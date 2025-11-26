@@ -11,8 +11,9 @@ namespace L1FlyMapViewer
         private MenuStrip menuStrip1;
         private ToolStripMenuItem openToolStripMenuItem;
         private ToolStripMenuItem databaseToolStripMenuItem;
+        private ToolStripMenuItem mapEditorToolStripMenuItem;
         private StatusStrip statusStrip1;
-        private ToolStripStatusLabel toolStripStatusLabel1;
+        public ToolStripStatusLabel toolStripStatusLabel1;
         public ToolStripProgressBar toolStripProgressBar1;
         public ToolStripStatusLabel toolStripStatusLabel2;
         public ToolStripStatusLabel toolStripStatusLabel3;
@@ -97,6 +98,7 @@ namespace L1FlyMapViewer
             this.menuStrip1 = new MenuStrip();
             this.openToolStripMenuItem = new ToolStripMenuItem();
             this.databaseToolStripMenuItem = new ToolStripMenuItem();
+            this.mapEditorToolStripMenuItem = new ToolStripMenuItem();
 
             // StatusStrip
             this.statusStrip1 = new StatusStrip();
@@ -190,7 +192,8 @@ namespace L1FlyMapViewer
             //
             this.menuStrip1.Items.AddRange(new ToolStripItem[] {
                 this.openToolStripMenuItem,
-                this.databaseToolStripMenuItem
+                this.databaseToolStripMenuItem,
+                this.mapEditorToolStripMenuItem
             });
             this.menuStrip1.Location = new Point(0, 0);
             this.menuStrip1.Name = "menuStrip1";
@@ -212,6 +215,14 @@ namespace L1FlyMapViewer
             this.databaseToolStripMenuItem.Size = new Size(88, 20);
             this.databaseToolStripMenuItem.Text = "資料庫設定";
             this.databaseToolStripMenuItem.Click += new System.EventHandler(this.databaseToolStripMenuItem_Click);
+
+            //
+            // mapEditorToolStripMenuItem
+            //
+            this.mapEditorToolStripMenuItem.Name = "mapEditorToolStripMenuItem";
+            this.mapEditorToolStripMenuItem.Size = new Size(88, 20);
+            this.mapEditorToolStripMenuItem.Text = "地圖編輯器";
+            this.mapEditorToolStripMenuItem.Click += new System.EventHandler(this.mapEditorToolStripMenuItem_Click);
 
             //
             // statusStrip1

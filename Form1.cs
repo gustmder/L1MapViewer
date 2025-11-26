@@ -13,11 +13,26 @@ using System.ComponentModel;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
+using L1MapViewer;
 
 namespace L1FlyMapViewer
 {
-    public partial class Form1 : Form
+    public partial class Form1 : Form, IMapViewer
     {
+        // IMapViewer 介面實作 - 明確公開控制項屬性
+        ComboBox IMapViewer.comboBox1 => this.comboBox1;
+        PictureBox IMapViewer.pictureBox1 => this.pictureBox1;
+        PictureBox IMapViewer.pictureBox2 => this.pictureBox2;
+        PictureBox IMapViewer.pictureBox3 => this.pictureBox3;
+        PictureBox IMapViewer.pictureBox4 => this.pictureBox4;
+        VScrollBar IMapViewer.vScrollBar1 => this.vScrollBar1;
+        HScrollBar IMapViewer.hScrollBar1 => this.hScrollBar1;
+        ToolStripProgressBar IMapViewer.toolStripProgressBar1 => this.toolStripProgressBar1;
+        ToolStripStatusLabel IMapViewer.toolStripStatusLabel1 => this.toolStripStatusLabel1;
+        ToolStripStatusLabel IMapViewer.toolStripStatusLabel2 => this.toolStripStatusLabel2;
+        ToolStripStatusLabel IMapViewer.toolStripStatusLabel3 => this.toolStripStatusLabel3;
+        Panel IMapViewer.panel1 => this.panel1;
+
         private static Form1 instance;
         private Point mouseDownPoint;
         private Point mouseDownMapPoint;  // 地图上的点击起始位置
@@ -56,7 +71,7 @@ namespace L1FlyMapViewer
         private List<SpawnData> currentSpawnList = new List<SpawnData>();
 
         // 縮放相關
-        public double zoomLevel = 1.0;  // 當前縮放級別
+        public double zoomLevel { get; set; } = 1.0;  // 當前縮放級別
         private const double ZOOM_MIN = 0.1;  // 最小縮放
         private const double ZOOM_MAX = 5.0;  // 最大縮放
         private const double ZOOM_STEP = 0.2;  // 縮放步進（增大以提升性能）
@@ -100,6 +115,7 @@ namespace L1FlyMapViewer
                 if (!string.IsNullOrEmpty(savedPath) && Directory.Exists(savedPath))
                 {
                     this.toolStripStatusLabel3.Text = savedPath;
+                    Share.LineagePath = savedPath;
                     this.openToolStripMenuItem.Enabled = false;
                     try
                     {
@@ -157,6 +173,7 @@ namespace L1FlyMapViewer
 
                 this.openToolStripMenuItem.Enabled = false;
                 this.toolStripStatusLabel3.Text = folderDialog.SelectedPath;
+                Share.LineagePath = folderDialog.SelectedPath;
                 // 保存选择的路径（保存完整路径，而不是父目录）
                 Utils.WriteINI("Path", "LineagePath", folderDialog.SelectedPath, str);
                 this.LoadMap(folderDialog.SelectedPath);
@@ -165,7 +182,7 @@ namespace L1FlyMapViewer
 
         public void LoadMap(string selectedPath)
         {
-            Utils.ShowProgressBar(true);
+            Utils.ShowProgressBar(true, this);
             Dictionary<string, Struct.L1Map> dictionary = L1MapHelper.Read(selectedPath);
             this.comboBox1.Items.Clear();
             this.comboBox1.BeginUpdate();
@@ -177,7 +194,7 @@ namespace L1FlyMapViewer
             this.comboBox1.EndUpdate();
             this.comboBox1.SelectedIndex = 5;
             this.toolStripStatusLabel2.Text = "MapCount=" + (object)dictionary.Count;
-            Utils.ShowProgressBar(false);
+            Utils.ShowProgressBar(false, this);
         }
 
         // 更新小地图
@@ -296,7 +313,7 @@ namespace L1FlyMapViewer
             }
             else if (e.Button == MouseButtons.Right)
             {
-                L1MapHelper.doLocTagEvent(e);
+                L1MapHelper.doLocTagEvent(e, this);
             }
         }
 
@@ -530,7 +547,7 @@ namespace L1FlyMapViewer
             // 普通移动，显示坐标
             else
             {
-                L1MapHelper.doMouseMoveEvent(e);
+                L1MapHelper.doMouseMoveEvent(e, this);
             }
         }
 
@@ -553,7 +570,7 @@ namespace L1FlyMapViewer
             string szSelectName = this.comboBox1.SelectedItem.ToString();
             if (szSelectName.Contains("-"))
                 szSelectName = szSelectName.Split('-')[0].Trim();
-            L1MapHelper.doPaintEvent(szSelectName);
+            L1MapHelper.doPaintEvent(szSelectName, this);
 
             // 等待地图绘制完成后更新小地图
             Application.DoEvents();
@@ -853,6 +870,13 @@ namespace L1FlyMapViewer
                     LoadSpawnListForCurrentMap();
                 }
             }
+        }
+
+        // 地圖編輯器
+        private void mapEditorToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            MapForm mapForm = new MapForm();
+            mapForm.Show();
         }
 
         // 從資料庫載入 spawnlist 資料

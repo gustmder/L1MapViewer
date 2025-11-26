@@ -32,7 +32,7 @@ namespace L1MapViewer.Reader {
                 return Share.IdxDataList[szIdxType];
             }
             //idx/pak檔的路徑
-            string szIdxFullName = string.Format(@"{0}\{1}.idx", Form1.Get().toolStripStatusLabel3.Text, szIdxType);
+            string szIdxFullName = string.Format(@"{0}\{1}.idx", Share.LineagePath, szIdxType);
             string szPakFullName = szIdxFullName.Replace(".idx", ".pak");
 
             //兩個路徑都需要存在

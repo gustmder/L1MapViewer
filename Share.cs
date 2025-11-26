@@ -9,6 +9,9 @@ using static L1MapViewer.Other.Struct;
 
 namespace L1MapViewer {
     class Share {
+        //共享的天堂資料夾路徑
+        public static string LineagePath { get; set; }
+
         //共享的idx資料清單
         public static Dictionary<string, Dictionary<string, L1Idx>> IdxDataList = new Dictionary<string, Dictionary<string, L1Idx>>();
         //共享的地圖資料清單

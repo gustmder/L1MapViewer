@@ -38,9 +38,10 @@ namespace L1MapViewer.Other {
         }
 
         //進度條 搭配Application.DoEvents(); 系統就會暫時把頁面還給你
-        public static void ShowProgressBar(bool b) {
-            Form1.Get().toolStripProgressBar1.Visible = b;
+        public static void ShowProgressBar(bool b, IMapViewer viewer) {
+            viewer.toolStripProgressBar1.Visible = b;
         }
+        
 
         //獲得指定路徑的上層路徑
         public static string GetParentDirectoryPath(string folderPath, int levels) {

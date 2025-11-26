@@ -18,7 +18,6 @@ using static L1MapViewer.Other.Struct;
 
 namespace L1MapViewer.Helper {
     class L1MapHelper {
-        private const int MapPadding = 100;
         public static readonly int BMP_W = 64 * 24 * 2;        //地圖區塊尺寸
         public static readonly int BMP_H = 64 * 12 * 2;        //地圖區塊尺寸
         public static readonly int BMP_R_W = 64 * 48 * 2;      //R版的地圖區塊尺寸
@@ -328,33 +327,33 @@ namespace L1MapViewer.Helper {
         }
         //---------------------------------------------------------
         //顯示座標
-        public static void doMouseMoveEvent(MouseEventArgs e) {
-            if (Form1.Get().comboBox1.SelectedItem == null) {
+        public static void doMouseMoveEvent(MouseEventArgs e, IMapViewer viewer) {
+            if (viewer.comboBox1.SelectedItem == null) {
                 return;
             }
             // 調整座標以考慮縮放
-            double zoomLevel = Form1.Get().zoomLevel;
+            double zoomLevel = viewer.zoomLevel;
             int ex = (int)(e.X / zoomLevel);
             int ey = (int)(e.Y / zoomLevel);
 
             LinLocation location = GetLinLoc(ex, ey);
 
             if (location != null) {
-                Form1.Get().toolStripStatusLabel2.Text = string.Format("{0},{1}", location.x, location.y);
+                viewer.toolStripStatusLabel2.Text = string.Format("{0},{1}", location.x, location.y);
             }
         }
         //繪製選定的座標
-        public static void doLocTagEvent(MouseEventArgs e) {
-            if (Form1.Get().comboBox1.SelectedItem == null) {
+        public static void doLocTagEvent(MouseEventArgs e, IMapViewer viewer) {
+            if (viewer.comboBox1.SelectedItem == null) {
                 return;
             }
 
-            Image img = Form1.Get().pictureBox2.Image;
+            Image img = viewer.pictureBox2.Image;
             if (img == null) {
                 return;
             }
             // 調整座標以考慮縮放
-            double zoomLevel = Form1.Get().zoomLevel;
+            double zoomLevel = viewer.zoomLevel;
             int ex = (int)(e.X / zoomLevel);
             int ey = (int)(e.Y / zoomLevel);
 
@@ -373,7 +372,7 @@ namespace L1MapViewer.Helper {
                     g.DrawRectangle(Pens.Red, Rectangle.Round(boundsRect));
                 }
             }
-            Form1.Get().pictureBox2.Refresh();
+            viewer.pictureBox2.Refresh();
         }
 
         private static LinLocation GetLinLoc(int ex, int ey) {
@@ -392,20 +391,19 @@ namespace L1MapViewer.Helper {
             return null;
         }
 
-        // 公共方法：获取坐标位置（根據畫面座標）
+        // 公開方法：通過螢幕座標獲取天堂座標
         public static LinLocation GetLinLocation(int ex, int ey) {
             return GetLinLoc(ex, ey);
         }
 
-        // 根據遊戲世界座標查找 LinLocation
-        public static LinLocation GetLinLocationByCoords(int linx, int liny) {
-            string key = string.Format("{0}-{1}", linx, liny);
+        // 通過天堂座標獲取 LinLocation
+        public static LinLocation GetLinLocationByCoords(int x, int y) {
+            string key = string.Format("{0}-{1}", x, y);
             if (Share.LinLocList.ContainsKey(key)) {
                 return Share.LinLocList[key];
             }
             return null;
         }
-
         public static void DrawLocation(Graphics g, int ex, int ey, string locString, bool isArrow) {
             SolidBrush sb = new SolidBrush(Color.Gold);
             Font font = new Font("微軟正黑體", 10, FontStyle.Regular);
@@ -421,12 +419,12 @@ namespace L1MapViewer.Helper {
         }
 
         //填入天堂座標
-        private static void FillLinLoc(Bitmap bitmap, L1MapSeg pMapSeg, double rate, int nPage, int padding = 0) {
+        private static void FillLinLoc(Bitmap bitmap, L1MapSeg pMapSeg, double rate, int nPage) {
 
-            //取得bmp在bitmap的座標 (不是天堂座標)
+            //取得bmp在bitmap的座標 (不是天堂座標)        
             int[] nsLoc = pMapSeg.GetLoc(rate);
-            int mx = nsLoc[0] + padding;
-            int my = nsLoc[1] + padding;
+            int mx = nsLoc[0];
+            int my = nsLoc[1];
 
             int mWidth = 0;
             int mHeight = 0;
@@ -507,29 +505,29 @@ namespace L1MapViewer.Helper {
         }
 
         //畫地圖
-        public static void doPaintEvent(string szSelectName) {
-            Utils.ShowProgressBar(true);
-            Form1.Get().Cursor = Cursors.WaitCursor;//漏斗指標
+        public static void doPaintEvent(string szSelectName, IMapViewer viewer) {
+            Utils.ShowProgressBar(true, viewer);
+            ((Form)viewer).Cursor = Cursors.WaitCursor;//漏斗指標
 
             //panel1底色須跟pictureBox1相同...為了美觀
-            if (Form1.Get().panel1.BackColor != Color.Black) {
-                Form1.Get().panel1.BackColor = Color.Black;
+            if (viewer.panel1.BackColor != Color.Black) {
+                viewer.panel1.BackColor = Color.Black;
             }
 
-            Form1.Get().comboBox1.Enabled = false;
+            viewer.comboBox1.Enabled = false;
 
-            Form1.Get().pictureBox2.Visible = false;
-            Form1.Get().pictureBox3.Visible = false;
-            Form1.Get().pictureBox4.Visible = false;
+            viewer.pictureBox2.Visible = false;
+            viewer.pictureBox3.Visible = false;
+            viewer.pictureBox4.Visible = false;
 
             //重置設定 (先給圖再定位)
-            if (Form1.Get().pictureBox1.Image != null) {
-                Form1.Get().pictureBox1.Image.Dispose();
-                Form1.Get().pictureBox1.Image = new Bitmap(1, 1);
-                Form1.Get().pictureBox1.Width = 1;
-                Form1.Get().pictureBox1.Height = 1;
-                Form1.Get().pictureBox1.Location = new Point(3, 3);
-                Form1.Get().pictureBox1.Refresh();
+            if (viewer.pictureBox1.Image != null) {
+                viewer.pictureBox1.Image.Dispose();
+                viewer.pictureBox1.Image = new Bitmap(1, 1);
+                viewer.pictureBox1.Width = 1;
+                viewer.pictureBox1.Height = 1;
+                viewer.pictureBox1.Location = new Point(3, 3);
+                viewer.pictureBox1.Refresh();
             }
 
             Share.RegionList.Clear();
@@ -593,27 +591,27 @@ namespace L1MapViewer.Helper {
                     string szTmpBmpFile = string.Format(@"{0}\{1}.bmp", Path.GetTempPath(), szTmpBmpName);
                     if (File.Exists(szTmpBmpFile)) {
                         Bitmap tmpBmp = new Bitmap(szTmpBmpFile);
-                        Form1.Get().pictureBox1.Image = tmpBmp;
-                        Form1.Get().pictureBox1.Width = tmpBmp.Width;
-                        Form1.Get().pictureBox1.Height = tmpBmp.Height;
-                        Form1.Get().pictureBox1.Refresh();
+                        viewer.pictureBox1.Image = tmpBmp;
+                        viewer.pictureBox1.Width = tmpBmp.Width;
+                        viewer.pictureBox1.Height = tmpBmp.Height;
+                        viewer.pictureBox1.Refresh();
 
 
-                        //使用vScrollBar、hScrollBar控制pictureBox控件显示图片 (1/3)   
-                        Form1.Get().hScrollBar1.Maximum = Math.Max(0, Form1.Get().pictureBox1.Width);
-                        Form1.Get().vScrollBar1.Maximum = Math.Max(0, Form1.Get().pictureBox1.Height);
+                        //使用vScrollBar、hScrollBar控制pictureBox控件显示图片 (1/3)
+                        viewer.hScrollBar1.Maximum = Math.Max(0, viewer.pictureBox1.Width);
+                        viewer.vScrollBar1.Maximum = Math.Max(0, viewer.pictureBox1.Height);
                         //滾動條置中
-                        Form1.Get().hScrollBar1.Value = Form1.Get().hScrollBar1.Maximum / 2;
-                        Form1.Get().vScrollBar1.Value = Form1.Get().vScrollBar1.Maximum / 2;
-                        Form1.Get().vScrollBar1_Scroll(null, null);
-                        Form1.Get().hScrollBar1_Scroll(null, null);
-                        //取得資料
+                        viewer.hScrollBar1.Value = viewer.hScrollBar1.Maximum / 2;
+                        viewer.vScrollBar1.Value = viewer.vScrollBar1.Maximum / 2;
+                        viewer.vScrollBar1_Scroll(null, null);
+                        viewer.hScrollBar1_Scroll(null, null);
+                        //取得資料       
                         foreach (string fileFullName in Utils.SortDesc(pMap.FullFileNameList.Keys)) {
                             //取得bmp在bitmap的座標 (不是天堂座標)
                             L1MapSeg iL1MapSeg = pMap.FullFileNameList[fileFullName];
 
                             //填入座標
-                            FillLinLoc(tmpBmp, iL1MapSeg, rate, PAGE_1, MapPadding);
+                            FillLinLoc(tmpBmp, iL1MapSeg, rate, PAGE_1);
                         }
                         return;
                     }
@@ -624,36 +622,27 @@ namespace L1MapViewer.Helper {
 
 
 
-                // 添加 padding 讓邊緣更容易查看
-                int mapWidth = (int)((pMap.nBlockCountX * blockWidth) * rate);
-                int mapHeight = (int)((pMap.nBlockCountX * blockHeight / 2 + pMap.nBlockCountY * blockHeight / 2) * rate);
-                int width = mapWidth + (MapPadding * 2);
-                int height = mapHeight + (MapPadding * 2);
+                int width = (int)((pMap.nBlockCountX * blockWidth) * rate);
+                int height = (int)((pMap.nBlockCountX * blockHeight / 2 + pMap.nBlockCountY * blockHeight / 2) * rate);
 
                 Bitmap bitmap = new Bitmap(width, height, PixelFormat.Format16bppRgb555);
-
-                // 填充背景色為淺灰色
-                using (Graphics bgGraphics = Graphics.FromImage(bitmap))
-                {
-                    bgGraphics.Clear(Color.FromArgb(30, 30, 30)); // 深灰色背景
-                }
 
                 ImageAttributes vAttr = new ImageAttributes();
                 vAttr.SetColorKey(Color.FromArgb(0), Color.FromArgb(0));//透明色
 
-                Form1.Get().pictureBox1.Image = bitmap;
-                Form1.Get().pictureBox1.Width = bitmap.Width;
-                Form1.Get().pictureBox1.Height = bitmap.Height;
+                viewer.pictureBox1.Image = bitmap;
+                viewer.pictureBox1.Width = bitmap.Width;
+                viewer.pictureBox1.Height = bitmap.Height;
 
 
                 //使用vScrollBar、hScrollBar控制pictureBox控件显示图片 (1/3)
-                Form1.Get().hScrollBar1.Maximum = Math.Max(0, Form1.Get().pictureBox1.Width);
-                Form1.Get().vScrollBar1.Maximum = Math.Max(0, Form1.Get().pictureBox1.Height);
+                viewer.hScrollBar1.Maximum = Math.Max(0, viewer.pictureBox1.Width);
+                viewer.vScrollBar1.Maximum = Math.Max(0, viewer.pictureBox1.Height);
                 //滾動條置中
-                Form1.Get().hScrollBar1.Value = Form1.Get().hScrollBar1.Maximum / 5;
-                Form1.Get().vScrollBar1.Value = Form1.Get().vScrollBar1.Maximum / 5;
-                Form1.Get().vScrollBar1_Scroll(null, null);
-                Form1.Get().hScrollBar1_Scroll(null, null);
+                viewer.hScrollBar1.Value = viewer.hScrollBar1.Maximum / 5;
+                viewer.vScrollBar1.Value = viewer.vScrollBar1.Maximum / 5;
+                viewer.vScrollBar1_Scroll(null, null);
+                viewer.hScrollBar1_Scroll(null, null);
                 //取得資料
                 foreach (string fileFullName in Utils.SortDesc(pMap.FullFileNameList.Keys)) {
                     byte[] data = File.ReadAllBytes(fileFullName);
@@ -674,21 +663,20 @@ namespace L1MapViewer.Helper {
                         bmp = segFileToBmp(data);
                     }
 
-                    //合併+縮圖+透明
+                    //合併+縮圖+透明                 
                     using (Graphics g = Graphics.FromImage(bitmap)) {
                         int mWidth = (int)(bmp.Width * rate);
                         int mHeight = (int)(bmp.Height * rate);
-                        // 添加 padding 偏移量
-                        g.DrawImage(bmp, new Rectangle(mx + MapPadding, my + MapPadding, mWidth, mHeight), 0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel, vAttr);
+                        g.DrawImage(bmp, new Rectangle(mx, my, mWidth, mHeight), 0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel, vAttr);
 
                         //填入座標
-                        FillLinLoc(bitmap, pMapSeg, rate, PAGE_1, MapPadding);
+                        FillLinLoc(bitmap, pMapSeg, rate, PAGE_1);
                     }
 
                     bmp.Dispose();
                     Application.DoEvents(); //系統就會暫時把頁面還給你
 
-                    Form1.Get().pictureBox1.Refresh();
+                    viewer.pictureBox1.Refresh();
                 }
 
                 //大地圖的暫存檔
@@ -697,49 +685,49 @@ namespace L1MapViewer.Helper {
                 }
             } finally {
                 //在地圖上再加一層用來畫範圍的圈圈
-                Image img = Form1.Get().pictureBox1.Image;
+                Image img = viewer.pictureBox1.Image;
                 if (img != null) {
                     //怪物分布的標記
-                    Form1.Get().pictureBox4.Parent = Form1.Get().pictureBox1;
-                    Form1.Get().pictureBox4.Image = new Bitmap(img.Width, img.Height);
-                    Form1.Get().pictureBox4.Width = img.Width;
-                    Form1.Get().pictureBox4.Height = img.Height;
-                    Form1.Get().pictureBox4.Location = new Point(0, 0);
-                    Form1.Get().pictureBox4.Visible = true;
-                    Form1.Get().pictureBox4.Refresh();
+                    viewer.pictureBox4.Parent = viewer.pictureBox1;
+                    viewer.pictureBox4.Image = new Bitmap(img.Width, img.Height);
+                    viewer.pictureBox4.Width = img.Width;
+                    viewer.pictureBox4.Height = img.Height;
+                    viewer.pictureBox4.Location = new Point(0, 0);
+                    viewer.pictureBox4.Visible = true;
+                    viewer.pictureBox4.Refresh();
 
                     //畫額外的圖
-                    Form1.Get().pictureBox3.Parent = Form1.Get().pictureBox4;
-                    Form1.Get().pictureBox3.Image = new Bitmap(img.Width, img.Height);
-                    Form1.Get().pictureBox3.Width = img.Width;
-                    Form1.Get().pictureBox3.Height = img.Height;
-                    Form1.Get().pictureBox3.Location = new Point(0, 0);
-                    Form1.Get().pictureBox3.Visible = true;
-                    Form1.Get().pictureBox3.Refresh();
+                    viewer.pictureBox3.Parent = viewer.pictureBox4;
+                    viewer.pictureBox3.Image = new Bitmap(img.Width, img.Height);
+                    viewer.pictureBox3.Width = img.Width;
+                    viewer.pictureBox3.Height = img.Height;
+                    viewer.pictureBox3.Location = new Point(0, 0);
+                    viewer.pictureBox3.Visible = true;
+                    viewer.pictureBox3.Refresh();
 
                     //座標顯示
-                    Form1.Get().pictureBox2.Parent = Form1.Get().pictureBox3;
-                    Form1.Get().pictureBox2.Image = new Bitmap(img.Width, img.Height);
-                    Form1.Get().pictureBox2.Width = img.Width;
-                    Form1.Get().pictureBox2.Height = img.Height;
-                    Form1.Get().pictureBox2.Location = new Point(0, 0);
-                    Form1.Get().pictureBox2.Visible = true;
-                    Form1.Get().pictureBox2.Refresh();
+                    viewer.pictureBox2.Parent = viewer.pictureBox3;
+                    viewer.pictureBox2.Image = new Bitmap(img.Width, img.Height);
+                    viewer.pictureBox2.Width = img.Width;
+                    viewer.pictureBox2.Height = img.Height;
+                    viewer.pictureBox2.Location = new Point(0, 0);
+                    viewer.pictureBox2.Visible = true;
+                    viewer.pictureBox2.Refresh();
 
-                    /*using (Graphics g = Graphics.FromImage(Form1.Get().pictureBox2.Image)) {
+                    /*using (Graphics g = Graphics.FromImage(viewer.pictureBox2.Image)) {
                         Point p1 = new Point(0, 0);
-                        Point p2 = new Point(0, Form1.Get().pictureBox2.Height - 1);
-                        Point p3 = new Point(Form1.Get().pictureBox2.Width - 1, Form1.Get().pictureBox2.Height - 1);
-                        Point p4 = new Point(Form1.Get().pictureBox2.Width - 1, 0);
+                        Point p2 = new Point(0, viewer.pictureBox2.Height - 1);
+                        Point p3 = new Point(viewer.pictureBox2.Width - 1, viewer.pictureBox2.Height - 1);
+                        Point p4 = new Point(viewer.pictureBox2.Width - 1, 0);
                         g.DrawPolygon(new Pen(Color.Red, 1), new Point[] { p1, p2, p3, p4 });
                     }*/
 
                 }
-                Form1.Get().Cursor = Cursors.Default;
+                ((Form)viewer).Cursor = Cursors.Default;
 
-                Form1.Get().comboBox1.Enabled = true;
+                viewer.comboBox1.Enabled = true;
 
-                Utils.ShowProgressBar(false);
+                Utils.ShowProgressBar(false, viewer);
             }
         }
 
