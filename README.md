@@ -10,3 +10,10 @@
  - 拼成一張地圖
 
 實際效果請參考影片https://youtu.be/UVRn_-dOmng
+
+
+# update log
+## 20251126
+* update to net7.0 project
+* fix project files 
+* ready to build

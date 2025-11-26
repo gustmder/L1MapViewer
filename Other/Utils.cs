@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using L1FlyMapViewer;
 
 namespace L1MapViewer.Other {
     class Utils {

@@ -1,16 +1,23 @@
-using System;
-using System.Windows.Forms;
+using L1FlyMapViewer;
+using L1MapViewer;
+using System.Text;
 
-namespace L1MapViewer {
-    static class Program {
-        /// &lt;summary&gt;
-        /// 應用程式的主要進入點。
-        /// &lt;/summary&gt;
-        [STAThread]
-        static void Main() {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new Form1());
-        }
+namespace L1MapViewerCore;
+
+static class Program
+{
+    /// <summary>
+    ///  The main entry point for the application.
+    /// </summary>
+    [STAThread]
+    static void Main()
+    {
+        // Register encoding provider for Big5 and other code pages
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+        // To customize application configuration such as set high DPI settings or default font,
+        // see https://aka.ms/applicationconfiguration.
+        ApplicationConfiguration.Initialize();
+        Application.Run(new Form1());
     }
 }

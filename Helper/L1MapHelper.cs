@@ -13,10 +13,12 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using System.Xml;
+using L1FlyMapViewer;
 using static L1MapViewer.Other.Struct;
 
 namespace L1MapViewer.Helper {
     class L1MapHelper {
+        private const int MapPadding = 100;
         public static readonly int BMP_W = 64 * 24 * 2;        //地圖區塊尺寸
         public static readonly int BMP_H = 64 * 12 * 2;        //地圖區塊尺寸
         public static readonly int BMP_R_W = 64 * 48 * 2;      //R版的地圖區塊尺寸
@@ -330,8 +332,10 @@ namespace L1MapViewer.Helper {
             if (Form1.Get().comboBox1.SelectedItem == null) {
                 return;
             }
-            int ex = e.X;
-            int ey = e.Y;
+            // 調整座標以考慮縮放
+            double zoomLevel = Form1.Get().zoomLevel;
+            int ex = (int)(e.X / zoomLevel);
+            int ey = (int)(e.Y / zoomLevel);
 
             LinLocation location = GetLinLoc(ex, ey);
 
@@ -349,8 +353,10 @@ namespace L1MapViewer.Helper {
             if (img == null) {
                 return;
             }
-            int ex = e.X;
-            int ey = e.Y;
+            // 調整座標以考慮縮放
+            double zoomLevel = Form1.Get().zoomLevel;
+            int ex = (int)(e.X / zoomLevel);
+            int ey = (int)(e.Y / zoomLevel);
 
             //目前滑鼠指到的座標
             LinLocation location = GetLinLoc(ex, ey);
@@ -385,6 +391,21 @@ namespace L1MapViewer.Helper {
             }
             return null;
         }
+
+        // 公共方法：获取坐标位置（根據畫面座標）
+        public static LinLocation GetLinLocation(int ex, int ey) {
+            return GetLinLoc(ex, ey);
+        }
+
+        // 根據遊戲世界座標查找 LinLocation
+        public static LinLocation GetLinLocationByCoords(int linx, int liny) {
+            string key = string.Format("{0}-{1}", linx, liny);
+            if (Share.LinLocList.ContainsKey(key)) {
+                return Share.LinLocList[key];
+            }
+            return null;
+        }
+
         public static void DrawLocation(Graphics g, int ex, int ey, string locString, bool isArrow) {
             SolidBrush sb = new SolidBrush(Color.Gold);
             Font font = new Font("微軟正黑體", 10, FontStyle.Regular);
@@ -400,12 +421,12 @@ namespace L1MapViewer.Helper {
         }
 
         //填入天堂座標
-        private static void FillLinLoc(Bitmap bitmap, L1MapSeg pMapSeg, double rate, int nPage) {
+        private static void FillLinLoc(Bitmap bitmap, L1MapSeg pMapSeg, double rate, int nPage, int padding = 0) {
 
-            //取得bmp在bitmap的座標 (不是天堂座標)        
+            //取得bmp在bitmap的座標 (不是天堂座標)
             int[] nsLoc = pMapSeg.GetLoc(rate);
-            int mx = nsLoc[0];
-            int my = nsLoc[1];
+            int mx = nsLoc[0] + padding;
+            int my = nsLoc[1] + padding;
 
             int mWidth = 0;
             int mHeight = 0;
@@ -586,13 +607,13 @@ namespace L1MapViewer.Helper {
                         Form1.Get().vScrollBar1.Value = Form1.Get().vScrollBar1.Maximum / 2;
                         Form1.Get().vScrollBar1_Scroll(null, null);
                         Form1.Get().hScrollBar1_Scroll(null, null);
-                        //取得資料       
+                        //取得資料
                         foreach (string fileFullName in Utils.SortDesc(pMap.FullFileNameList.Keys)) {
                             //取得bmp在bitmap的座標 (不是天堂座標)
                             L1MapSeg iL1MapSeg = pMap.FullFileNameList[fileFullName];
 
                             //填入座標
-                            FillLinLoc(tmpBmp, iL1MapSeg, rate, PAGE_1);
+                            FillLinLoc(tmpBmp, iL1MapSeg, rate, PAGE_1, MapPadding);
                         }
                         return;
                     }
@@ -603,10 +624,19 @@ namespace L1MapViewer.Helper {
 
 
 
-                int width = (int)((pMap.nBlockCountX * blockWidth) * rate);
-                int height = (int)((pMap.nBlockCountX * blockHeight / 2 + pMap.nBlockCountY * blockHeight / 2) * rate);
+                // 添加 padding 讓邊緣更容易查看
+                int mapWidth = (int)((pMap.nBlockCountX * blockWidth) * rate);
+                int mapHeight = (int)((pMap.nBlockCountX * blockHeight / 2 + pMap.nBlockCountY * blockHeight / 2) * rate);
+                int width = mapWidth + (MapPadding * 2);
+                int height = mapHeight + (MapPadding * 2);
 
                 Bitmap bitmap = new Bitmap(width, height, PixelFormat.Format16bppRgb555);
+
+                // 填充背景色為淺灰色
+                using (Graphics bgGraphics = Graphics.FromImage(bitmap))
+                {
+                    bgGraphics.Clear(Color.FromArgb(30, 30, 30)); // 深灰色背景
+                }
 
                 ImageAttributes vAttr = new ImageAttributes();
                 vAttr.SetColorKey(Color.FromArgb(0), Color.FromArgb(0));//透明色
@@ -644,14 +674,15 @@ namespace L1MapViewer.Helper {
                         bmp = segFileToBmp(data);
                     }
 
-                    //合併+縮圖+透明                 
+                    //合併+縮圖+透明
                     using (Graphics g = Graphics.FromImage(bitmap)) {
                         int mWidth = (int)(bmp.Width * rate);
                         int mHeight = (int)(bmp.Height * rate);
-                        g.DrawImage(bmp, new Rectangle(mx, my, mWidth, mHeight), 0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel, vAttr);
+                        // 添加 padding 偏移量
+                        g.DrawImage(bmp, new Rectangle(mx + MapPadding, my + MapPadding, mWidth, mHeight), 0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel, vAttr);
 
                         //填入座標
-                        FillLinLoc(bitmap, pMapSeg, rate, PAGE_1);
+                        FillLinLoc(bitmap, pMapSeg, rate, PAGE_1, MapPadding);
                     }
 
                     bmp.Dispose();
