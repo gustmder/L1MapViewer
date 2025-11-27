@@ -55,7 +55,6 @@ namespace L1FlyMapViewer
         private CheckBox chkShowPassable;
         private CheckBox chkShowGrid;
         private CheckBox chkShowS32Boundary;
-        private CheckBox chkEnableEdit;
         private Button btnSetPassable;
         private Button btnSetImpassable;
         private Button btnSaveS32;
@@ -428,7 +427,6 @@ namespace L1FlyMapViewer
             this.s32LayerControlPanel.Controls.Add(this.chkShowPassable);
             this.s32LayerControlPanel.Controls.Add(this.chkShowGrid);
             this.s32LayerControlPanel.Controls.Add(this.chkShowS32Boundary);
-            this.s32LayerControlPanel.Controls.Add(this.chkEnableEdit);
             this.s32LayerControlPanel.Controls.Add(this.btnSetPassable);
             this.s32LayerControlPanel.Controls.Add(this.btnSetImpassable);
             this.s32LayerControlPanel.Controls.Add(this.btnSaveS32);
@@ -529,18 +527,6 @@ namespace L1FlyMapViewer
             this.chkShowS32Boundary.Text = "S32邊界";
             this.chkShowS32Boundary.UseVisualStyleBackColor = true;
             this.chkShowS32Boundary.CheckedChanged += new System.EventHandler(this.S32Layer_CheckedChanged);
-
-            //
-            // chkEnableEdit
-            //
-            this.chkEnableEdit.AutoSize = true;
-            this.chkEnableEdit.ForeColor = Color.Red;
-            this.chkEnableEdit.Location = new Point(110, 35);
-            this.chkEnableEdit.Name = "chkEnableEdit";
-            this.chkEnableEdit.Size = new Size(80, 17);
-            this.chkEnableEdit.TabIndex = 6;
-            this.chkEnableEdit.Text = "允許編輯";
-            this.chkEnableEdit.UseVisualStyleBackColor = true;
 
             //
             // btnSetPassable

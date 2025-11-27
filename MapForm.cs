@@ -297,12 +297,13 @@ namespace L1FlyMapViewer
                     Layer = obj.Layer,
                     IndexId = obj.IndexId,
                     TileId = obj.TileId,
-                    OriginalIndex = orderIndex++  // 保存順序索引（按 Layer 排序後的順序）
+                    OriginalIndex = orderIndex++,  // 保存順序索引（按 Layer 排序後的順序）
+                    SourceMapId = currentMapId     // 記錄來源地圖
                 });
             }
 
             hasLayer4Clipboard = true;
-            this.toolStripStatusLabel1.Text = $"已複製 {objectsWithCoords.Count} 個 Layer4 物件，使用 Shift+左鍵 選取貼上位置後按 Ctrl+V 貼上";
+            this.toolStripStatusLabel1.Text = $"已複製 {objectsWithCoords.Count} 個 Layer4 物件 (來源: {currentMapId})，使用 Shift+左鍵 選取貼上位置後按 Ctrl+V 貼上";
 
             // 清除選取框但保留複製資料
             isLayer4CopyMode = false;
@@ -418,7 +419,13 @@ namespace L1FlyMapViewer
             // 重新渲染地圖
             RenderS32Map();
 
+            // 檢查是否跨地圖貼上
+            string sourceMapId = layer4Clipboard.FirstOrDefault()?.SourceMapId;
+            bool isCrossMap = !string.IsNullOrEmpty(sourceMapId) && sourceMapId != currentMapId;
+
             string message = $"已貼上 {pastedCount} 個 Layer4 物件";
+            if (isCrossMap)
+                message += $" (從地圖 {sourceMapId} 跨地圖貼上)";
             if (skippedCount > 0)
                 message += $"，{skippedCount} 個物件超出地圖範圍被跳過";
             this.toolStripStatusLabel1.Text = message;
@@ -1958,6 +1965,7 @@ namespace L1FlyMapViewer
             public int IndexId { get; set; }
             public int TileId { get; set; }
             public int OriginalIndex { get; set; } // 原始 Layer4 列表中的索引（用於保持順序）
+            public string SourceMapId { get; set; } // 來源地圖 ID（用於跨地圖複製）
         }
 
         // Undo 相關變數
