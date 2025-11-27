@@ -31,6 +31,18 @@ namespace L1FlyMapViewer
         private Label lblLayer4Groups;
         private ListView lvLayer4Groups;
 
+        // 工具列面板（右側功能區）
+        private Panel toolbarPanel;
+        private Button btnToolCopy;
+        private Button btnToolPaste;
+        private Button btnToolDelete;
+        private Button btnToolUndo;
+        private Button btnToolRedo;
+        private Button btnToolSave;
+        private Button btnToolCellInfo;
+        private Button btnToolReplaceTile;
+        private ToolTip toolTip1;
+
         // 中間 TabControl
         private TabControl tabControl1;
         private TabPage tabMapPreview;
@@ -101,6 +113,18 @@ namespace L1FlyMapViewer
             this.lvTiles = new ListView();
             this.lblLayer4Groups = new Label();
             this.lvLayer4Groups = new ListView();
+
+            // 工具列面板
+            this.toolbarPanel = new Panel();
+            this.btnToolCopy = new Button();
+            this.btnToolPaste = new Button();
+            this.btnToolDelete = new Button();
+            this.btnToolUndo = new Button();
+            this.btnToolRedo = new Button();
+            this.btnToolSave = new Button();
+            this.btnToolCellInfo = new Button();
+            this.btnToolReplaceTile = new Button();
+            this.toolTip1 = new ToolTip();
 
             // 中間 TabControl
             this.tabControl1 = new TabControl();
@@ -686,11 +710,126 @@ namespace L1FlyMapViewer
             this.lvLayer4Groups.ItemChecked += new ItemCheckedEventHandler(this.lvLayer4Groups_ItemChecked);
 
             //
+            // toolbarPanel
+            //
+            this.toolbarPanel.BorderStyle = BorderStyle.FixedSingle;
+            this.toolbarPanel.Controls.Add(this.btnToolCopy);
+            this.toolbarPanel.Controls.Add(this.btnToolPaste);
+            this.toolbarPanel.Controls.Add(this.btnToolDelete);
+            this.toolbarPanel.Controls.Add(this.btnToolUndo);
+            this.toolbarPanel.Controls.Add(this.btnToolRedo);
+            this.toolbarPanel.Controls.Add(this.btnToolSave);
+            this.toolbarPanel.Controls.Add(this.btnToolCellInfo);
+            this.toolbarPanel.Controls.Add(this.btnToolReplaceTile);
+            this.toolbarPanel.Dock = DockStyle.Right;
+            this.toolbarPanel.Location = new Point(970, 24);
+            this.toolbarPanel.Name = "toolbarPanel";
+            this.toolbarPanel.Size = new Size(40, 654);
+            this.toolbarPanel.TabIndex = 7;
+
+            //
+            // btnToolCopy
+            //
+            this.btnToolCopy.Location = new Point(2, 5);
+            this.btnToolCopy.Name = "btnToolCopy";
+            this.btnToolCopy.Size = new Size(34, 34);
+            this.btnToolCopy.TabIndex = 0;
+            this.btnToolCopy.Text = "複製";
+            this.btnToolCopy.UseVisualStyleBackColor = true;
+            this.toolTip1.SetToolTip(this.btnToolCopy, "複製 (Ctrl+C)");
+            this.btnToolCopy.Click += new System.EventHandler(this.btnToolCopy_Click);
+
+            //
+            // btnToolPaste
+            //
+            this.btnToolPaste.Location = new Point(2, 44);
+            this.btnToolPaste.Name = "btnToolPaste";
+            this.btnToolPaste.Size = new Size(34, 34);
+            this.btnToolPaste.TabIndex = 1;
+            this.btnToolPaste.Text = "貼上";
+            this.btnToolPaste.UseVisualStyleBackColor = true;
+            this.toolTip1.SetToolTip(this.btnToolPaste, "貼上 (Ctrl+V)");
+            this.btnToolPaste.Click += new System.EventHandler(this.btnToolPaste_Click);
+
+            //
+            // btnToolDelete
+            //
+            this.btnToolDelete.Location = new Point(2, 83);
+            this.btnToolDelete.Name = "btnToolDelete";
+            this.btnToolDelete.Size = new Size(34, 34);
+            this.btnToolDelete.TabIndex = 2;
+            this.btnToolDelete.Text = "刪除";
+            this.btnToolDelete.UseVisualStyleBackColor = true;
+            this.toolTip1.SetToolTip(this.btnToolDelete, "刪除 (Del)");
+            this.btnToolDelete.Click += new System.EventHandler(this.btnToolDelete_Click);
+
+            //
+            // btnToolUndo
+            //
+            this.btnToolUndo.Location = new Point(2, 132);
+            this.btnToolUndo.Name = "btnToolUndo";
+            this.btnToolUndo.Size = new Size(34, 34);
+            this.btnToolUndo.TabIndex = 3;
+            this.btnToolUndo.Text = "復原";
+            this.btnToolUndo.UseVisualStyleBackColor = true;
+            this.toolTip1.SetToolTip(this.btnToolUndo, "復原 (Ctrl+Z)");
+            this.btnToolUndo.Click += new System.EventHandler(this.btnToolUndo_Click);
+
+            //
+            // btnToolRedo
+            //
+            this.btnToolRedo.Location = new Point(2, 171);
+            this.btnToolRedo.Name = "btnToolRedo";
+            this.btnToolRedo.Size = new Size(34, 34);
+            this.btnToolRedo.TabIndex = 4;
+            this.btnToolRedo.Text = "重做";
+            this.btnToolRedo.UseVisualStyleBackColor = true;
+            this.toolTip1.SetToolTip(this.btnToolRedo, "重做 (Ctrl+Y)");
+            this.btnToolRedo.Click += new System.EventHandler(this.btnToolRedo_Click);
+
+            //
+            // btnToolSave
+            //
+            this.btnToolSave.Location = new Point(2, 220);
+            this.btnToolSave.Name = "btnToolSave";
+            this.btnToolSave.Size = new Size(34, 34);
+            this.btnToolSave.TabIndex = 5;
+            this.btnToolSave.Text = "儲存";
+            this.btnToolSave.UseVisualStyleBackColor = true;
+            this.toolTip1.SetToolTip(this.btnToolSave, "儲存 (Ctrl+S)");
+            this.btnToolSave.Click += new System.EventHandler(this.btnToolSave_Click);
+
+            //
+            // btnToolCellInfo
+            //
+            this.btnToolCellInfo.Location = new Point(2, 269);
+            this.btnToolCellInfo.Name = "btnToolCellInfo";
+            this.btnToolCellInfo.Size = new Size(34, 34);
+            this.btnToolCellInfo.TabIndex = 6;
+            this.btnToolCellInfo.Text = "詳細";
+            this.btnToolCellInfo.UseVisualStyleBackColor = true;
+            this.toolTip1.SetToolTip(this.btnToolCellInfo, "格子詳細資訊");
+            this.btnToolCellInfo.Click += new System.EventHandler(this.btnToolCellInfo_Click);
+
+            //
+            // btnToolReplaceTile
+            //
+            this.btnToolReplaceTile.Location = new Point(2, 318);
+            this.btnToolReplaceTile.Name = "btnToolReplaceTile";
+            this.btnToolReplaceTile.Size = new Size(34, 34);
+            this.btnToolReplaceTile.TabIndex = 7;
+            this.btnToolReplaceTile.Text = "替換";
+            this.btnToolReplaceTile.UseVisualStyleBackColor = true;
+            this.toolTip1.SetToolTip(this.btnToolReplaceTile, "批次替換地板");
+            this.btnToolReplaceTile.Click += new System.EventHandler(this.btnToolReplaceTile_Click);
+
+            //
             // MapForm
             //
             this.AutoScaleDimensions = new SizeF(6F, 13F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(1400, 700);
+            this.Controls.Add(this.toolbarPanel);
             this.Controls.Add(this.rightPanel);
             this.Controls.Add(this.tabControl1);
             this.Controls.Add(this.leftPanel);

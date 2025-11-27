@@ -6410,5 +6410,262 @@ namespace L1FlyMapViewer
             // 重新渲染地圖
             RenderS32Map();
         }
+
+        // ===== 工具列按鈕事件處理 =====
+
+        private void btnToolCopy_Click(object sender, EventArgs e)
+        {
+            CopySelectedCells();
+        }
+
+        private void btnToolPaste_Click(object sender, EventArgs e)
+        {
+            PasteSelectedCells();
+        }
+
+        private void btnToolDelete_Click(object sender, EventArgs e)
+        {
+            DeleteSelectedLayer4Objects();
+        }
+
+        private void btnToolUndo_Click(object sender, EventArgs e)
+        {
+            UndoLastAction();
+        }
+
+        private void btnToolRedo_Click(object sender, EventArgs e)
+        {
+            RedoLastAction();
+        }
+
+        private void btnToolSave_Click(object sender, EventArgs e)
+        {
+            btnSaveS32_Click(sender, e);
+        }
+
+        private void btnToolCellInfo_Click(object sender, EventArgs e)
+        {
+            // 如果有選取區域，顯示第一個選取格子的詳細資訊
+            if (currentSelectedCells.Count > 0)
+            {
+                var firstCell = currentSelectedCells[0];
+                ShowCellLayersDialog(firstCell.LocalX, firstCell.LocalY);
+            }
+            else
+            {
+                this.toolStripStatusLabel1.Text = "請先使用 Shift+左鍵 選取格子";
+            }
+        }
+
+        private void btnToolReplaceTile_Click(object sender, EventArgs e)
+        {
+            // 檢查是否已載入地圖
+            if (allS32DataDict.Count == 0)
+            {
+                MessageBox.Show("請先載入地圖", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 創建替換對話框
+            Form replaceForm = new Form();
+            replaceForm.Text = "批次替換地板";
+            replaceForm.Size = new Size(400, 280);
+            replaceForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+            replaceForm.StartPosition = FormStartPosition.CenterParent;
+            replaceForm.MaximizeBox = false;
+            replaceForm.MinimizeBox = false;
+
+            // 來源 TileId
+            Label lblSrcTileId = new Label();
+            lblSrcTileId.Text = "來源 TileId:";
+            lblSrcTileId.Location = new Point(20, 20);
+            lblSrcTileId.Size = new Size(100, 20);
+            replaceForm.Controls.Add(lblSrcTileId);
+
+            TextBox txtSrcTileId = new TextBox();
+            txtSrcTileId.Location = new Point(130, 18);
+            txtSrcTileId.Size = new Size(100, 20);
+            replaceForm.Controls.Add(txtSrcTileId);
+
+            // 來源 IndexId
+            Label lblSrcIndexId = new Label();
+            lblSrcIndexId.Text = "來源 IndexId:";
+            lblSrcIndexId.Location = new Point(20, 50);
+            lblSrcIndexId.Size = new Size(100, 20);
+            replaceForm.Controls.Add(lblSrcIndexId);
+
+            TextBox txtSrcIndexId = new TextBox();
+            txtSrcIndexId.Location = new Point(130, 48);
+            txtSrcIndexId.Size = new Size(100, 20);
+            replaceForm.Controls.Add(txtSrcIndexId);
+
+            // 分隔線
+            Label lblSeparator = new Label();
+            lblSeparator.Text = "↓ 替換為 ↓";
+            lblSeparator.Location = new Point(20, 85);
+            lblSeparator.Size = new Size(350, 20);
+            lblSeparator.TextAlign = ContentAlignment.MiddleCenter;
+            lblSeparator.ForeColor = Color.Blue;
+            replaceForm.Controls.Add(lblSeparator);
+
+            // 目標 TileId
+            Label lblDstTileId = new Label();
+            lblDstTileId.Text = "目標 TileId:";
+            lblDstTileId.Location = new Point(20, 115);
+            lblDstTileId.Size = new Size(100, 20);
+            replaceForm.Controls.Add(lblDstTileId);
+
+            TextBox txtDstTileId = new TextBox();
+            txtDstTileId.Location = new Point(130, 113);
+            txtDstTileId.Size = new Size(100, 20);
+            replaceForm.Controls.Add(txtDstTileId);
+
+            // 目標 IndexId
+            Label lblDstIndexId = new Label();
+            lblDstIndexId.Text = "目標 IndexId:";
+            lblDstIndexId.Location = new Point(20, 145);
+            lblDstIndexId.Size = new Size(100, 20);
+            replaceForm.Controls.Add(lblDstIndexId);
+
+            TextBox txtDstIndexId = new TextBox();
+            txtDstIndexId.Location = new Point(130, 143);
+            txtDstIndexId.Size = new Size(100, 20);
+            replaceForm.Controls.Add(txtDstIndexId);
+
+            // 預覽按鈕
+            Button btnPreview = new Button();
+            btnPreview.Text = "預覽";
+            btnPreview.Location = new Point(80, 190);
+            btnPreview.Size = new Size(80, 30);
+            replaceForm.Controls.Add(btnPreview);
+
+            // 執行按鈕
+            Button btnExecute = new Button();
+            btnExecute.Text = "執行替換";
+            btnExecute.Location = new Point(170, 190);
+            btnExecute.Size = new Size(80, 30);
+            replaceForm.Controls.Add(btnExecute);
+
+            // 取消按鈕
+            Button btnCancel = new Button();
+            btnCancel.Text = "取消";
+            btnCancel.Location = new Point(260, 190);
+            btnCancel.Size = new Size(80, 30);
+            btnCancel.Click += (s, args) => replaceForm.Close();
+            replaceForm.Controls.Add(btnCancel);
+
+            // 預覽功能
+            btnPreview.Click += (s, args) =>
+            {
+                if (!int.TryParse(txtSrcTileId.Text, out int srcTileId) ||
+                    !int.TryParse(txtSrcIndexId.Text, out int srcIndexId))
+                {
+                    MessageBox.Show("請輸入有效的來源 TileId 和 IndexId", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                int matchCount = 0;
+                int s32Count = 0;
+
+                foreach (var kvp in allS32DataDict)
+                {
+                    S32Data s32Data = kvp.Value;
+                    bool hasMatch = false;
+
+                    for (int y = 0; y < 64; y++)
+                    {
+                        for (int x = 0; x < 128; x++)
+                        {
+                            var cell = s32Data.Layer1[y, x];
+                            if (cell.TileId == srcTileId && cell.IndexId == srcIndexId)
+                            {
+                                matchCount++;
+                                hasMatch = true;
+                            }
+                        }
+                    }
+
+                    if (hasMatch) s32Count++;
+                }
+
+                MessageBox.Show($"找到 {matchCount} 個匹配的格子\n分布在 {s32Count} 個 S32 檔案中",
+                    "預覽結果", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            };
+
+            // 執行替換功能
+            btnExecute.Click += (s, args) =>
+            {
+                if (!int.TryParse(txtSrcTileId.Text, out int srcTileId) ||
+                    !int.TryParse(txtSrcIndexId.Text, out int srcIndexId) ||
+                    !int.TryParse(txtDstTileId.Text, out int dstTileId) ||
+                    !int.TryParse(txtDstIndexId.Text, out int dstIndexId))
+                {
+                    MessageBox.Show("請輸入有效的 TileId 和 IndexId", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // 確認執行
+                var confirmResult = MessageBox.Show(
+                    $"確定要將所有 TileId={srcTileId}, IndexId={srcIndexId} 的格子\n替換為 TileId={dstTileId}, IndexId={dstIndexId} 嗎？\n\n此操作會影響所有已載入的 S32 檔案。",
+                    "確認替換",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+
+                if (confirmResult != DialogResult.Yes) return;
+
+                int replacedCount = 0;
+                HashSet<string> modifiedS32Files = new HashSet<string>();
+
+                foreach (var kvp in allS32DataDict)
+                {
+                    S32Data s32Data = kvp.Value;
+                    bool hasModified = false;
+
+                    for (int y = 0; y < 64; y++)
+                    {
+                        for (int x = 0; x < 128; x++)
+                        {
+                            var cell = s32Data.Layer1[y, x];
+                            if (cell.TileId == srcTileId && cell.IndexId == srcIndexId)
+                            {
+                                // 替換 TileId 和 IndexId
+                                cell.TileId = dstTileId;
+                                cell.IndexId = dstIndexId;
+                                cell.IsModified = true;
+                                replacedCount++;
+                                hasModified = true;
+                            }
+                        }
+                    }
+
+                    if (hasModified)
+                    {
+                        // 新增目標 TileId 到 Layer6（如果不存在）
+                        if (!s32Data.Layer6.Contains(dstTileId))
+                        {
+                            s32Data.Layer6.Add(dstTileId);
+                        }
+
+                        // 標記 S32 為已修改
+                        s32Data.IsModified = true;
+                        modifiedS32Files.Add(kvp.Key);
+                    }
+                }
+
+                // 重新渲染地圖
+                RenderS32Map();
+
+                // 更新 Tile 清單
+                UpdateTileList();
+
+                MessageBox.Show($"替換完成！\n共替換 {replacedCount} 個格子\n影響 {modifiedS32Files.Count} 個 S32 檔案\n\n請記得儲存修改。",
+                    "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                this.toolStripStatusLabel1.Text = $"已替換 {replacedCount} 個格子，影響 {modifiedS32Files.Count} 個 S32 檔案";
+                replaceForm.Close();
+            };
+
+            replaceForm.ShowDialog();
+        }
     }
 }
