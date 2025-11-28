@@ -51,6 +51,8 @@ namespace L1FlyMapViewer
         private Button btnToolReplaceTile;
         private Button btnToolAddS32;
         private Button btnToolClearLayer7;
+        private Button btnToolClearCell;
+        private Button btnToolCheckL6;
         private ToolTip toolTip1;
 
         // 中間 TabControl
@@ -144,6 +146,8 @@ namespace L1FlyMapViewer
             this.btnToolReplaceTile = new Button();
             this.btnToolAddS32 = new Button();
             this.btnToolClearLayer7 = new Button();
+            this.btnToolClearCell = new Button();
+            this.btnToolCheckL6 = new Button();
             this.toolTip1 = new ToolTip();
 
             // 中間 TabControl
@@ -303,7 +307,7 @@ namespace L1FlyMapViewer
             this.toolStripCopyMoveCmd.Name = "toolStripCopyMoveCmd";
             this.toolStripCopyMoveCmd.Size = new Size(120, 20);
             this.toolStripCopyMoveCmd.Text = "複製移動指令";
-            this.toolStripCopyMoveCmd.ToolTipText = "複製 .移動 x y 地圖id 指令到剪貼簿";
+            this.toolStripCopyMoveCmd.ToolTipText = "複製 移動 x y 地圖id 指令到剪貼簿";
             this.toolStripCopyMoveCmd.Enabled = false;
             this.toolStripCopyMoveCmd.Click += new System.EventHandler(this.toolStripCopyMoveCmd_Click);
 
@@ -832,6 +836,8 @@ namespace L1FlyMapViewer
             this.toolbarPanel.Controls.Add(this.btnToolReplaceTile);
             this.toolbarPanel.Controls.Add(this.btnToolAddS32);
             this.toolbarPanel.Controls.Add(this.btnToolClearLayer7);
+            this.toolbarPanel.Controls.Add(this.btnToolClearCell);
+            this.toolbarPanel.Controls.Add(this.btnToolCheckL6);
             this.toolbarPanel.Dock = DockStyle.Right;
             this.toolbarPanel.Location = new Point(970, 24);
             this.toolbarPanel.Name = "toolbarPanel";
@@ -957,6 +963,30 @@ namespace L1FlyMapViewer
             this.btnToolClearLayer7.UseVisualStyleBackColor = true;
             this.toolTip1.SetToolTip(this.btnToolClearLayer7, "清除所有第七層（傳送點）資料");
             this.btnToolClearLayer7.Click += new System.EventHandler(this.btnToolClearLayer7_Click);
+
+            //
+            // btnToolClearCell
+            //
+            this.btnToolClearCell.Location = new Point(2, 443);
+            this.btnToolClearCell.Name = "btnToolClearCell";
+            this.btnToolClearCell.Size = new Size(34, 34);
+            this.btnToolClearCell.TabIndex = 10;
+            this.btnToolClearCell.Text = "清格";
+            this.btnToolClearCell.UseVisualStyleBackColor = true;
+            this.toolTip1.SetToolTip(this.btnToolClearCell, "清除指定格子的各層資料");
+            this.btnToolClearCell.Click += new System.EventHandler(this.btnToolClearCell_Click);
+
+            //
+            // btnToolCheckL6
+            //
+            this.btnToolCheckL6.Location = new Point(2, 481);
+            this.btnToolCheckL6.Name = "btnToolCheckL6";
+            this.btnToolCheckL6.Size = new Size(34, 34);
+            this.btnToolCheckL6.TabIndex = 11;
+            this.btnToolCheckL6.Text = "查L6";
+            this.btnToolCheckL6.UseVisualStyleBackColor = true;
+            this.toolTip1.SetToolTip(this.btnToolCheckL6, "檢查L1/L4的TileId是否都登記在L6");
+            this.btnToolCheckL6.Click += new System.EventHandler(this.btnToolCheckL6_Click);
 
             //
             // MapForm
