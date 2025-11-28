@@ -2620,6 +2620,9 @@ namespace L1FlyMapViewer
                         RenderS32Map();
                         UpdateTileList();
 
+                        // 更新群組縮圖列表（載入時執行一次）
+                        UpdateGroupThumbnailsList();
+
                         // 捲動到地圖中間
                         ScrollToMapCenter();
                     }
@@ -6528,6 +6531,415 @@ namespace L1FlyMapViewer
 
             // 重新渲染地圖
             RenderS32Map();
+        }
+
+        // 更新群組縮圖列表（顯示所有已載入 S32 的群組）
+        private void UpdateGroupThumbnailsList()
+        {
+            lvGroupThumbnails.Items.Clear();
+
+            if (lvGroupThumbnails.LargeImageList != null)
+            {
+                lvGroupThumbnails.LargeImageList.Dispose();
+            }
+
+            if (allS32DataDict.Count == 0)
+            {
+                lblGroupThumbnails.Text = "群組縮圖列表";
+                return;
+            }
+
+            // 收集所有 S32 中的群組
+            var allGroupsDict = new Dictionary<int, List<(S32Data s32, ObjectTile obj)>>();
+            foreach (var s32Data in allS32DataDict.Values)
+            {
+                foreach (var obj in s32Data.Layer4)
+                {
+                    if (!allGroupsDict.ContainsKey(obj.GroupId))
+                    {
+                        allGroupsDict[obj.GroupId] = new List<(S32Data, ObjectTile)>();
+                    }
+                    allGroupsDict[obj.GroupId].Add((s32Data, obj));
+                }
+            }
+
+            if (allGroupsDict.Count == 0)
+            {
+                lblGroupThumbnails.Text = "群組縮圖列表 (0)";
+                return;
+            }
+
+            // 建立 ImageList
+            ImageList imageList = new ImageList();
+            imageList.ImageSize = new Size(80, 80);
+            imageList.ColorDepth = ColorDepth.Depth32Bit;
+
+            int thumbnailIndex = 0;
+            foreach (var kvp in allGroupsDict.OrderBy(k => k.Key))
+            {
+                int groupId = kvp.Key;
+                var objects = kvp.Value;
+
+                // 生成群組縮圖
+                Bitmap thumbnail = GenerateGroupThumbnail(objects, 80);
+                if (thumbnail != null)
+                {
+                    imageList.Images.Add(thumbnail);
+
+                    ListViewItem item = new ListViewItem($"G{groupId} ({objects.Count})");
+                    item.ImageIndex = thumbnailIndex;
+                    item.Tag = new GroupThumbnailInfo { GroupId = groupId, Objects = objects };
+                    lvGroupThumbnails.Items.Add(item);
+
+                    thumbnailIndex++;
+                }
+            }
+
+            lvGroupThumbnails.LargeImageList = imageList;
+            lblGroupThumbnails.Text = $"群組縮圖列表 ({allGroupsDict.Count})";
+        }
+
+        // 群組縮圖資訊
+        private class GroupThumbnailInfo
+        {
+            public int GroupId { get; set; }
+            public List<(S32Data s32, ObjectTile obj)> Objects { get; set; }
+        }
+
+        // 生成群組縮圖（將同 GroupId 的物件按相對位置組裝，白底半透明疊加）
+        private Bitmap GenerateGroupThumbnail(List<(S32Data s32, ObjectTile obj)> objects, int thumbnailSize)
+        {
+            if (objects == null || objects.Count == 0)
+                return null;
+
+            try
+            {
+                // 計算物件的邊界範圍
+                int minX = objects.Min(o => o.obj.X);
+                int maxX = objects.Max(o => o.obj.X);
+                int minY = objects.Min(o => o.obj.Y);
+                int maxY = objects.Max(o => o.obj.Y);
+
+                // 計算實際像素範圍
+                // 等距投影：每個格子在 X 方向佔 24 像素，Y 方向佔 12 像素
+                // tile 縮圖是 48x48 像素
+                int rangeX = maxX - minX + 1;
+                int rangeY = maxY - minY + 1;
+
+                // 等距投影的實際寬高（考慮 tile 實際大小 48x48）
+                int actualWidth = (rangeX + rangeY) * 24 + 48;
+                int actualHeight = (rangeX + rangeY) * 12 + 48;
+
+                // 建立暫存圖片（不再限制大小，讓完整圖形能顯示）
+                int tempWidth = Math.Max(actualWidth, 96);
+                int tempHeight = Math.Max(actualHeight, 96);
+                if (tempWidth > 1024) tempWidth = 1024;
+                if (tempHeight > 1024) tempHeight = 1024;
+
+                Bitmap tempBitmap = new Bitmap(tempWidth, tempHeight, PixelFormat.Format32bppArgb);
+                using (Graphics g = Graphics.FromImage(tempBitmap))
+                {
+                    g.Clear(Color.Transparent);
+
+                    // 計算偏移，讓圖片置中
+                    // tile 實際大小是 48x48，等距投影間距 24x12
+                    int offsetX = (tempWidth - actualWidth) / 2 + rangeY * 24;
+                    int offsetY = (tempHeight - actualHeight) / 2;
+
+                    // 按 Layer 排序後繪製（半透明疊加效果）
+                    foreach (var item in objects.OrderBy(o => o.obj.Layer))
+                    {
+                        var obj = item.obj;
+
+                        // 計算相對位置
+                        int relX = obj.X - minX;
+                        int relY = obj.Y - minY;
+
+                        // 等距投影座標轉換（每格間距 24x12）
+                        int pixelX = offsetX + (relX - relY) * 24;
+                        int pixelY = offsetY + (relX + relY) * 12;
+
+                        // 載入並繪製 tile（帶透明度）
+                        Bitmap tileBitmap = LoadTileThumbnail(obj.TileId, obj.IndexId);
+                        if (tileBitmap != null)
+                        {
+                            // 繪製時保持半透明（90% 不透明）
+                            // 使用 tile 的實際大小 48x48
+                            using (var ia = new ImageAttributes())
+                            {
+                                ColorMatrix cm = new ColorMatrix();
+                                cm.Matrix33 = 0.9f;
+                                ia.SetColorMatrix(cm);
+
+                                g.DrawImage(tileBitmap,
+                                    new Rectangle(pixelX, pixelY, 48, 48),
+                                    0, 0, tileBitmap.Width, tileBitmap.Height,
+                                    GraphicsUnit.Pixel, ia);
+                            }
+                        }
+                    }
+                }
+
+                // 縮放到目標大小（白底）
+                Bitmap result = new Bitmap(thumbnailSize, thumbnailSize, PixelFormat.Format32bppArgb);
+                using (Graphics g = Graphics.FromImage(result))
+                {
+                    // 白色底
+                    g.Clear(Color.White);
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+
+                    // 保持比例縮放
+                    float scaleX = (float)(thumbnailSize - 4) / tempWidth;
+                    float scaleY = (float)(thumbnailSize - 4) / tempHeight;
+                    float scale = Math.Min(scaleX, scaleY);
+                    int scaledWidth = (int)(tempWidth * scale);
+                    int scaledHeight = (int)(tempHeight * scale);
+                    int drawX = (thumbnailSize - scaledWidth) / 2;
+                    int drawY = (thumbnailSize - scaledHeight) / 2;
+
+                    g.DrawImage(tempBitmap, drawX, drawY, scaledWidth, scaledHeight);
+
+                    // 加邊框
+                    using (Pen borderPen = new Pen(Color.LightGray, 1))
+                    {
+                        g.DrawRectangle(borderPen, 0, 0, thumbnailSize - 1, thumbnailSize - 1);
+                    }
+                }
+
+                tempBitmap.Dispose();
+                return result;
+            }
+            catch
+            {
+                // 如果生成失敗，返回一個帶文字的預設圖片
+                Bitmap fallback = new Bitmap(thumbnailSize, thumbnailSize);
+                using (Graphics g = Graphics.FromImage(fallback))
+                {
+                    g.Clear(Color.White);
+                    using (Font font = new Font("Arial", 10))
+                    {
+                        string text = $"G{objects[0].obj.GroupId}";
+                        SizeF textSize = g.MeasureString(text, font);
+                        g.DrawString(text, font, Brushes.Gray,
+                            (thumbnailSize - textSize.Width) / 2,
+                            (thumbnailSize - textSize.Height) / 2);
+                    }
+                }
+                return fallback;
+            }
+        }
+
+        // 群組縮圖單擊事件 - 顯示放大預覽
+        private void lvGroupThumbnails_Click(object sender, EventArgs e)
+        {
+            if (lvGroupThumbnails.SelectedItems.Count == 0)
+                return;
+
+            var item = lvGroupThumbnails.SelectedItems[0];
+            if (item.Tag is GroupThumbnailInfo info && info.Objects.Count > 0)
+            {
+                ShowGroupPreviewDialog(info);
+            }
+        }
+
+        // 顯示群組預覽對話框
+        private void ShowGroupPreviewDialog(GroupThumbnailInfo info)
+        {
+            // 生成放大的預覽圖（400x400）
+            int previewSize = 400;
+            Bitmap previewImage = GenerateGroupThumbnail(info.Objects, previewSize);
+
+            if (previewImage == null)
+                return;
+
+            // 建立預覽對話框
+            Form previewForm = new Form
+            {
+                Text = $"群組 {info.GroupId} - {info.Objects.Count} 個物件",
+                Size = new Size(previewSize + 40, previewSize + 100),
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false
+            };
+
+            PictureBox pb = new PictureBox
+            {
+                Image = previewImage,
+                Size = new Size(previewSize, previewSize),
+                Location = new Point(10, 10),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            Button btnGoto = new Button
+            {
+                Text = "跳轉到位置",
+                Size = new Size(100, 30),
+                Location = new Point(10, previewSize + 20)
+            };
+            btnGoto.Click += (s, ev) =>
+            {
+                previewForm.Close();
+                JumpToGroupLocation(info);
+            };
+
+            Button btnClose = new Button
+            {
+                Text = "關閉",
+                Size = new Size(80, 30),
+                Location = new Point(previewSize - 70, previewSize + 20)
+            };
+            btnClose.Click += (s, ev) => previewForm.Close();
+
+            // 顯示物件資訊
+            Label lblInfo = new Label
+            {
+                Text = $"GroupId: {info.GroupId} | 物件數: {info.Objects.Count}",
+                Location = new Point(120, previewSize + 25),
+                Size = new Size(previewSize - 200, 20),
+                ForeColor = Color.Gray
+            };
+
+            previewForm.Controls.Add(pb);
+            previewForm.Controls.Add(btnGoto);
+            previewForm.Controls.Add(btnClose);
+            previewForm.Controls.Add(lblInfo);
+
+            previewForm.FormClosed += (s, ev) =>
+            {
+                previewImage.Dispose();
+            };
+
+            previewForm.ShowDialog(this);
+        }
+
+        // 跳轉到群組位置
+        private void JumpToGroupLocation(GroupThumbnailInfo info)
+        {
+            if (info.Objects.Count == 0)
+                return;
+
+            var firstObj = info.Objects[0];
+            var s32Data = firstObj.s32;
+            var obj = firstObj.obj;
+
+            // 計算螢幕座標
+            int[] loc = s32Data.SegInfo.GetLoc(1.0);
+            int mx = loc[0];
+            int my = loc[1];
+
+            int localBaseX = 0;
+            int localBaseY = 63 * 12;
+            localBaseX -= 24 * (obj.X / 2);
+            localBaseY -= 12 * (obj.X / 2);
+
+            int screenX = mx + localBaseX + obj.X * 24 + obj.Y * 24;
+            int screenY = my + localBaseY + obj.Y * 12;
+
+            // 捲動到該位置
+            int scrollX = screenX - s32MapPanel.Width / 2;
+            int scrollY = screenY - s32MapPanel.Height / 2;
+
+            if (scrollX < 0) scrollX = 0;
+            if (scrollY < 0) scrollY = 0;
+            if (scrollX > s32MapPanel.HorizontalScroll.Maximum) scrollX = s32MapPanel.HorizontalScroll.Maximum;
+            if (scrollY > s32MapPanel.VerticalScroll.Maximum) scrollY = s32MapPanel.VerticalScroll.Maximum;
+
+            s32MapPanel.AutoScrollPosition = new Point(scrollX, scrollY);
+
+            // 高亮顯示該格子
+            highlightedS32Data = s32Data;
+            highlightedCellX = obj.X;
+            highlightedCellY = obj.Y;
+
+            s32PictureBox.Invalidate();
+            UpdateMiniMap();
+
+            this.toolStripStatusLabel1.Text = $"跳轉到群組 {info.GroupId}，位置 ({obj.X}, {obj.Y})，共 {info.Objects.Count} 個物件";
+        }
+
+        // 群組縮圖雙擊事件 - 跳轉到該群組位置
+        private void lvGroupThumbnails_DoubleClick(object sender, EventArgs e)
+        {
+            if (lvGroupThumbnails.SelectedItems.Count == 0)
+                return;
+
+            var item = lvGroupThumbnails.SelectedItems[0];
+            if (item.Tag is GroupThumbnailInfo info && info.Objects.Count > 0)
+            {
+                JumpToGroupLocation(info);
+            }
+        }
+
+        // 群組縮圖右鍵刪除
+        private void lvGroupThumbnails_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right)
+                return;
+
+            if (lvGroupThumbnails.SelectedItems.Count == 0)
+                return;
+
+            var item = lvGroupThumbnails.SelectedItems[0];
+            if (!(item.Tag is GroupThumbnailInfo info) || info.Objects.Count == 0)
+                return;
+
+            // 建立右鍵選單
+            ContextMenuStrip menu = new ContextMenuStrip();
+
+            ToolStripMenuItem deleteItem = new ToolStripMenuItem($"刪除群組 {info.GroupId} ({info.Objects.Count} 個物件)");
+            deleteItem.Click += (s, ev) =>
+            {
+                DeleteGroupFromMap(info);
+            };
+
+            ToolStripMenuItem gotoItem = new ToolStripMenuItem("跳轉到位置");
+            gotoItem.Click += (s, ev) =>
+            {
+                JumpToGroupLocation(info);
+            };
+
+            menu.Items.Add(gotoItem);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(deleteItem);
+
+            menu.Show(lvGroupThumbnails, e.Location);
+        }
+
+        // 從地圖刪除群組
+        private void DeleteGroupFromMap(GroupThumbnailInfo info)
+        {
+            // 確認刪除
+            DialogResult result = MessageBox.Show(
+                $"確定要刪除群組 {info.GroupId} 嗎？\n" +
+                $"這將移除 {info.Objects.Count} 個 Layer4 物件。",
+                "確認刪除群組",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (result != DialogResult.Yes)
+                return;
+
+            // 按 S32 分組刪除
+            var objectsByS32 = info.Objects.GroupBy(o => o.s32).ToList();
+
+            int deletedCount = 0;
+            foreach (var group in objectsByS32)
+            {
+                S32Data s32Data = group.Key;
+                foreach (var item in group)
+                {
+                    s32Data.Layer4.Remove(item.obj);
+                    deletedCount++;
+                }
+                s32Data.IsModified = true;
+            }
+
+            // 重新渲染
+            RenderS32Map();
+
+            this.toolStripStatusLabel1.Text = $"已刪除群組 {info.GroupId}，共 {deletedCount} 個物件";
         }
 
         // ===== 工具列按鈕事件處理 =====

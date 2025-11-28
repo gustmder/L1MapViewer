@@ -30,6 +30,8 @@ namespace L1FlyMapViewer
         private ListView lvTiles;
         private Label lblLayer4Groups;
         private ListView lvLayer4Groups;
+        private Label lblGroupThumbnails;
+        private ListView lvGroupThumbnails;
 
         // 工具列面板（右側功能區）
         private Panel toolbarPanel;
@@ -114,6 +116,8 @@ namespace L1FlyMapViewer
             this.lvTiles = new ListView();
             this.lblLayer4Groups = new Label();
             this.lvLayer4Groups = new ListView();
+            this.lblGroupThumbnails = new Label();
+            this.lvGroupThumbnails = new ListView();
 
             // 工具列面板
             this.toolbarPanel = new Panel();
@@ -661,10 +665,12 @@ namespace L1FlyMapViewer
             this.rightPanel.Controls.Add(this.lvTiles);
             this.rightPanel.Controls.Add(this.lblLayer4Groups);
             this.rightPanel.Controls.Add(this.lvLayer4Groups);
+            this.rightPanel.Controls.Add(this.lblGroupThumbnails);
+            this.rightPanel.Controls.Add(this.lvGroupThumbnails);
             this.rightPanel.Dock = DockStyle.Right;
             this.rightPanel.Location = new Point(1010, 24);
             this.rightPanel.Name = "rightPanel";
-            this.rightPanel.Size = new Size(190, 654);
+            this.rightPanel.Size = new Size(220, 654);
             this.rightPanel.TabIndex = 6;
 
             //
@@ -672,7 +678,7 @@ namespace L1FlyMapViewer
             //
             this.lblTileList.Location = new Point(5, 5);
             this.lblTileList.Name = "lblTileList";
-            this.lblTileList.Size = new Size(180, 20);
+            this.lblTileList.Size = new Size(210, 20);
             this.lblTileList.TabIndex = 0;
             this.lblTileList.Text = "使用的 Tile";
             this.lblTileList.TextAlign = ContentAlignment.MiddleLeft;
@@ -682,7 +688,7 @@ namespace L1FlyMapViewer
             //
             this.lvTiles.Location = new Point(5, 30);
             this.lvTiles.Name = "lvTiles";
-            this.lvTiles.Size = new Size(180, 300);
+            this.lvTiles.Size = new Size(210, 150);
             this.lvTiles.TabIndex = 1;
             this.lvTiles.View = View.LargeIcon;
             this.lvTiles.DoubleClick += new System.EventHandler(this.lvTiles_DoubleClick);
@@ -690,19 +696,19 @@ namespace L1FlyMapViewer
             //
             // lblLayer4Groups
             //
-            this.lblLayer4Groups.Location = new Point(5, 340);
+            this.lblLayer4Groups.Location = new Point(5, 185);
             this.lblLayer4Groups.Name = "lblLayer4Groups";
-            this.lblLayer4Groups.Size = new Size(180, 20);
+            this.lblLayer4Groups.Size = new Size(210, 20);
             this.lblLayer4Groups.TabIndex = 2;
-            this.lblLayer4Groups.Text = "Layer4 物件群組";
+            this.lblLayer4Groups.Text = "Layer4 群組篩選";
             this.lblLayer4Groups.TextAlign = ContentAlignment.MiddleLeft;
 
             //
             // lvLayer4Groups
             //
-            this.lvLayer4Groups.Location = new Point(5, 365);
+            this.lvLayer4Groups.Location = new Point(5, 210);
             this.lvLayer4Groups.Name = "lvLayer4Groups";
-            this.lvLayer4Groups.Size = new Size(180, 280);
+            this.lvLayer4Groups.Size = new Size(210, 120);
             this.lvLayer4Groups.TabIndex = 3;
             this.lvLayer4Groups.View = View.Details;
             this.lvLayer4Groups.FullRowSelect = true;
@@ -711,6 +717,29 @@ namespace L1FlyMapViewer
             this.lvLayer4Groups.Columns.Add("數量", 50);
             this.lvLayer4Groups.Columns.Add("位置", 65);
             this.lvLayer4Groups.ItemChecked += new ItemCheckedEventHandler(this.lvLayer4Groups_ItemChecked);
+
+            //
+            // lblGroupThumbnails
+            //
+            this.lblGroupThumbnails.Location = new Point(5, 335);
+            this.lblGroupThumbnails.Name = "lblGroupThumbnails";
+            this.lblGroupThumbnails.Size = new Size(210, 20);
+            this.lblGroupThumbnails.TabIndex = 4;
+            this.lblGroupThumbnails.Text = "群組縮圖列表";
+            this.lblGroupThumbnails.TextAlign = ContentAlignment.MiddleLeft;
+
+            //
+            // lvGroupThumbnails
+            //
+            this.lvGroupThumbnails.Location = new Point(5, 360);
+            this.lvGroupThumbnails.Name = "lvGroupThumbnails";
+            this.lvGroupThumbnails.Size = new Size(210, 285);
+            this.lvGroupThumbnails.TabIndex = 5;
+            this.lvGroupThumbnails.View = View.LargeIcon;
+            this.lvGroupThumbnails.MultiSelect = false;
+            this.lvGroupThumbnails.Click += new System.EventHandler(this.lvGroupThumbnails_Click);
+            this.lvGroupThumbnails.DoubleClick += new System.EventHandler(this.lvGroupThumbnails_DoubleClick);
+            this.lvGroupThumbnails.MouseUp += new MouseEventHandler(this.lvGroupThumbnails_MouseUp);
 
             //
             // toolbarPanel
