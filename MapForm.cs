@@ -10,6 +10,7 @@ using System.Windows.Forms;
 using L1MapViewer;
 using L1MapViewer.Converter;
 using L1MapViewer.Helper;
+using L1MapViewer.Models;
 using L1MapViewer.Other;
 using L1MapViewer.Reader;
 
@@ -81,6 +82,10 @@ namespace L1FlyMapViewer
 
         // Tile 資料快取 - key: "tileId_indexId"
         private Dictionary<string, byte[]> tileDataCache = new Dictionary<string, byte[]>();
+
+        // 地圖過濾相關
+        private List<string> allMapItems = new List<string>();  // 所有地圖項目
+        private bool isFiltering = false;  // 防止過濾時觸發 SelectedIndexChanged
 
         public MapForm()
         {
@@ -1109,33 +1114,49 @@ namespace L1FlyMapViewer
             // 如果已經有地圖資料，填充 comboBox
             if (Share.MapDataList != null && Share.MapDataList.Count > 0)
             {
-                this.comboBox1.Items.Clear();
-                this.comboBox1.BeginUpdate();
+                // 儲存所有地圖項目供過濾使用
+                allMapItems.Clear();
                 foreach (string key in Utils.SortAsc(Share.MapDataList.Keys))
                 {
                     Struct.L1Map l1Map = Share.MapDataList[key];
-                    this.comboBox1.Items.Add(string.Format("{0}-{1}", key, l1Map.szName));
+                    allMapItems.Add(string.Format("{0}-{1}", key, l1Map.szName));
+                }
+
+                isFiltering = true;
+                this.comboBox1.Items.Clear();
+                this.comboBox1.BeginUpdate();
+                foreach (var item in allMapItems)
+                {
+                    this.comboBox1.Items.Add(item);
                 }
                 this.comboBox1.EndUpdate();
+                isFiltering = false;
 
-                // 讀取上次選擇的地圖索引
+                // 讀取上次選擇的地圖名稱
                 if (this.comboBox1.Items.Count > 0)
                 {
-                    int lastSelectedIndex = 0;
+                    string lastMapName = "";
 
                     if (File.Exists(iniPath))
                     {
-                        string savedIndex = Utils.GetINI("MapForm", "LastSelectedMapIndex", "0", iniPath);
-                        if (int.TryParse(savedIndex, out int index))
+                        lastMapName = Utils.GetINI("MapForm", "LastSelectedMapName", "", iniPath);
+                    }
+
+                    // 如果有上次選擇的地圖，找到它
+                    int selectedIndex = 0;
+                    if (!string.IsNullOrEmpty(lastMapName))
+                    {
+                        for (int i = 0; i < this.comboBox1.Items.Count; i++)
                         {
-                            if (index >= 0 && index < this.comboBox1.Items.Count)
+                            if (this.comboBox1.Items[i].ToString() == lastMapName)
                             {
-                                lastSelectedIndex = index;
+                                selectedIndex = i;
+                                break;
                             }
                         }
                     }
 
-                    this.comboBox1.SelectedIndex = lastSelectedIndex;
+                    this.comboBox1.SelectedIndex = selectedIndex;
                 }
             }
         }
@@ -1426,48 +1447,129 @@ namespace L1FlyMapViewer
         {
             Utils.ShowProgressBar(true, this);
             var dictionary = L1MapHelper.Read(selectedPath);
-            this.comboBox1.Items.Clear();
-            this.comboBox1.BeginUpdate();
+
+            // 儲存所有地圖項目供過濾使用
+            allMapItems.Clear();
             foreach (string key in Utils.SortAsc(dictionary.Keys))
             {
                 Struct.L1Map l1Map = dictionary[key];
-                this.comboBox1.Items.Add(string.Format("{0}-{1}", key, l1Map.szName));
+                allMapItems.Add(string.Format("{0}-{1}", key, l1Map.szName));
+            }
+
+            // 填充 ComboBox
+            isFiltering = true;
+            this.comboBox1.Items.Clear();
+            this.comboBox1.BeginUpdate();
+            foreach (var item in allMapItems)
+            {
+                this.comboBox1.Items.Add(item);
             }
             this.comboBox1.EndUpdate();
+            isFiltering = false;
 
-            // 讀取上次選擇的地圖索引
+            // 讀取上次選擇的地圖名稱（改用名稱而非索引，避免過濾後索引錯亂）
             if (this.comboBox1.Items.Count > 0)
             {
-                int lastSelectedIndex = 0;
                 string iniPath = Path.GetTempPath() + "mapviewer.ini";
+                string lastMapName = "";
 
                 if (File.Exists(iniPath))
                 {
-                    string savedIndex = Utils.GetINI("MapForm", "LastSelectedMapIndex", "0", iniPath);
-                    if (int.TryParse(savedIndex, out int index))
+                    lastMapName = Utils.GetINI("MapForm", "LastSelectedMapName", "", iniPath);
+                }
+
+                // 如果有上次選擇的地圖，找到它
+                int selectedIndex = 0;
+                if (!string.IsNullOrEmpty(lastMapName))
+                {
+                    for (int i = 0; i < this.comboBox1.Items.Count; i++)
                     {
-                        if (index >= 0 && index < this.comboBox1.Items.Count)
+                        if (this.comboBox1.Items[i].ToString() == lastMapName)
                         {
-                            lastSelectedIndex = index;
+                            selectedIndex = i;
+                            break;
                         }
                     }
                 }
 
-                this.comboBox1.SelectedIndex = lastSelectedIndex;
+                this.comboBox1.SelectedIndex = selectedIndex;
             }
 
             this.toolStripStatusLabel2.Text = "MapCount=" + dictionary.Count;
             Utils.ShowProgressBar(false, this);
         }
 
+        // 地圖搜尋過濾
+        private void comboBox1_TextChanged(object sender, EventArgs e)
+        {
+            if (isFiltering) return;
+
+            string searchText = this.comboBox1.Text.ToLower();
+
+            // 如果文字為空或是選中了一個項目，不過濾
+            if (string.IsNullOrEmpty(searchText) || this.comboBox1.SelectedItem != null &&
+                this.comboBox1.SelectedItem.ToString().ToLower() == searchText)
+            {
+                return;
+            }
+
+            isFiltering = true;
+
+            // 記住游標位置
+            int cursorPos = this.comboBox1.SelectionStart;
+
+            // 過濾項目
+            var filteredItems = allMapItems
+                .Where(item => item.ToLower().Contains(searchText))
+                .ToList();
+
+            this.comboBox1.BeginUpdate();
+            this.comboBox1.Items.Clear();
+            foreach (var item in filteredItems)
+            {
+                this.comboBox1.Items.Add(item);
+            }
+            this.comboBox1.EndUpdate();
+
+            // 還原文字和游標位置
+            this.comboBox1.Text = searchText;
+            this.comboBox1.SelectionStart = cursorPos;
+            this.comboBox1.SelectionLength = 0;
+
+            // 顯示下拉選單
+            if (filteredItems.Count > 0 && !this.comboBox1.DroppedDown)
+            {
+                this.comboBox1.DroppedDown = true;
+            }
+
+            isFiltering = false;
+
+            this.toolStripStatusLabel1.Text = $"找到 {filteredItems.Count} 個地圖";
+        }
+
+        // 清空搜尋，顯示所有地圖
+        private void ResetMapFilter()
+        {
+            isFiltering = true;
+            this.comboBox1.BeginUpdate();
+            this.comboBox1.Items.Clear();
+            foreach (var item in allMapItems)
+            {
+                this.comboBox1.Items.Add(item);
+            }
+            this.comboBox1.EndUpdate();
+            isFiltering = false;
+        }
+
         private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
+            if (isFiltering) return;  // 過濾中不觸發
             if (this.comboBox1.SelectedItem == null)
                 return;
 
-            // 保存當前選擇的索引
+            // 保存當前選擇的地圖名稱（用名稱而非索引，避免過濾後錯亂）
             string iniPath = Path.GetTempPath() + "mapviewer.ini";
-            Utils.WriteINI("MapForm", "LastSelectedMapIndex", this.comboBox1.SelectedIndex.ToString(), iniPath);
+            Utils.WriteINI("MapForm", "LastSelectedMapName", this.comboBox1.SelectedItem.ToString(), iniPath);
 
             // 重置縮放級別
             zoomLevel = 1.0;
@@ -1499,6 +1601,9 @@ namespace L1FlyMapViewer
 
             // 載入該地圖的 s32 檔案清單
             LoadS32FileList(szSelectName);
+
+            // 選擇後重置過濾，顯示所有地圖
+            ResetMapFilter();
         }
 
         // 更新小地圖
@@ -4851,7 +4956,7 @@ namespace L1FlyMapViewer
                 affectedS32.Add(cell.S32Data);
             }
 
-            // Layer2 和 Layer5-8 統計（這是整個 S32 共用的資料）
+            // Layer2 統計（整個 S32 共用的資料）
             if (deleteLayer2)
             {
                 foreach (var s32 in affectedS32)
@@ -4859,12 +4964,25 @@ namespace L1FlyMapViewer
                     layer2Count += s32.Layer2.Count;
                 }
             }
+
+            // Layer5 統計（按格子位置刪除透明圖塊）
+            Dictionary<S32Data, List<Layer5Item>> layer5ToDeleteByS32 = new Dictionary<S32Data, List<Layer5Item>>();
             if (deleteLayer5to8)
             {
-                foreach (var s32 in affectedS32)
+                foreach (var cell in cells)
                 {
-                    if (s32.Layer5to8Data != null && s32.Layer5to8Data.Length > 0)
-                        layer5to8Count++;
+                    // Layer5 的 X, Y 是 0-63 範圍（與 Layer3 相同）
+                    int layer3X = cell.LocalX / 2;
+                    var layer5Items = cell.S32Data.Layer5.Where(l => l.X == layer3X && l.Y == cell.LocalY).ToList();
+                    if (layer5Items.Count > 0)
+                    {
+                        if (!layer5ToDeleteByS32.ContainsKey(cell.S32Data))
+                        {
+                            layer5ToDeleteByS32[cell.S32Data] = new List<Layer5Item>();
+                        }
+                        layer5ToDeleteByS32[cell.S32Data].AddRange(layer5Items);
+                        layer5to8Count += layer5Items.Count;
+                    }
                 }
             }
 
@@ -4880,7 +4998,7 @@ namespace L1FlyMapViewer
             if (deleteLayer2 && layer2Count > 0) deleteParts.Add($"L2:{layer2Count} (整個S32)");
             if (deleteLayer3 && layer3Count > 0) deleteParts.Add($"L3:{layer3Count}");
             if (deleteLayer4 && layer4Count > 0) deleteParts.Add($"L4:{layer4Count}");
-            if (deleteLayer5to8 && layer5to8Count > 0) deleteParts.Add($"L5-8:{layer5to8Count}個S32");
+            if (deleteLayer5to8 && layer5to8Count > 0) deleteParts.Add($"L5:{layer5to8Count}");
 
             string deleteInfo = string.Join(", ", deleteParts);
 
@@ -4953,18 +5071,19 @@ namespace L1FlyMapViewer
                     }
                 }
 
-                // 刪除 Layer5-8（整個 S32 的資料）
-                int layer5to8Deleted = 0;
+                // 刪除 Layer5（按格子刪除透明圖塊）
+                int layer5Deleted = 0;
                 if (deleteLayer5to8)
                 {
-                    foreach (var s32 in affectedS32)
+                    foreach (var kvp in layer5ToDeleteByS32)
                     {
-                        if (s32.Layer5to8Data != null && s32.Layer5to8Data.Length > 0)
+                        S32Data s32Data = kvp.Key;
+                        foreach (var item in kvp.Value)
                         {
-                            s32.Layer5to8Data = new byte[0];
-                            s32.IsModified = true;
-                            layer5to8Deleted++;
+                            s32Data.Layer5.Remove(item);
+                            layer5Deleted++;
                         }
+                        s32Data.IsModified = true;
                     }
                 }
 
@@ -4976,7 +5095,7 @@ namespace L1FlyMapViewer
                 if (deleteLayer2 && layer2Deleted > 0) resultParts.Add($"L2:{layer2Deleted}");
                 if (deleteLayer3 && layer3Count > 0) resultParts.Add($"L3:{layer3Count}");
                 if (deleteLayer4 && layer4Count > 0) resultParts.Add($"L4:{layer4Count}");
-                if (deleteLayer5to8 && layer5to8Deleted > 0) resultParts.Add($"L5-8:{layer5to8Deleted}");
+                if (deleteLayer5to8 && layer5Deleted > 0) resultParts.Add($"L5:{layer5Deleted}");
 
                 string resultInfo = resultParts.Count > 0 ? string.Join(", ", resultParts) : "無";
                 this.toolStripStatusLabel1.Text = $"已刪除 {cells.Count} 格 ({resultInfo})，影響 {affectedS32.Count} 個 S32 檔案";

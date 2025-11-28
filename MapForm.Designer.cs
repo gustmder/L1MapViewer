@@ -270,11 +270,12 @@ namespace L1FlyMapViewer
             this.comboBox1.FormattingEnabled = true;
             this.comboBox1.Location = new Point(10, 10);
             this.comboBox1.Name = "comboBox1";
-            this.comboBox1.Size = new Size(260, 21);
+            this.comboBox1.Size = new Size(260, 23);
             this.comboBox1.TabIndex = 0;
-            this.comboBox1.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
-            this.comboBox1.AutoCompleteSource = AutoCompleteSource.ListItems;
+            this.comboBox1.DropDownStyle = ComboBoxStyle.DropDown;  // 可輸入文字
+            this.comboBox1.MaxDropDownItems = 20;
             this.comboBox1.SelectedIndexChanged += new System.EventHandler(this.comboBox1_SelectedIndexChanged);
+            this.comboBox1.TextChanged += new System.EventHandler(this.comboBox1_TextChanged);
 
             //
             // miniMapPictureBox
