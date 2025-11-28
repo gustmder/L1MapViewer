@@ -16,6 +16,10 @@ namespace L1FlyMapViewer
         public ToolStripProgressBar toolStripProgressBar1;
         public ToolStripStatusLabel toolStripStatusLabel2;
         public ToolStripStatusLabel toolStripStatusLabel3;
+        private ToolStripStatusLabel toolStripJumpLabel;
+        private ToolStripTextBox toolStripJumpTextBox;
+        private ToolStripButton toolStripJumpButton;
+        private ToolStripButton toolStripCopyMoveCmd;
 
         // 左側面板
         private Panel leftPanel;
@@ -27,10 +31,12 @@ namespace L1FlyMapViewer
         // 右側面板（Tile 清單）
         private Panel rightPanel;
         private Label lblTileList;
+        private TextBox txtTileSearch;
         private ListView lvTiles;
         private Label lblLayer4Groups;
         private ListView lvLayer4Groups;
         private Label lblGroupThumbnails;
+        private Button btnShowAllGroups;
         private ListView lvGroupThumbnails;
 
         // 工具列面板（右側功能區）
@@ -102,6 +108,10 @@ namespace L1FlyMapViewer
             this.toolStripStatusLabel2 = new ToolStripStatusLabel();
             this.toolStripStatusLabel3 = new ToolStripStatusLabel();
             this.toolStripProgressBar1 = new ToolStripProgressBar();
+            this.toolStripJumpLabel = new ToolStripStatusLabel();
+            this.toolStripJumpTextBox = new ToolStripTextBox();
+            this.toolStripJumpButton = new ToolStripButton();
+            this.toolStripCopyMoveCmd = new ToolStripButton();
 
             // 左側面板
             this.leftPanel = new Panel();
@@ -113,10 +123,12 @@ namespace L1FlyMapViewer
             // 右側面板
             this.rightPanel = new Panel();
             this.lblTileList = new Label();
+            this.txtTileSearch = new TextBox();
             this.lvTiles = new ListView();
             this.lblLayer4Groups = new Label();
             this.lvLayer4Groups = new ListView();
             this.lblGroupThumbnails = new Label();
+            this.btnShowAllGroups = new Button();
             this.lvGroupThumbnails = new ListView();
 
             // 工具列面板
@@ -219,7 +231,13 @@ namespace L1FlyMapViewer
                 this.toolStripStatusLabel1,
                 this.toolStripStatusLabel2,
                 this.toolStripStatusLabel3,
-                this.toolStripProgressBar1
+                this.toolStripProgressBar1,
+                new ToolStripSeparator(),
+                this.toolStripCopyMoveCmd,
+                new ToolStripSeparator(),
+                this.toolStripJumpLabel,
+                this.toolStripJumpTextBox,
+                this.toolStripJumpButton
             });
             this.statusStrip1.Location = new Point(0, 678);
             this.statusStrip1.Name = "statusStrip1";
@@ -253,6 +271,39 @@ namespace L1FlyMapViewer
             this.toolStripProgressBar1.Size = new Size(100, 16);
             this.toolStripProgressBar1.Style = ProgressBarStyle.Marquee;
             this.toolStripProgressBar1.Visible = false;
+
+            //
+            // toolStripJumpLabel
+            //
+            this.toolStripJumpLabel.Name = "toolStripJumpLabel";
+            this.toolStripJumpLabel.Size = new Size(60, 17);
+            this.toolStripJumpLabel.Text = "跳轉座標:";
+
+            //
+            // toolStripJumpTextBox
+            //
+            this.toolStripJumpTextBox.Name = "toolStripJumpTextBox";
+            this.toolStripJumpTextBox.Size = new Size(100, 22);
+            this.toolStripJumpTextBox.ToolTipText = "輸入座標 (X,Y) 然後按 Enter 或點擊跳轉";
+            this.toolStripJumpTextBox.KeyDown += new KeyEventHandler(this.toolStripJumpTextBox_KeyDown);
+
+            //
+            // toolStripJumpButton
+            //
+            this.toolStripJumpButton.Name = "toolStripJumpButton";
+            this.toolStripJumpButton.Size = new Size(35, 20);
+            this.toolStripJumpButton.Text = "Go";
+            this.toolStripJumpButton.Click += new System.EventHandler(this.toolStripJumpButton_Click);
+
+            //
+            // toolStripCopyMoveCmd
+            //
+            this.toolStripCopyMoveCmd.Name = "toolStripCopyMoveCmd";
+            this.toolStripCopyMoveCmd.Size = new Size(120, 20);
+            this.toolStripCopyMoveCmd.Text = "複製移動指令";
+            this.toolStripCopyMoveCmd.ToolTipText = "複製 .移動 x y 地圖id 指令到剪貼簿";
+            this.toolStripCopyMoveCmd.Enabled = false;
+            this.toolStripCopyMoveCmd.Click += new System.EventHandler(this.toolStripCopyMoveCmd_Click);
 
             //
             // leftPanel
@@ -662,10 +713,12 @@ namespace L1FlyMapViewer
             //
             this.rightPanel.BorderStyle = BorderStyle.FixedSingle;
             this.rightPanel.Controls.Add(this.lblTileList);
+            this.rightPanel.Controls.Add(this.txtTileSearch);
             this.rightPanel.Controls.Add(this.lvTiles);
             this.rightPanel.Controls.Add(this.lblLayer4Groups);
             this.rightPanel.Controls.Add(this.lvLayer4Groups);
             this.rightPanel.Controls.Add(this.lblGroupThumbnails);
+            this.rightPanel.Controls.Add(this.btnShowAllGroups);
             this.rightPanel.Controls.Add(this.lvGroupThumbnails);
             this.rightPanel.Dock = DockStyle.Right;
             this.rightPanel.Location = new Point(1010, 24);
@@ -684,14 +737,25 @@ namespace L1FlyMapViewer
             this.lblTileList.TextAlign = ContentAlignment.MiddleLeft;
 
             //
+            // txtTileSearch
+            //
+            this.txtTileSearch.Location = new Point(5, 28);
+            this.txtTileSearch.Name = "txtTileSearch";
+            this.txtTileSearch.Size = new Size(210, 23);
+            this.txtTileSearch.TabIndex = 7;
+            this.txtTileSearch.PlaceholderText = "搜尋 TileId...";
+            this.txtTileSearch.TextChanged += new System.EventHandler(this.txtTileSearch_TextChanged);
+
+            //
             // lvTiles
             //
-            this.lvTiles.Location = new Point(5, 30);
+            this.lvTiles.Location = new Point(5, 55);
             this.lvTiles.Name = "lvTiles";
-            this.lvTiles.Size = new Size(210, 150);
+            this.lvTiles.Size = new Size(210, 125);
             this.lvTiles.TabIndex = 1;
             this.lvTiles.View = View.LargeIcon;
             this.lvTiles.DoubleClick += new System.EventHandler(this.lvTiles_DoubleClick);
+            this.lvTiles.MouseUp += new MouseEventHandler(this.lvTiles_MouseUp);
 
             //
             // lblLayer4Groups
@@ -723,10 +787,21 @@ namespace L1FlyMapViewer
             //
             this.lblGroupThumbnails.Location = new Point(5, 335);
             this.lblGroupThumbnails.Name = "lblGroupThumbnails";
-            this.lblGroupThumbnails.Size = new Size(210, 20);
+            this.lblGroupThumbnails.Size = new Size(140, 20);
             this.lblGroupThumbnails.TabIndex = 4;
             this.lblGroupThumbnails.Text = "群組縮圖列表";
             this.lblGroupThumbnails.TextAlign = ContentAlignment.MiddleLeft;
+
+            //
+            // btnShowAllGroups
+            //
+            this.btnShowAllGroups.Location = new Point(150, 335);
+            this.btnShowAllGroups.Name = "btnShowAllGroups";
+            this.btnShowAllGroups.Size = new Size(60, 20);
+            this.btnShowAllGroups.TabIndex = 6;
+            this.btnShowAllGroups.Text = "全部";
+            this.btnShowAllGroups.UseVisualStyleBackColor = true;
+            this.btnShowAllGroups.Click += new System.EventHandler(this.btnShowAllGroups_Click);
 
             //
             // lvGroupThumbnails
@@ -737,7 +812,7 @@ namespace L1FlyMapViewer
             this.lvGroupThumbnails.TabIndex = 5;
             this.lvGroupThumbnails.View = View.LargeIcon;
             this.lvGroupThumbnails.MultiSelect = false;
-            this.lvGroupThumbnails.Click += new System.EventHandler(this.lvGroupThumbnails_Click);
+            this.lvGroupThumbnails.MouseClick += new MouseEventHandler(this.lvGroupThumbnails_MouseClick);
             this.lvGroupThumbnails.DoubleClick += new System.EventHandler(this.lvGroupThumbnails_DoubleClick);
             this.lvGroupThumbnails.MouseUp += new MouseEventHandler(this.lvGroupThumbnails_MouseUp);
 
