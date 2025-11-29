@@ -1286,6 +1286,11 @@ namespace L1FlyMapViewer
                     this.comboBox1.SelectedIndex = selectedIndex;
                 }
             }
+
+            // 初始化浮動圖層面板位置和狀態
+            SyncFloatPanelCheckboxes();
+            s32EditorPanel_Resize(null, null);
+            layerFloatPanel.BringToFront();
         }
 
         private void openToolStripMenuItem_Click(object sender, EventArgs e)
@@ -3143,6 +3148,94 @@ namespace L1FlyMapViewer
             // 使用防抖Timer，避免快速切換時多次渲染
             renderDebounceTimer.Stop();
             renderDebounceTimer.Start();
+        }
+
+
+        // 浮動圖層面板選項變更
+        private void chkFloatLayer_CheckedChanged(object sender, EventArgs e)
+        {
+            // 同步到原本的 CheckBox
+            if (sender == chkFloatLayer1)
+            {
+                chkLayer1.Checked = chkFloatLayer1.Checked;
+            }
+            else if (sender == chkFloatLayer2)
+            {
+                chkLayer2.Checked = chkFloatLayer2.Checked;
+            }
+            else if (sender == chkFloatLayer4)
+            {
+                chkLayer4.Checked = chkFloatLayer4.Checked;
+            }
+            else if (sender == chkFloatPassable)
+            {
+                chkShowPassable.Checked = chkFloatPassable.Checked;
+            }
+            else if (sender == chkFloatGrid)
+            {
+                chkShowGrid.Checked = chkFloatGrid.Checked;
+            }
+            else if (sender == chkFloatS32Boundary)
+            {
+                chkShowS32Boundary.Checked = chkFloatS32Boundary.Checked;
+            }
+
+            // 更新圖示顯示狀態
+            UpdateLayerIconText();
+
+            // 觸發重新渲染
+            renderDebounceTimer.Stop();
+            renderDebounceTimer.Start();
+        }
+
+        // 更新浮動圖層圖示文字（顯示目前啟用的層）
+        private void UpdateLayerIconText()
+        {
+            // 圖示用不同顏色表示狀態 - 根據啟用層數量
+            int enabledCount = 0;
+            if (chkFloatLayer1.Checked) enabledCount++;
+            if (chkFloatLayer2.Checked) enabledCount++;
+            if (chkFloatLayer4.Checked) enabledCount++;
+            if (chkFloatPassable.Checked) enabledCount++;
+            if (chkFloatGrid.Checked) enabledCount++;
+            if (chkFloatS32Boundary.Checked) enabledCount++;
+
+            if (enabledCount == 0)
+            {
+                lblLayerIcon.ForeColor = Color.Gray;
+            }
+            else if (enabledCount == 6)
+            {
+                lblLayerIcon.ForeColor = Color.LightGreen;
+            }
+            else
+            {
+                lblLayerIcon.ForeColor = Color.Yellow;
+            }
+        }
+
+        // s32EditorPanel 大小變更時調整浮動面板位置
+        private void s32EditorPanel_Resize(object sender, EventArgs e)
+        {
+            // 將浮動面板放在 s32MapPanel 區域的右上角（相對於 s32EditorPanel）
+            int rightMargin = 10;
+            int topMargin = 10;
+            // s32MapPanel 的起點是 s32LayerControlPanel 下方
+            int mapPanelTop = s32MapPanel.Top;
+            int mapPanelRight = s32MapPanel.Right;
+            layerFloatPanel.Location = new Point(mapPanelRight - layerFloatPanel.Width - rightMargin - 20, mapPanelTop + topMargin);
+        }
+
+        // 同步浮動面板與原本 CheckBox 的狀態
+        private void SyncFloatPanelCheckboxes()
+        {
+            chkFloatLayer1.Checked = chkLayer1.Checked;
+            chkFloatLayer2.Checked = chkLayer2.Checked;
+            chkFloatLayer4.Checked = chkLayer4.Checked;
+            chkFloatPassable.Checked = chkShowPassable.Checked;
+            chkFloatGrid.Checked = chkShowGrid.Checked;
+            chkFloatS32Boundary.Checked = chkShowS32Boundary.Checked;
+            UpdateLayerIconText();
         }
 
         // 複製設定按鈕點擊事件

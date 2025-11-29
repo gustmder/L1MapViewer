@@ -83,6 +83,17 @@ namespace L1FlyMapViewer
         private CheckBox chkLayer2;
         private CheckBox chkLayer3;
         private CheckBox chkLayer4;
+
+        // 浮動圖層控制面板（右上角）
+        private Panel layerFloatPanel;
+        private Label lblLayerIcon;
+        private Panel layerPopupPanel;
+        private CheckBox chkFloatLayer1;
+        private CheckBox chkFloatLayer2;
+        private CheckBox chkFloatLayer4;
+        private CheckBox chkFloatPassable;
+        private CheckBox chkFloatGrid;
+        private CheckBox chkFloatS32Boundary;
         private CheckBox chkShowPassable;
         private CheckBox chkShowGrid;
         private CheckBox chkShowS32Boundary;
@@ -199,6 +210,17 @@ namespace L1FlyMapViewer
             this.s32MapPanel = new Panel();
             this.s32PictureBox = new PictureBox();
             this.lblS32Info = new Label();
+
+            // 浮動圖層控制面板
+            this.layerFloatPanel = new Panel();
+            this.lblLayerIcon = new Label();
+            this.layerPopupPanel = new Panel();
+            this.chkFloatLayer1 = new CheckBox();
+            this.chkFloatLayer2 = new CheckBox();
+            this.chkFloatLayer4 = new CheckBox();
+            this.chkFloatPassable = new CheckBox();
+            this.chkFloatGrid = new CheckBox();
+            this.chkFloatS32Boundary = new CheckBox();
 
             this.menuStrip1.SuspendLayout();
             this.statusStrip1.SuspendLayout();
@@ -511,6 +533,7 @@ namespace L1FlyMapViewer
             // s32EditorPanel
             //
             this.s32EditorPanel.BackColor = Color.White;
+            this.s32EditorPanel.Controls.Add(this.layerFloatPanel);
             this.s32EditorPanel.Controls.Add(this.s32MapPanel);
             this.s32EditorPanel.Controls.Add(this.s32LayerControlPanel);
             this.s32EditorPanel.Controls.Add(this.lblS32Info);
@@ -519,19 +542,13 @@ namespace L1FlyMapViewer
             this.s32EditorPanel.Name = "s32EditorPanel";
             this.s32EditorPanel.Size = new Size(696, 608);
             this.s32EditorPanel.TabIndex = 0;
+            this.s32EditorPanel.Resize += new System.EventHandler(this.s32EditorPanel_Resize);
 
             //
             // s32LayerControlPanel
             //
             this.s32LayerControlPanel.BackColor = Color.LightGray;
             this.s32LayerControlPanel.BorderStyle = BorderStyle.FixedSingle;
-            this.s32LayerControlPanel.Controls.Add(this.chkLayer1);
-            this.s32LayerControlPanel.Controls.Add(this.chkLayer2);
-            this.s32LayerControlPanel.Controls.Add(this.chkLayer3);
-            this.s32LayerControlPanel.Controls.Add(this.chkLayer4);
-            this.s32LayerControlPanel.Controls.Add(this.chkShowPassable);
-            this.s32LayerControlPanel.Controls.Add(this.chkShowGrid);
-            this.s32LayerControlPanel.Controls.Add(this.chkShowS32Boundary);
             this.s32LayerControlPanel.Controls.Add(this.btnCopySettings);
             this.s32LayerControlPanel.Controls.Add(this.btnCopyMapCoords);
             this.s32LayerControlPanel.Controls.Add(this.btnSetPassable);
@@ -542,7 +559,7 @@ namespace L1FlyMapViewer
             this.s32LayerControlPanel.Dock = DockStyle.Top;
             this.s32LayerControlPanel.Location = new Point(0, 0);
             this.s32LayerControlPanel.Name = "s32LayerControlPanel";
-            this.s32LayerControlPanel.Size = new Size(696, 65);
+            this.s32LayerControlPanel.Size = new Size(696, 35);
             this.s32LayerControlPanel.TabIndex = 0;
 
             //
@@ -638,7 +655,7 @@ namespace L1FlyMapViewer
             //
             // btnCopySettings
             //
-            this.btnCopySettings.Location = new Point(520, 33);
+            this.btnCopySettings.Location = new Point(520, 5);
             this.btnCopySettings.Name = "btnCopySettings";
             this.btnCopySettings.Size = new Size(90, 25);
             this.btnCopySettings.TabIndex = 8;
@@ -649,7 +666,7 @@ namespace L1FlyMapViewer
             //
             // btnCopyMapCoords
             //
-            this.btnCopyMapCoords.Location = new Point(615, 33);
+            this.btnCopyMapCoords.Location = new Point(615, 5);
             this.btnCopyMapCoords.Name = "btnCopyMapCoords";
             this.btnCopyMapCoords.Size = new Size(75, 25);
             this.btnCopyMapCoords.TabIndex = 13;
@@ -660,7 +677,7 @@ namespace L1FlyMapViewer
             //
             // btnSetPassable
             //
-            this.btnSetPassable.Location = new Point(10, 33);
+            this.btnSetPassable.Location = new Point(10, 5);
             this.btnSetPassable.Name = "btnSetPassable";
             this.btnSetPassable.Size = new Size(80, 25);
             this.btnSetPassable.TabIndex = 9;
@@ -671,7 +688,7 @@ namespace L1FlyMapViewer
             //
             // btnSetImpassable
             //
-            this.btnSetImpassable.Location = new Point(100, 33);
+            this.btnSetImpassable.Location = new Point(100, 5);
             this.btnSetImpassable.Name = "btnSetImpassable";
             this.btnSetImpassable.Size = new Size(80, 25);
             this.btnSetImpassable.TabIndex = 10;
@@ -682,7 +699,7 @@ namespace L1FlyMapViewer
             //
             // btnSaveS32
             //
-            this.btnSaveS32.Location = new Point(190, 33);
+            this.btnSaveS32.Location = new Point(190, 5);
             this.btnSaveS32.Name = "btnSaveS32";
             this.btnSaveS32.Size = new Size(80, 25);
             this.btnSaveS32.TabIndex = 11;
@@ -693,7 +710,7 @@ namespace L1FlyMapViewer
             //
             // btnReloadMap
             //
-            this.btnReloadMap.Location = new Point(280, 33);
+            this.btnReloadMap.Location = new Point(280, 5);
             this.btnReloadMap.Name = "btnReloadMap";
             this.btnReloadMap.Size = new Size(100, 25);
             this.btnReloadMap.TabIndex = 12;
@@ -741,6 +758,130 @@ namespace L1FlyMapViewer
             this.lblS32Info.TabIndex = 2;
             this.lblS32Info.Text = "請選擇一個 S32 檔案";
             this.lblS32Info.TextAlign = ContentAlignment.MiddleLeft;
+
+            //
+            // layerFloatPanel (浮動圖層控制面板)
+            //
+            this.layerFloatPanel.BackColor = Color.FromArgb(200, 50, 50, 50);
+            this.layerFloatPanel.Controls.Add(this.lblLayerIcon);
+            this.layerFloatPanel.Controls.Add(this.layerPopupPanel);
+            this.layerFloatPanel.Location = new Point(10, 10);
+            this.layerFloatPanel.Name = "layerFloatPanel";
+            this.layerFloatPanel.Size = new Size(90, 164);
+            this.layerFloatPanel.TabIndex = 10;
+            this.layerFloatPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+
+            //
+            // lblLayerIcon (圖層圖示)
+            //
+            this.lblLayerIcon.BackColor = Color.Transparent;
+            this.lblLayerIcon.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
+            this.lblLayerIcon.ForeColor = Color.White;
+            this.lblLayerIcon.Location = new Point(0, 0);
+            this.lblLayerIcon.Name = "lblLayerIcon";
+            this.lblLayerIcon.Size = new Size(90, 24);
+            this.lblLayerIcon.TabIndex = 0;
+            this.lblLayerIcon.Text = "▣ 圖層";
+            this.lblLayerIcon.TextAlign = ContentAlignment.MiddleCenter;
+
+            //
+            // layerPopupPanel (展開的選項面板)
+            //
+            this.layerPopupPanel.BackColor = Color.FromArgb(230, 40, 40, 40);
+            this.layerPopupPanel.Controls.Add(this.chkFloatLayer1);
+            this.layerPopupPanel.Controls.Add(this.chkFloatLayer2);
+            this.layerPopupPanel.Controls.Add(this.chkFloatLayer4);
+            this.layerPopupPanel.Controls.Add(this.chkFloatPassable);
+            this.layerPopupPanel.Controls.Add(this.chkFloatGrid);
+            this.layerPopupPanel.Controls.Add(this.chkFloatS32Boundary);
+            this.layerPopupPanel.Location = new Point(0, 24);
+            this.layerPopupPanel.Name = "layerPopupPanel";
+            this.layerPopupPanel.Padding = new Padding(5);
+            this.layerPopupPanel.Size = new Size(90, 140);
+            this.layerPopupPanel.TabIndex = 1;
+            this.layerPopupPanel.Visible = true;
+
+            //
+            // chkFloatLayer1
+            //
+            this.chkFloatLayer1.AutoSize = true;
+            this.chkFloatLayer1.Checked = true;
+            this.chkFloatLayer1.CheckState = CheckState.Checked;
+            this.chkFloatLayer1.ForeColor = Color.White;
+            this.chkFloatLayer1.Location = new Point(8, 5);
+            this.chkFloatLayer1.Name = "chkFloatLayer1";
+            this.chkFloatLayer1.Size = new Size(80, 19);
+            this.chkFloatLayer1.TabIndex = 0;
+            this.chkFloatLayer1.Text = "L1 地板";
+            this.chkFloatLayer1.UseVisualStyleBackColor = true;
+            this.chkFloatLayer1.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
+
+            //
+            // chkFloatLayer2
+            //
+            this.chkFloatLayer2.AutoSize = true;
+            this.chkFloatLayer2.ForeColor = Color.LightGray;
+            this.chkFloatLayer2.Location = new Point(8, 27);
+            this.chkFloatLayer2.Name = "chkFloatLayer2";
+            this.chkFloatLayer2.Size = new Size(80, 19);
+            this.chkFloatLayer2.TabIndex = 1;
+            this.chkFloatLayer2.Text = "L2";
+            this.chkFloatLayer2.UseVisualStyleBackColor = true;
+            this.chkFloatLayer2.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
+
+            //
+            // chkFloatLayer4
+            //
+            this.chkFloatLayer4.AutoSize = true;
+            this.chkFloatLayer4.Checked = true;
+            this.chkFloatLayer4.CheckState = CheckState.Checked;
+            this.chkFloatLayer4.ForeColor = Color.White;
+            this.chkFloatLayer4.Location = new Point(8, 49);
+            this.chkFloatLayer4.Name = "chkFloatLayer4";
+            this.chkFloatLayer4.Size = new Size(80, 19);
+            this.chkFloatLayer4.TabIndex = 2;
+            this.chkFloatLayer4.Text = "L4 物件";
+            this.chkFloatLayer4.UseVisualStyleBackColor = true;
+            this.chkFloatLayer4.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
+
+            //
+            // chkFloatPassable
+            //
+            this.chkFloatPassable.AutoSize = true;
+            this.chkFloatPassable.ForeColor = Color.LightGreen;
+            this.chkFloatPassable.Location = new Point(8, 71);
+            this.chkFloatPassable.Name = "chkFloatPassable";
+            this.chkFloatPassable.Size = new Size(80, 19);
+            this.chkFloatPassable.TabIndex = 3;
+            this.chkFloatPassable.Text = "通行";
+            this.chkFloatPassable.UseVisualStyleBackColor = true;
+            this.chkFloatPassable.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
+
+            //
+            // chkFloatGrid
+            //
+            this.chkFloatGrid.AutoSize = true;
+            this.chkFloatGrid.ForeColor = Color.LightBlue;
+            this.chkFloatGrid.Location = new Point(8, 93);
+            this.chkFloatGrid.Name = "chkFloatGrid";
+            this.chkFloatGrid.Size = new Size(80, 19);
+            this.chkFloatGrid.TabIndex = 4;
+            this.chkFloatGrid.Text = "格線";
+            this.chkFloatGrid.UseVisualStyleBackColor = true;
+            this.chkFloatGrid.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
+
+            //
+            // chkFloatS32Boundary
+            //
+            this.chkFloatS32Boundary.AutoSize = true;
+            this.chkFloatS32Boundary.ForeColor = Color.Orange;
+            this.chkFloatS32Boundary.Location = new Point(8, 115);
+            this.chkFloatS32Boundary.Name = "chkFloatS32Boundary";
+            this.chkFloatS32Boundary.Size = new Size(80, 19);
+            this.chkFloatS32Boundary.TabIndex = 5;
+            this.chkFloatS32Boundary.Text = "S32邊界";
+            this.chkFloatS32Boundary.UseVisualStyleBackColor = true;
+            this.chkFloatS32Boundary.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
 
             //
             // rightPanel
