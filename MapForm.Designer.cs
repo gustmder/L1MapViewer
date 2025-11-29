@@ -742,6 +742,7 @@ namespace L1FlyMapViewer
             this.s32PictureBox.TabIndex = 0;
             this.s32PictureBox.TabStop = false;
             this.s32PictureBox.MouseClick += new MouseEventHandler(this.s32PictureBox_MouseClick);
+            this.s32PictureBox.MouseDoubleClick += new MouseEventHandler(this.s32PictureBox_MouseDoubleClick);
             this.s32PictureBox.MouseDown += new MouseEventHandler(this.s32PictureBox_MouseDown);
             this.s32PictureBox.MouseMove += new MouseEventHandler(this.s32PictureBox_MouseMove);
             this.s32PictureBox.MouseUp += new MouseEventHandler(this.s32PictureBox_MouseUp);

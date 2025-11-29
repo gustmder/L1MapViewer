@@ -777,9 +777,11 @@ L1MapViewer CLI - S32 檔案解析工具
                 bw.Write((ushort)s32.Layer2.Count);
                 foreach (var item in s32.Layer2)
                 {
-                    bw.Write(item.Value1);
-                    bw.Write(item.Value2);
-                    bw.Write(item.Value3);
+                    bw.Write(item.X);
+                    bw.Write(item.Y);
+                    bw.Write(item.IndexId);
+                    bw.Write(item.TileId);
+                    bw.Write(item.UK);
                 }
 
                 // 第三層（地圖屬性）- 64x64

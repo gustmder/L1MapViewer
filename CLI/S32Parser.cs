@@ -65,15 +65,17 @@ namespace L1MapViewer.CLI
                 // 記錄第二層偏移
                 s32Data.Layer2Offset = (int)br.BaseStream.Position;
 
-                // 第二層
+                // 第二層 - X(BYTE), Y(BYTE), IndexId(BYTE), TileId(USHORT), UK(BYTE)
                 int layer2Count = br.ReadUInt16();
                 for (int i = 0; i < layer2Count; i++)
                 {
                     s32Data.Layer2.Add(new Layer2Item
                     {
-                        Value1 = br.ReadByte(),
-                        Value2 = br.ReadByte(),
-                        Value3 = br.ReadInt32()
+                        X = br.ReadByte(),
+                        Y = br.ReadByte(),
+                        IndexId = br.ReadByte(),
+                        TileId = br.ReadUInt16(),
+                        UK = br.ReadByte()
                     });
                 }
 

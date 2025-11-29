@@ -184,13 +184,15 @@ namespace L1MapViewer.Helper
                     {
                         foreach (var item in cell.S32Data.Layer2)
                         {
-                            if (!Layer2Clipboard.Any(l => l.Value1 == item.Value1 && l.Value2 == item.Value2 && l.Value3 == item.Value3))
+                            if (!Layer2Clipboard.Any(l => l.X == item.X && l.Y == item.Y && l.TileId == item.TileId))
                             {
                                 Layer2Clipboard.Add(new Layer2Item
                                 {
-                                    Value1 = item.Value1,
-                                    Value2 = item.Value2,
-                                    Value3 = item.Value3
+                                    X = item.X,
+                                    Y = item.Y,
+                                    IndexId = item.IndexId,
+                                    TileId = item.TileId,
+                                    UK = item.UK
                                 });
                             }
                         }
@@ -380,13 +382,15 @@ namespace L1MapViewer.Helper
                 {
                     foreach (var item in Layer2Clipboard)
                     {
-                        if (!targetS32.Layer2.Any(l => l.Value1 == item.Value1 && l.Value2 == item.Value2 && l.Value3 == item.Value3))
+                        if (!targetS32.Layer2.Any(l => l.X == item.X && l.Y == item.Y && l.TileId == item.TileId))
                         {
                             targetS32.Layer2.Add(new Layer2Item
                             {
-                                Value1 = item.Value1,
-                                Value2 = item.Value2,
-                                Value3 = item.Value3
+                                X = item.X,
+                                Y = item.Y,
+                                IndexId = item.IndexId,
+                                TileId = item.TileId,
+                                UK = item.UK
                             });
                             layer2AddedCount++;
                             targetS32.IsModified = true;

@@ -71,13 +71,15 @@ namespace L1MapViewer.Models
     }
 
     /// <summary>
-    /// 第二層項目
+    /// 第二層項目 - X(BYTE), Y(BYTE), IndexId(BYTE), TileId(USHORT), UK(BYTE)
     /// </summary>
     public class Layer2Item
     {
-        public byte Value1 { get; set; }
-        public byte Value2 { get; set; }
-        public int Value3 { get; set; }
+        public byte X { get; set; }
+        public byte Y { get; set; }
+        public byte IndexId { get; set; }
+        public ushort TileId { get; set; }
+        public byte UK { get; set; }
     }
 
     /// <summary>
@@ -195,6 +197,9 @@ namespace L1MapViewer.Models
         public int IndexId { get; set; }
         public int TileId { get; set; }
         public int OriginalIndex { get; set; }
+        // Layer1 座標系統 (0-127) 的原始局部座標
+        public int OriginalLocalLayer1X { get; set; }
+        public int OriginalLocalY { get; set; }
     }
 
     /// <summary>
