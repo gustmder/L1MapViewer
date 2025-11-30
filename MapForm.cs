@@ -2188,8 +2188,8 @@ namespace L1FlyMapViewer
                                 int blockX = loc[0];
                                 int blockY = loc[1];
 
-                                // 渲染這個 S32 區塊（Layer1 + Layer4）- 使用快取
-                                Bitmap blockBmp = GetOrRenderS32Block(s32Data, true, true);
+                                // 渲染這個 S32 區塊（Layer1 + Layer4，小地圖不顯示 Layer2）- 使用快取
+                                Bitmap blockBmp = GetOrRenderS32Block(s32Data, true, false, true);
 
                                 // 縮小繪製到小地圖
                                 int destX = (int)(blockX * scale);
@@ -4035,6 +4035,7 @@ namespace L1FlyMapViewer
 
             // 預先讀取 UI 狀態（在 UI Thread）
             bool showLayer1 = chkLayer1.Checked;
+            bool showLayer2 = chkLayer2.Checked;
             bool showLayer4 = chkLayer4.Checked;
             bool showLayer3 = chkLayer3.Checked;
             bool showPassable = chkShowPassable.Checked;
@@ -4172,7 +4173,7 @@ namespace L1FlyMapViewer
 
                         // 為這個 S32 生成獨立的 bitmap（使用快取）
                         var getBlockSw = Stopwatch.StartNew();
-                        Bitmap blockBmp = GetOrRenderS32Block(s32Data, showLayer1, showLayer4);
+                        Bitmap blockBmp = GetOrRenderS32Block(s32Data, showLayer1, showLayer2, showLayer4);
                         getBlockSw.Stop();
                         totalGetBlockMs += getBlockSw.ElapsedMilliseconds;
 
@@ -4325,10 +4326,10 @@ namespace L1FlyMapViewer
         private int _cacheHits = 0;
         private int _cacheMisses = 0;
 
-        private Bitmap GetOrRenderS32Block(S32Data s32Data, bool showLayer1, bool showLayer4)
+        private Bitmap GetOrRenderS32Block(S32Data s32Data, bool showLayer1, bool showLayer2, bool showLayer4)
         {
-            // 只有 Layer1+Layer4 都開啟時才使用快取
-            if (showLayer1 && showLayer4)
+            // 只有 Layer1+Layer2+Layer4 都開啟時才使用快取
+            if (showLayer1 && showLayer2 && showLayer4)
             {
                 string cacheKey = s32Data.FilePath;
                 if (_s32BlockCache.TryGetValue(cacheKey, out Bitmap cached))
@@ -4339,13 +4340,13 @@ namespace L1FlyMapViewer
 
                 _cacheMisses++;
                 // 渲染並快取
-                Bitmap rendered = RenderS32Block(s32Data, showLayer1, showLayer4);
+                Bitmap rendered = RenderS32Block(s32Data, showLayer1, showLayer2, showLayer4);
                 _s32BlockCache.TryAdd(cacheKey, rendered);
                 return rendered;
             }
 
             // 其他情況直接渲染（不快取）
-            return RenderS32Block(s32Data, showLayer1, showLayer4);
+            return RenderS32Block(s32Data, showLayer1, showLayer2, showLayer4);
         }
 
         /// <summary>
@@ -4382,7 +4383,7 @@ namespace L1FlyMapViewer
         }
 
         // 渲染單個 S32 區塊為 bitmap（與 L1MapHelper.s32FileToBmp 相同的方式）
-        private Bitmap RenderS32Block(S32Data s32Data, bool showLayer1, bool showLayer4)
+        private Bitmap RenderS32Block(S32Data s32Data, bool showLayer1, bool showLayer2, bool showLayer4)
         {
             int blockWidth = 64 * 24 * 2;  // 3072
             int blockHeight = 64 * 12 * 2; // 1536
@@ -4418,6 +4419,29 @@ namespace L1FlyMapViewer
 
                                 DrawTilToBufferDirect(pixelX, pixelY, cell.TileId, cell.IndexId, rowpix, ptr, blockWidth, blockHeight);
                             }
+                        }
+                    }
+                }
+
+                // 第二層 - 與第一層渲染方式相同
+                if (showLayer2)
+                {
+                    foreach (var item in s32Data.Layer2)
+                    {
+                        if (item.TileId > 0)
+                        {
+                            int x = item.X;
+                            int y = item.Y;
+
+                            int baseX = 0;
+                            int baseY = 63 * 12;
+                            baseX -= 24 * (x / 2);
+                            baseY -= 12 * (x / 2);
+
+                            int pixelX = baseX + x * 24 + y * 24;
+                            int pixelY = baseY + y * 12;
+
+                            DrawTilToBufferDirect(pixelX, pixelY, item.TileId, item.IndexId, rowpix, ptr, blockWidth, blockHeight);
                         }
                     }
                 }
@@ -7441,6 +7465,8 @@ namespace L1FlyMapViewer
                     }
                 }
 
+                // 清除快取並重新渲染
+                ClearS32BlockCache();
                 RenderS32Map();
 
                 // 組合結果訊息
