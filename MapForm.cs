@@ -109,6 +109,7 @@ namespace L1FlyMapViewer
 
         // Viewport 渲染相關
         private Bitmap _viewportBitmap;  // 當前渲染的 Viewport Bitmap
+        private readonly object _viewportBitmapLock = new object();  // 保護 _viewportBitmap 的鎖
 
         // Tile 資料快取 - key: "tileId_indexId" (使用 ConcurrentDictionary 支援多執行緒)
         private System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> tileDataCache = new System.Collections.Concurrent.ConcurrentDictionary<string, byte[]>();
@@ -4264,10 +4265,13 @@ namespace L1FlyMapViewer
                         // 保存渲染結果元數據
                         _viewState.SetRenderResult(worldRect.X, worldRect.Y, worldRect.Width, worldRect.Height, _viewState.ZoomLevel);
 
-                        // 釋放舊的 Viewport Bitmap
-                        if (_viewportBitmap != null)
-                            _viewportBitmap.Dispose();
-                        _viewportBitmap = viewportBitmap;
+                        // 釋放舊的 Viewport Bitmap（加鎖保護）
+                        lock (_viewportBitmapLock)
+                        {
+                            if (_viewportBitmap != null)
+                                _viewportBitmap.Dispose();
+                            _viewportBitmap = viewportBitmap;
+                        }
 
                         invokeSw.Stop();
                         LogPerf($"[RENDER-COMPLETE] bitmap assigned, size={viewportBitmap.Width}x{viewportBitmap.Height}, renderOrigin=({worldRect.X},{worldRect.Y}), invokeTime={invokeSw.ElapsedMilliseconds}ms");
@@ -6879,28 +6883,31 @@ namespace L1FlyMapViewer
         {
             var paintSw = Stopwatch.StartNew();
 
-            // 繪製 Viewport Bitmap
-            if (_viewportBitmap != null && _viewState.RenderWidth > 0)
+            // 繪製 Viewport Bitmap（加鎖保護避免多執行緒衝突）
+            lock (_viewportBitmapLock)
             {
-                // 計算 Viewport Bitmap 在 PictureBox 上的繪製位置
-                // _viewState.RenderOriginX/Y 是已渲染區域的世界座標原點
-                // _viewState.ScrollX/Y 是當前視圖的世界座標位置
-                // 繪製位置 = (RenderOrigin - Scroll) * ZoomLevel
-                int drawX = (int)((_viewState.RenderOriginX - _viewState.ScrollX) * s32ZoomLevel);
-                int drawY = (int)((_viewState.RenderOriginY - _viewState.ScrollY) * s32ZoomLevel);
+                if (_viewportBitmap != null && _viewState.RenderWidth > 0)
+                {
+                    // 計算 Viewport Bitmap 在 PictureBox 上的繪製位置
+                    // _viewState.RenderOriginX/Y 是已渲染區域的世界座標原點
+                    // _viewState.ScrollX/Y 是當前視圖的世界座標位置
+                    // 繪製位置 = (RenderOrigin - Scroll) * ZoomLevel
+                    int drawX = (int)((_viewState.RenderOriginX - _viewState.ScrollX) * s32ZoomLevel);
+                    int drawY = (int)((_viewState.RenderOriginY - _viewState.ScrollY) * s32ZoomLevel);
 
-                // Viewport Bitmap 是未縮放的，需要縮放繪製
-                int drawWidth = (int)(_viewState.RenderWidth * s32ZoomLevel);
-                int drawHeight = (int)(_viewState.RenderHeight * s32ZoomLevel);
+                    // Viewport Bitmap 是未縮放的，需要縮放繪製
+                    int drawWidth = (int)(_viewState.RenderWidth * s32ZoomLevel);
+                    int drawHeight = (int)(_viewState.RenderHeight * s32ZoomLevel);
 
-                var drawSw = Stopwatch.StartNew();
-                e.Graphics.DrawImage(_viewportBitmap, drawX, drawY, drawWidth, drawHeight);
-                drawSw.Stop();
-                LogPerf($"[PAINT] drawImage={drawSw.ElapsedMilliseconds}ms, bmpSize={_viewportBitmap.Width}x{_viewportBitmap.Height}, drawPos=({drawX},{drawY}), drawSize={drawWidth}x{drawHeight}");
-            }
-            else
-            {
-                LogPerf($"[PAINT] no bitmap, _viewportBitmap={(_viewportBitmap != null ? "exists" : "null")}, RenderWidth={_viewState.RenderWidth}");
+                    var drawSw = Stopwatch.StartNew();
+                    e.Graphics.DrawImage(_viewportBitmap, drawX, drawY, drawWidth, drawHeight);
+                    drawSw.Stop();
+                    LogPerf($"[PAINT] drawImage={drawSw.ElapsedMilliseconds}ms, bmpSize={_viewportBitmap.Width}x{_viewportBitmap.Height}, drawPos=({drawX},{drawY}), drawSize={drawWidth}x{drawHeight}");
+                }
+                else
+                {
+                    LogPerf($"[PAINT] no bitmap, _viewportBitmap={(_viewportBitmap != null ? "exists" : "null")}, RenderWidth={_viewState.RenderWidth}");
+                }
             }
 
             // 通行性編輯模式：繪製多邊形
@@ -12887,6 +12894,234 @@ namespace L1FlyMapViewer
             btnClose.Text = "關閉";
             btnClose.Location = new Point(580, 465);
             btnClose.Size = new Size(90, 35);
+            btnClose.Click += (s, args) => resultForm.Close();
+            resultForm.Controls.Add(btnClose);
+
+            resultForm.Resize += (s, args) =>
+            {
+                clbItems.Size = new Size(resultForm.ClientSize.Width - 20, resultForm.ClientSize.Height - 130);
+                btnSelectAll.Location = new Point(10, resultForm.ClientSize.Height - 85);
+                btnDeselectAll.Location = new Point(100, resultForm.ClientSize.Height - 85);
+                btnClearSelected.Location = new Point(10, resultForm.ClientSize.Height - 45);
+                btnClearAll.Location = new Point(140, resultForm.ClientSize.Height - 45);
+                btnClose.Location = new Point(resultForm.ClientSize.Width - 100, resultForm.ClientSize.Height - 45);
+            };
+
+            resultForm.ShowDialog();
+        }
+
+        // 檢查 Layer5 中 ObjectIndex 是否存在於 Layer4 的 GroupId
+        private void btnToolCheckL5Invalid_Click(object sender, EventArgs e)
+        {
+            if (_document.S32Files.Count == 0)
+            {
+                MessageBox.Show("請先載入地圖", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 收集所有 Layer4 的 GroupId
+            HashSet<int> validGroupIds = new HashSet<int>();
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                foreach (var obj in s32Data.Layer4)
+                {
+                    validGroupIds.Add(obj.GroupId);
+                }
+            }
+
+            // 檢查 Layer5 的 ObjectIndex 是否有效
+            List<(string filePath, string fileName, Layer5Item item, int itemIndex)> invalidItems =
+                new List<(string, string, Layer5Item, int)>();
+
+            foreach (var kvp in _document.S32Files)
+            {
+                string filePath = kvp.Key;
+                string fileName = Path.GetFileName(kvp.Key);
+                S32Data s32Data = kvp.Value;
+
+                for (int i = 0; i < s32Data.Layer5.Count; i++)
+                {
+                    var item = s32Data.Layer5[i];
+                    // ObjectIndex 不存在於任何 Layer4 的 GroupId
+                    if (!validGroupIds.Contains(item.ObjectIndex))
+                    {
+                        invalidItems.Add((filePath, fileName, item, i));
+                    }
+                }
+            }
+
+            if (invalidItems.Count == 0)
+            {
+                MessageBox.Show("所有 Layer5 的 ObjectIndex 都有對應的 Layer4 GroupId，沒有異常資料。",
+                    "檢查完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 顯示確認對話框
+            var confirmResult = MessageBox.Show(
+                $"發現 {invalidItems.Count} 個 Layer5 項目的 ObjectIndex 沒有對應的 Layer4 GroupId。\n\n是否要查看並清除這些異常資料？",
+                "Layer5 異常 GroupId",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (confirmResult != DialogResult.Yes)
+                return;
+
+            // 顯示清單讓使用者選擇要清除的項目
+            Form resultForm = new Form();
+            resultForm.Text = $"Layer5 異常 ObjectIndex - 共 {invalidItems.Count} 項";
+            resultForm.Size = new Size(750, 550);
+            resultForm.FormBorderStyle = FormBorderStyle.Sizable;
+            resultForm.StartPosition = FormStartPosition.CenterParent;
+
+            Label lblSummary = new Label();
+            lblSummary.Text = $"以下 {invalidItems.Count} 個 Layer5 項目的 ObjectIndex 不存在於任何 Layer4 的 GroupId：";
+            lblSummary.Location = new Point(10, 10);
+            lblSummary.Size = new Size(710, 20);
+            resultForm.Controls.Add(lblSummary);
+
+            CheckedListBox clbItems = new CheckedListBox();
+            clbItems.Location = new Point(10, 35);
+            clbItems.Size = new Size(710, 380);
+            clbItems.Font = new Font("Consolas", 9);
+            clbItems.CheckOnClick = true;
+
+            foreach (var (filePath, fileName, item, itemIndex) in invalidItems)
+            {
+                string displayText = $"[{fileName}] X={item.X}, Y={item.Y}, ObjIdx={item.ObjectIndex}, Type={item.Type}";
+                clbItems.Items.Add(displayText);
+            }
+            resultForm.Controls.Add(clbItems);
+
+            Button btnSelectAll = new Button();
+            btnSelectAll.Text = "全選";
+            btnSelectAll.Location = new Point(10, 425);
+            btnSelectAll.Size = new Size(80, 30);
+            btnSelectAll.Click += (s, args) =>
+            {
+                for (int i = 0; i < clbItems.Items.Count; i++)
+                    clbItems.SetItemChecked(i, true);
+            };
+            resultForm.Controls.Add(btnSelectAll);
+
+            Button btnDeselectAll = new Button();
+            btnDeselectAll.Text = "取消全選";
+            btnDeselectAll.Location = new Point(100, 425);
+            btnDeselectAll.Size = new Size(80, 30);
+            btnDeselectAll.Click += (s, args) =>
+            {
+                for (int i = 0; i < clbItems.Items.Count; i++)
+                    clbItems.SetItemChecked(i, false);
+            };
+            resultForm.Controls.Add(btnDeselectAll);
+
+            Button btnClearSelected = new Button();
+            btnClearSelected.Text = "清除勾選項目";
+            btnClearSelected.Location = new Point(10, 465);
+            btnClearSelected.Size = new Size(120, 35);
+            btnClearSelected.BackColor = Color.LightCoral;
+            btnClearSelected.Click += (s, args) =>
+            {
+                if (clbItems.CheckedIndices.Count == 0)
+                {
+                    MessageBox.Show("請先勾選要清除的項目", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var delConfirm = MessageBox.Show(
+                    $"確定要清除勾選的 {clbItems.CheckedIndices.Count} 個項目嗎？",
+                    "確認刪除",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+
+                if (delConfirm != DialogResult.Yes)
+                    return;
+
+                // 按 S32 分組要刪除的項目（從後往前刪除以保持索引正確）
+                var toDelete = new Dictionary<string, List<Layer5Item>>();
+                foreach (int idx in clbItems.CheckedIndices)
+                {
+                    var (filePath, _, item, _) = invalidItems[idx];
+                    if (!toDelete.ContainsKey(filePath))
+                        toDelete[filePath] = new List<Layer5Item>();
+                    toDelete[filePath].Add(item);
+                }
+
+                int deletedCount = 0;
+                foreach (var kvp in toDelete)
+                {
+                    if (_document.S32Files.TryGetValue(kvp.Key, out var s32Data))
+                    {
+                        foreach (var item in kvp.Value)
+                        {
+                            s32Data.Layer5.Remove(item);
+                            deletedCount++;
+                        }
+                        s32Data.IsModified = true;
+                    }
+                }
+
+                MessageBox.Show($"已清除 {deletedCount} 個異常的 Layer5 項目", "清除完成",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                ClearS32BlockCache();
+                resultForm.Close();
+                RenderS32Map();
+            };
+            resultForm.Controls.Add(btnClearSelected);
+
+            Button btnClearAll = new Button();
+            btnClearAll.Text = "清除全部";
+            btnClearAll.Location = new Point(140, 465);
+            btnClearAll.Size = new Size(120, 35);
+            btnClearAll.BackColor = Color.Salmon;
+            btnClearAll.Click += (s, args) =>
+            {
+                var delConfirm = MessageBox.Show(
+                    $"確定要清除所有 {invalidItems.Count} 個異常項目嗎？",
+                    "確認刪除全部",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+
+                if (delConfirm != DialogResult.Yes)
+                    return;
+
+                // 按 S32 分組要刪除的項目
+                var toDelete = new Dictionary<string, List<Layer5Item>>();
+                foreach (var (filePath, _, item, _) in invalidItems)
+                {
+                    if (!toDelete.ContainsKey(filePath))
+                        toDelete[filePath] = new List<Layer5Item>();
+                    toDelete[filePath].Add(item);
+                }
+
+                int deletedCount = 0;
+                foreach (var kvp in toDelete)
+                {
+                    if (_document.S32Files.TryGetValue(kvp.Key, out var s32Data))
+                    {
+                        foreach (var item in kvp.Value)
+                        {
+                            s32Data.Layer5.Remove(item);
+                            deletedCount++;
+                        }
+                        s32Data.IsModified = true;
+                    }
+                }
+
+                MessageBox.Show($"已清除 {deletedCount} 個異常的 Layer5 項目", "清除完成",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                ClearS32BlockCache();
+                resultForm.Close();
+                RenderS32Map();
+            };
+            resultForm.Controls.Add(btnClearAll);
+
+            Button btnClose = new Button();
+            btnClose.Text = "關閉";
+            btnClose.Location = new Point(resultForm.ClientSize.Width - 100, 465);
+            btnClose.Size = new Size(80, 35);
             btnClose.Click += (s, args) => resultForm.Close();
             resultForm.Controls.Add(btnClose);
 
