@@ -4531,8 +4531,8 @@ namespace L1FlyMapViewer
             {
                 _renderedS32Blocks.Clear();
             }
-            // 重置 ViewState 渲染狀態，強制完整重新渲染（避免增量渲染複用舊 bitmap）
-            _viewState.SetRenderResult(0, 0, 0, 0, 0);
+            // 注意：不重置 _viewState.RenderResult，讓舊的 viewport bitmap 繼續顯示
+            // 直到新的渲染完成後由 RenderViewport 更新
         }
 
         /// <summary>
@@ -10774,7 +10774,21 @@ namespace L1FlyMapViewer
             // 記錄 Undo
             PushUndoAction(undoAction);
 
-            // 更新顯示
+            // 清除已刪除群組的選取狀態（避免渲染時過濾不到物件）
+            foreach (var info in infos)
+            {
+                _editState.SelectedLayer4Groups.Remove(info.GroupId);
+            }
+            _editState.IsFilteringLayer4Groups = _editState.SelectedLayer4Groups.Count > 0;
+
+            // 清除快取並重新渲染
+            ClearS32BlockCache();
+            RenderS32Map();
+
+            // 更新 Layer5 異常檢查按鈕
+            UpdateLayer5InvalidButton();
+
+            // 更新群組縮圖列表
             if (_editState.SelectedCells.Count > 0)
             {
                 UpdateGroupThumbnailsList(_editState.SelectedCells);
@@ -10783,13 +10797,6 @@ namespace L1FlyMapViewer
             {
                 UpdateGroupThumbnailsList();
             }
-
-            // 清除快取並重新渲染
-            ClearS32BlockCache();
-            RenderS32Map();
-
-            // 更新 Layer5 異常檢查按鈕
-            UpdateLayer5InvalidButton();
 
             this.toolStripStatusLabel1.Text = $"已刪除 {infos.Count} 個群組，共 {deletedCount} 個物件";
         }
@@ -10857,8 +10864,16 @@ namespace L1FlyMapViewer
                 PushUndoAction(undoAction);
             }
 
-            // 重新渲染
+            // 清除已刪除群組的選取狀態（避免渲染時過濾不到物件）
+            _editState.SelectedLayer4Groups.Remove(groupId);
+            _editState.IsFilteringLayer4Groups = _editState.SelectedLayer4Groups.Count > 0;
+
+            // 清除快取並重新渲染（RenderS32Map 內部會在完成後自動 Invalidate）
+            ClearS32BlockCache();
             RenderS32Map();
+
+            // 更新 Layer5 異常檢查按鈕
+            UpdateLayer5InvalidButton();
 
             // 更新群組縮圖列表（保持選取區域的交集）
             if (_editState.SelectedCells != null && _editState.SelectedCells.Count > 0)
