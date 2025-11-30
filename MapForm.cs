@@ -2111,9 +2111,6 @@ namespace L1FlyMapViewer
                 originalS32Image = null;
             }
 
-            // 清除 Tile 快取（切換地圖時釋放記憶體）
-            tileDataCache.Clear();
-
             string szSelectName = this.comboBox1.SelectedItem.ToString();
             if (szSelectName.Contains("-"))
                 szSelectName = szSelectName.Split('-')[0].Trim();
@@ -3229,9 +3226,48 @@ namespace L1FlyMapViewer
             _document.MapId = mapId;
             lblS32Files.Text = "S32 檔案清單";  // 重置標籤
 
-            // 清除快取
+            // 清除所有快取
             ClearS32BlockCache();
             ClearMiniMapCache();
+            cachedAggregatedTiles.Clear();
+            tileDataCache.Clear();
+            _tilFileCache.Clear();
+
+            // 清除 viewport bitmap
+            lock (_viewportBitmapLock)
+            {
+                if (_viewportBitmap != null)
+                {
+                    _viewportBitmap.Dispose();
+                    _viewportBitmap = null;
+                }
+            }
+
+            // 重置 ViewState
+            _viewState.Reset();
+
+            // 清除編輯狀態
+            _editState.SelectedCells.Clear();
+            _editState.CellClipboard.Clear();
+            _editState.Layer2Clipboard.Clear();
+            _editState.Layer5Clipboard.Clear();
+            _editState.Layer6Clipboard.Clear();
+            _editState.Layer7Clipboard.Clear();
+            _editState.Layer8Clipboard.Clear();
+            _editState.UndoHistory.Clear();
+            _editState.RedoHistory.Clear();
+            _editState.SelectedLayer4Groups.Clear();
+            _editState.IsFilteringLayer4Groups = false;
+            hasLayer4Clipboard = false;
+            isLayer4CopyMode = false;
+            selectedRegion = new Rectangle();
+            copyRegionBounds = new Rectangle();
+
+            // 清除群組縮圖
+            lvGroupThumbnails.Items.Clear();
+
+            // 隱藏 Layer5 異常按鈕
+            btnToolCheckL5Invalid.Visible = false;
 
             // 從 Share.MapDataList 取得地圖資料
             if (!Share.MapDataList.ContainsKey(mapId))
@@ -10225,7 +10261,7 @@ namespace L1FlyMapViewer
             }
         }
 
-        // 群組縮圖單擊事件 - 左鍵複製群組
+        // 群組縮圖單擊事件 - 左鍵複製群組（支援多選）
         private void lvGroupThumbnails_MouseClick(object sender, MouseEventArgs e)
         {
             // 只處理左鍵點擊（右鍵由 MouseUp 處理顯示 context menu）
@@ -10235,31 +10271,65 @@ namespace L1FlyMapViewer
             if (lvGroupThumbnails.SelectedItems.Count == 0)
                 return;
 
-            var item = lvGroupThumbnails.SelectedItems[0];
-            if (item.Tag is GroupThumbnailInfo info && info.Objects.Count > 0)
+            // 收集所有選中群組的資訊
+            var selectedInfos = new List<GroupThumbnailInfo>();
+            foreach (ListViewItem item in lvGroupThumbnails.SelectedItems)
             {
-                CopyGroupToClipboard(info);
+                if (item.Tag is GroupThumbnailInfo info && info.Objects.Count > 0)
+                {
+                    selectedInfos.Add(info);
+                }
+            }
+
+            if (selectedInfos.Count > 0)
+            {
+                CopyMultipleGroupsToClipboard(selectedInfos);
             }
         }
 
-        // 複製群組到剪貼簿
-        private void CopyGroupToClipboard(GroupThumbnailInfo info)
+        // 群組選擇變更事件 - 更新過濾狀態
+        private void lvGroupThumbnails_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            // 更新選取的群組 ID 列表
+            _editState.SelectedLayer4Groups.Clear();
+            foreach (ListViewItem item in lvGroupThumbnails.SelectedItems)
+            {
+                if (item.Tag is GroupThumbnailInfo info)
+                {
+                    _editState.SelectedLayer4Groups.Add(info.GroupId);
+                }
+            }
+            _editState.IsFilteringLayer4Groups = _editState.SelectedLayer4Groups.Count > 0;
+
+            // 更新狀態列
+            if (_editState.SelectedLayer4Groups.Count > 0)
+            {
+                string groupIds = string.Join(", ", _editState.SelectedLayer4Groups);
+                this.toolStripStatusLabel1.Text = $"已選取 {_editState.SelectedLayer4Groups.Count} 個群組: {groupIds}";
+            }
+        }
+
+        // 複製多個群組到剪貼簿
+        private void CopyMultipleGroupsToClipboard(List<GroupThumbnailInfo> infos)
         {
             _editState.CellClipboard.Clear();
 
-            if (info.Objects.Count == 0)
+            // 收集所有要複製的物件
+            var allObjects = new List<(S32Data s32, ObjectTile obj)>();
+            foreach (var info in infos)
             {
-                this.toolStripStatusLabel1.Text = "群組內沒有任何物件";
+                allObjects.AddRange(info.Objects);
+            }
+
+            if (allObjects.Count == 0)
+            {
+                this.toolStripStatusLabel1.Text = "選取的群組內沒有任何物件";
                 return;
             }
 
-            // info.Objects 已經是交集了（在 UpdateGroupThumbnailsList 時已過濾）
-            var objectsToCopy = info.Objects;
-
             // 計算要複製物件的座標範圍（使用 Layer1 座標系統）
-            // obj.X 本身就是 Layer1 局部座標 (0-127)
             int minX = int.MaxValue, minY = int.MaxValue;
-            foreach (var (s32, obj) in objectsToCopy)
+            foreach (var (s32, obj) in allObjects)
             {
                 int globalLayer1X = s32.SegInfo.nLinBeginX * 2 + obj.X;
                 int globalLayer1Y = s32.SegInfo.nLinBeginY + obj.Y;
@@ -10268,7 +10338,7 @@ namespace L1FlyMapViewer
             }
 
             // 複製物件（使用 Layer1 座標系統）
-            foreach (var (s32, obj) in objectsToCopy)
+            foreach (var (s32, obj) in allObjects)
             {
                 int globalLayer1X = s32.SegInfo.nLinBeginX * 2 + obj.X;
                 int globalLayer1Y = s32.SegInfo.nLinBeginY + obj.Y;
@@ -10288,7 +10358,6 @@ namespace L1FlyMapViewer
                     IndexId = obj.IndexId,
                     TileId = obj.TileId,
                     OriginalIndex = s32.Layer4.IndexOf(obj),
-                    // 記錄 Layer1 座標系統 (0-127) 的局部座標
                     OriginalLocalLayer1X = obj.X,
                     OriginalLocalY = obj.Y
                 });
@@ -10301,7 +10370,14 @@ namespace L1FlyMapViewer
             _editState.SourceMapId = _document.MapId;
 
             // 顯示訊息
-            this.toolStripStatusLabel1.Text = $"已複製群組 {info.GroupId}，共 {objectsToCopy.Count} 個物件 (選取位置後按 Ctrl+V 貼上)";
+            string groupIds = string.Join(", ", infos.Select(i => i.GroupId));
+            this.toolStripStatusLabel1.Text = $"已複製 {infos.Count} 個群組 ({groupIds})，共 {allObjects.Count} 個物件 (選取位置後按 Ctrl+V 貼上)";
+        }
+
+        // 複製單一群組到剪貼簿（保留供相容）
+        private void CopyGroupToClipboard(GroupThumbnailInfo info)
+        {
+            CopyMultipleGroupsToClipboard(new List<GroupThumbnailInfo> { info });
         }
 
         // 顯示群組預覽對話框（可縮放）
@@ -10571,7 +10647,7 @@ namespace L1FlyMapViewer
             }
         }
 
-        // 群組縮圖右鍵刪除
+        // 群組縮圖右鍵選單（支援多選）
         private void lvGroupThumbnails_MouseUp(object sender, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Right)
@@ -10580,37 +10656,142 @@ namespace L1FlyMapViewer
             if (lvGroupThumbnails.SelectedItems.Count == 0)
                 return;
 
-            var item = lvGroupThumbnails.SelectedItems[0];
-            if (!(item.Tag is GroupThumbnailInfo info) || info.Objects.Count == 0)
+            // 收集所有選中群組的資訊
+            var selectedInfos = new List<GroupThumbnailInfo>();
+            int totalObjects = 0;
+            foreach (ListViewItem item in lvGroupThumbnails.SelectedItems)
+            {
+                if (item.Tag is GroupThumbnailInfo info && info.Objects.Count > 0)
+                {
+                    selectedInfos.Add(info);
+                    totalObjects += info.Objects.Count;
+                }
+            }
+
+            if (selectedInfos.Count == 0)
                 return;
 
             // 建立右鍵選單
             ContextMenuStrip menu = new ContextMenuStrip();
 
-            ToolStripMenuItem copyItem = new ToolStripMenuItem($"複製群組 {info.GroupId}");
-            copyItem.Click += (s, ev) =>
+            if (selectedInfos.Count == 1)
             {
-                CopyGroupToClipboard(info);
-            };
+                // 單選模式 - 顯示原有選項
+                var info = selectedInfos[0];
 
-            ToolStripMenuItem gotoItem = new ToolStripMenuItem("跳轉到位置");
-            gotoItem.Click += (s, ev) =>
+                ToolStripMenuItem copyItem = new ToolStripMenuItem($"複製群組 {info.GroupId}");
+                copyItem.Click += (s, ev) => CopyGroupToClipboard(info);
+
+                ToolStripMenuItem gotoItem = new ToolStripMenuItem("跳轉到位置");
+                gotoItem.Click += (s, ev) => JumpToGroupLocation(info);
+
+                ToolStripMenuItem deleteItem = new ToolStripMenuItem($"刪除群組 {info.GroupId} ({info.Objects.Count} 個物件)");
+                deleteItem.Click += (s, ev) => DeleteGroupFromMap(info);
+
+                menu.Items.Add(copyItem);
+                menu.Items.Add(gotoItem);
+                menu.Items.Add(new ToolStripSeparator());
+                menu.Items.Add(deleteItem);
+            }
+            else
             {
-                JumpToGroupLocation(info);
-            };
+                // 多選模式 - 顯示批次操作選項
+                string groupIds = string.Join(", ", selectedInfos.Select(i => i.GroupId));
 
-            ToolStripMenuItem deleteItem = new ToolStripMenuItem($"刪除群組 {info.GroupId} ({info.Objects.Count} 個物件)");
-            deleteItem.Click += (s, ev) =>
-            {
-                DeleteGroupFromMap(info);
-            };
+                ToolStripMenuItem copyItem = new ToolStripMenuItem($"複製 {selectedInfos.Count} 個群組 ({totalObjects} 個物件)");
+                copyItem.Click += (s, ev) => CopyMultipleGroupsToClipboard(selectedInfos);
 
-            menu.Items.Add(copyItem);
-            menu.Items.Add(gotoItem);
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(deleteItem);
+                ToolStripMenuItem deleteItem = new ToolStripMenuItem($"刪除 {selectedInfos.Count} 個群組 ({totalObjects} 個物件)");
+                deleteItem.Click += (s, ev) => DeleteMultipleGroupsFromMap(selectedInfos);
+
+                menu.Items.Add(copyItem);
+                menu.Items.Add(new ToolStripSeparator());
+                menu.Items.Add(deleteItem);
+            }
 
             menu.Show(lvGroupThumbnails, e.Location);
+        }
+
+        // 從地圖刪除多個群組
+        private void DeleteMultipleGroupsFromMap(List<GroupThumbnailInfo> infos)
+        {
+            // 收集所有要刪除的物件
+            var allObjects = new List<(S32Data s32, ObjectTile obj)>();
+            foreach (var info in infos)
+            {
+                allObjects.AddRange(info.Objects);
+            }
+
+            if (allObjects.Count == 0)
+            {
+                MessageBox.Show("選取的群組內沒有物件。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            string groupIds = string.Join(", ", infos.Select(i => i.GroupId));
+
+            // 確認刪除
+            DialogResult result = MessageBox.Show(
+                $"確定要刪除 {infos.Count} 個群組嗎？\n" +
+                $"群組 ID: {groupIds}\n" +
+                $"這將移除選取區域內的 {allObjects.Count} 個 Layer4 物件。",
+                "確認刪除多個群組",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (result != DialogResult.Yes)
+                return;
+
+            // 建立 Undo 記錄
+            var undoAction = new UndoAction
+            {
+                Description = $"刪除 {infos.Count} 個群組 ({allObjects.Count} 個物件)"
+            };
+
+            // 刪除物件
+            int deletedCount = 0;
+            foreach (var (s32Data, obj) in allObjects)
+            {
+                // 記錄到 Undo
+                undoAction.RemovedObjects.Add(new UndoObjectInfo
+                {
+                    S32FilePath = s32Data.FilePath,
+                    GameX = s32Data.SegInfo.nLinBeginX + obj.X / 2,
+                    GameY = s32Data.SegInfo.nLinBeginY + obj.Y,
+                    LocalX = obj.X,
+                    LocalY = obj.Y,
+                    GroupId = obj.GroupId,
+                    Layer = obj.Layer,
+                    IndexId = obj.IndexId,
+                    TileId = obj.TileId
+                });
+
+                s32Data.Layer4.Remove(obj);
+                s32Data.IsModified = true;
+                deletedCount++;
+            }
+
+            // 記錄 Undo
+            PushUndoAction(undoAction);
+
+            // 更新顯示
+            if (_editState.SelectedCells.Count > 0)
+            {
+                UpdateGroupThumbnailsList(_editState.SelectedCells);
+            }
+            else
+            {
+                UpdateGroupThumbnailsList();
+            }
+
+            // 清除快取並重新渲染
+            ClearS32BlockCache();
+            RenderS32Map();
+
+            // 更新 Layer5 異常檢查按鈕
+            UpdateLayer5InvalidButton();
+
+            this.toolStripStatusLabel1.Text = $"已刪除 {infos.Count} 個群組，共 {deletedCount} 個物件";
         }
 
         // 從地圖刪除群組（只刪除 info.Objects 中的物件，即選取區域內的物件）

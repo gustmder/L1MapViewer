@@ -1016,10 +1016,11 @@ namespace L1FlyMapViewer
             this.lvGroupThumbnails.Size = new Size(210, 285);
             this.lvGroupThumbnails.TabIndex = 5;
             this.lvGroupThumbnails.View = View.LargeIcon;
-            this.lvGroupThumbnails.MultiSelect = false;
+            this.lvGroupThumbnails.MultiSelect = true;
             this.lvGroupThumbnails.MouseClick += new MouseEventHandler(this.lvGroupThumbnails_MouseClick);
             this.lvGroupThumbnails.DoubleClick += new System.EventHandler(this.lvGroupThumbnails_DoubleClick);
             this.lvGroupThumbnails.MouseUp += new MouseEventHandler(this.lvGroupThumbnails_MouseUp);
+            this.lvGroupThumbnails.SelectedIndexChanged += new System.EventHandler(this.lvGroupThumbnails_SelectedIndexChanged);
 
             //
             // toolbarPanel (第一排)
