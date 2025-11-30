@@ -76,6 +76,16 @@ namespace L1FlyMapViewer
         // 縮放防抖Timer
         private System.Windows.Forms.Timer zoomDebounceTimer;
 
+        // 拖曳結束後延遲渲染 Timer
+        private System.Windows.Forms.Timer dragRenderTimer;
+
+        // 效能 Log 檔案路徑
+        private static readonly string _perfLogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "perf.log");
+        private void LogPerf(string message)
+        {
+            try { File.AppendAllText(_perfLogPath, $"{DateTime.Now:HH:mm:ss.fff} {message}{Environment.NewLine}"); } catch { }
+        }
+
         // 通行性編輯模式
         private enum PassableEditMode
         {
@@ -102,6 +112,12 @@ namespace L1FlyMapViewer
 
         // Tile 資料快取 - key: "tileId_indexId" (使用 ConcurrentDictionary 支援多執行緒)
         private System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> tileDataCache = new System.Collections.Concurrent.ConcurrentDictionary<string, byte[]>();
+
+        // S32 Block 渲染快取 - key: filePath, value: rendered bitmap (Layer1+Layer4)
+        private System.Collections.Concurrent.ConcurrentDictionary<string, Bitmap> _s32BlockCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Bitmap>();
+
+        // 記錄已經繪製到 viewport bitmap 的 S32 檔案路徑（用於增量渲染）
+        private HashSet<string> _renderedS32Blocks = new HashSet<string>();
 
         // 地圖過濾相關
         private List<string> allMapItems = new List<string>();  // 所有地圖項目
@@ -130,6 +146,15 @@ namespace L1FlyMapViewer
             {
                 zoomDebounceTimer.Stop();
                 ApplyS32Zoom(pendingS32ZoomLevel);
+            };
+
+            // 初始化拖曳渲染延遲Timer（150ms延遲）
+            dragRenderTimer = new System.Windows.Forms.Timer();
+            dragRenderTimer.Interval = 150;
+            dragRenderTimer.Tick += (s, e) =>
+            {
+                dragRenderTimer.Stop();
+                CheckAndRerenderIfNeeded();
             };
 
             // 註冊滑鼠滾輪事件用於縮放
@@ -2642,6 +2667,10 @@ namespace L1FlyMapViewer
             _document.S32Files.Clear();
             _document.MapId = mapId;
 
+            // 清除快取
+            ClearS32BlockCache();
+            ClearMiniMapCache();
+
             // 從 Share.MapDataList 取得地圖資料
             if (!Share.MapDataList.ContainsKey(mapId))
                 return;
@@ -3434,8 +3463,8 @@ namespace L1FlyMapViewer
                     return;
                 }
 
-                // 清除小地圖快取（下次 UpdateMiniMap 會重新渲染）
-                ClearMiniMapCache();
+                // 清除小地圖快取（viewport 移動時需要更新紅框）
+                // 注意：S32 Block Cache 不在這裡清除，只在地圖切換或編輯時清除
 
                 Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
 
@@ -3526,6 +3555,16 @@ namespace L1FlyMapViewer
             s32PictureBox.Location = new Point(0, 0);
             s32MapPanel.AutoScroll = false;
 
+            // 檢查是否可以增量渲染（舊 viewport 與新 viewport 有重疊）
+            Rectangle oldWorldRect = new Rectangle(_viewState.RenderOriginX, _viewState.RenderOriginY, _viewState.RenderWidth, _viewState.RenderHeight);
+            bool canIncrementalRender = _viewportBitmap != null &&
+                                         _viewState.RenderWidth > 0 &&
+                                         oldWorldRect.IntersectsWith(worldRect) &&
+                                         Math.Abs(_viewState.RenderZoomLevel - _viewState.ZoomLevel) < 0.001;
+
+            Bitmap oldBitmap = canIncrementalRender ? _viewportBitmap : null;
+            HashSet<string> oldRenderedBlocks = canIncrementalRender ? new HashSet<string>(_renderedS32Blocks) : new HashSet<string>();
+
             // 背景執行渲染
             Task.Run(() =>
             {
@@ -3534,14 +3573,40 @@ namespace L1FlyMapViewer
                 int blockWidth = 64 * 24 * 2;  // 3072
                 int blockHeight = 64 * 12 * 2; // 1536
 
-                // 創建 Viewport Bitmap
+                // 創建新的 Viewport Bitmap
                 Bitmap viewportBitmap = new Bitmap(worldRect.Width, worldRect.Height, PixelFormat.Format16bppRgb555);
+                HashSet<string> newRenderedBlocks = new HashSet<string>();
 
                 ImageAttributes vAttr = new ImageAttributes();
                 vAttr.SetColorKey(Color.FromArgb(0), Color.FromArgb(0)); // 透明色
 
+                int renderedCount = 0;
+                int reusedCount = 0;
+                int skippedCount = 0;
+
                 using (Graphics g = Graphics.FromImage(viewportBitmap))
                 {
+                    // 如果可以增量渲染，先把舊 bitmap 的重疊部分複製過來
+                    if (canIncrementalRender && oldBitmap != null)
+                    {
+                        // 計算重疊區域
+                        Rectangle overlap = Rectangle.Intersect(oldWorldRect, worldRect);
+                        if (overlap.Width > 0 && overlap.Height > 0)
+                        {
+                            // 舊 bitmap 中的來源位置
+                            int srcX = overlap.X - oldWorldRect.X;
+                            int srcY = overlap.Y - oldWorldRect.Y;
+                            // 新 bitmap 中的目標位置
+                            int dstX = overlap.X - worldRect.X;
+                            int dstY = overlap.Y - worldRect.Y;
+
+                            g.DrawImage(oldBitmap,
+                                new Rectangle(dstX, dstY, overlap.Width, overlap.Height),
+                                new Rectangle(srcX, srcY, overlap.Width, overlap.Height),
+                                GraphicsUnit.Pixel);
+                        }
+                    }
+
                     // 使用與原始 L1MapHelper.LoadMap 完全相同的排序方式（Utils.SortDesc）
                     var sortedFilePaths = Utils.SortDesc(s32FilesSnapshot.Keys);
 
@@ -3569,10 +3634,30 @@ namespace L1FlyMapViewer
                         // 檢查是否與渲染範圍相交
                         Rectangle blockRect = new Rectangle(mx, my, blockWidth, blockHeight);
                         if (!blockRect.IntersectsWith(worldRect))
+                        {
+                            skippedCount++;
                             continue;
+                        }
 
-                        // 為這個 S32 生成獨立的 bitmap
-                        Bitmap blockBmp = RenderS32Block(s32Data, showLayer1, showLayer4);
+                        newRenderedBlocks.Add(filePath);
+
+                        // 如果這個 block 已經在舊的重疊區域內完整渲染過，跳過
+                        if (canIncrementalRender && oldRenderedBlocks.Contains(filePath))
+                        {
+                            // 檢查 block 是否完全在重疊區域內
+                            Rectangle overlap = Rectangle.Intersect(oldWorldRect, worldRect);
+                            if (blockRect.X >= overlap.X && blockRect.Y >= overlap.Y &&
+                                blockRect.Right <= overlap.Right && blockRect.Bottom <= overlap.Bottom)
+                            {
+                                reusedCount++;
+                                continue;
+                            }
+                        }
+
+                        renderedCount++;
+
+                        // 為這個 S32 生成獨立的 bitmap（使用快取）
+                        Bitmap blockBmp = GetOrRenderS32Block(s32Data, showLayer1, showLayer4);
 
                         // 計算繪製位置（減去 worldRect 原點偏移）
                         int drawX = mx - worldRect.X;
@@ -3582,8 +3667,20 @@ namespace L1FlyMapViewer
                         g.DrawImage(blockBmp, new Rectangle(drawX, drawY, blockBmp.Width, blockBmp.Height),
                             0, 0, blockBmp.Width, blockBmp.Height, GraphicsUnit.Pixel, vAttr);
 
-                        blockBmp.Dispose();
+                        // 注意：如果是快取的 bitmap 不要 Dispose
+                        // 快取會在 ClearS32BlockCache 時統一釋放
                     }
+                }
+                LogPerf($"[RENDER] Rendered {renderedCount}, reused {reusedCount}, skipped {skippedCount}, cacheHit={_cacheHits}, cacheMiss={_cacheMisses}, viewport={panelWidth}x{panelHeight}, worldRect={worldRect}");
+                _cacheHits = 0;
+                _cacheMisses = 0;
+
+                // 更新已渲染的 S32 清單
+                lock (_renderedS32Blocks)
+                {
+                    _renderedS32Blocks.Clear();
+                    foreach (var path in newRenderedBlocks)
+                        _renderedS32Blocks.Add(path);
                 }
 
                 if (cancellationToken.IsCancellationRequested)
@@ -3662,6 +3759,13 @@ namespace L1FlyMapViewer
             if (_document.S32Files.Count == 0 || string.IsNullOrEmpty(_document.MapId))
                 return;
 
+            // 拖曳中不重新渲染，只更新顯示
+            if (isMainMapDragging)
+            {
+                s32PictureBox.Invalidate();
+                return;
+            }
+
             // 更新縮放和 Viewport 大小到 ViewState
             _viewState.ZoomLevel = s32ZoomLevel;
             _viewState.ViewportWidth = s32MapPanel.Width;
@@ -3677,6 +3781,66 @@ namespace L1FlyMapViewer
             {
                 // 只需要重繪（不需要重新渲染）
                 s32PictureBox.Invalidate();
+            }
+        }
+
+        /// <summary>
+        /// 取得快取的 S32 Block 或渲染新的（用於 Viewport 渲染）
+        /// </summary>
+        private int _cacheHits = 0;
+        private int _cacheMisses = 0;
+
+        private Bitmap GetOrRenderS32Block(S32Data s32Data, bool showLayer1, bool showLayer4)
+        {
+            // 只有 Layer1+Layer4 都開啟時才使用快取
+            if (showLayer1 && showLayer4)
+            {
+                string cacheKey = s32Data.FilePath;
+                if (_s32BlockCache.TryGetValue(cacheKey, out Bitmap cached))
+                {
+                    _cacheHits++;
+                    return cached;
+                }
+
+                _cacheMisses++;
+                // 渲染並快取
+                Bitmap rendered = RenderS32Block(s32Data, showLayer1, showLayer4);
+                _s32BlockCache.TryAdd(cacheKey, rendered);
+                return rendered;
+            }
+
+            // 其他情況直接渲染（不快取）
+            return RenderS32Block(s32Data, showLayer1, showLayer4);
+        }
+
+        /// <summary>
+        /// 清除 S32 Block 快取（地圖變更或編輯時呼叫）
+        /// </summary>
+        private void ClearS32BlockCache()
+        {
+            foreach (var bmp in _s32BlockCache.Values)
+            {
+                bmp?.Dispose();
+            }
+            _s32BlockCache.Clear();
+            lock (_renderedS32Blocks)
+            {
+                _renderedS32Blocks.Clear();
+            }
+        }
+
+        /// <summary>
+        /// 清除單個 S32 Block 的快取（編輯後呼叫）
+        /// </summary>
+        private void InvalidateS32BlockCache(string filePath)
+        {
+            if (_s32BlockCache.TryRemove(filePath, out Bitmap bmp))
+            {
+                bmp?.Dispose();
+            }
+            lock (_renderedS32Blocks)
+            {
+                _renderedS32Blocks.Remove(filePath);
             }
         }
 
@@ -5849,9 +6013,6 @@ namespace L1FlyMapViewer
         // S32 地圖鼠標移動事件 - 更新選擇區域或拖拽移動
         private void s32PictureBox_MouseMove(object sender, MouseEventArgs e)
         {
-            // 更新狀態列顯示遊戲座標
-            UpdateStatusBarWithGameCoords(e.X, e.Y);
-
             // 中鍵拖拽移動視圖
             if (isMainMapDragging)
             {
@@ -5871,10 +6032,13 @@ namespace L1FlyMapViewer
                 // 更新 ViewState 的捲動位置
                 _viewState.SetScrollSilent(newScrollX, newScrollY);
 
-                // 重繪
+                // 重繪（不觸發重新渲染）
                 s32PictureBox.Invalidate();
                 return;
             }
+
+            // 更新狀態列顯示遊戲座標（拖曳時跳過）
+            UpdateStatusBarWithGameCoords(e.X, e.Y);
 
             if (isSelectingRegion)
             {
@@ -5916,8 +6080,9 @@ namespace L1FlyMapViewer
                 this.s32PictureBox.Cursor = Cursors.Default;
                 UpdateMiniMap();
 
-                // 拖曳結束後檢查是否需要重新渲染
-                CheckAndRerenderIfNeeded();
+                // 拖曳結束後延遲渲染（避免快速連續拖曳時頻繁重渲染）
+                dragRenderTimer.Stop();
+                dragRenderTimer.Start();
                 return;
             }
 
