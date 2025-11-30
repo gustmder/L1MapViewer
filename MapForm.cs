@@ -66,6 +66,9 @@ namespace L1FlyMapViewer
         private Image originalS32Image;
         private double pendingS32ZoomLevel = 1.0;
 
+        // 小地圖完整渲染 Bitmap（整張地圖的縮圖）
+        private Bitmap _miniMapFullBitmap = null;
+
         // 圖層切換防抖Timer
         private System.Windows.Forms.Timer renderDebounceTimer;
 
@@ -1790,15 +1793,19 @@ namespace L1FlyMapViewer
         {
             try
             {
-                // 使用 ViewState 的地圖大小或 PictureBox 大小
-                int pictureWidth = _viewState.MapWidth > 0 ? _viewState.MapWidth : this.s32PictureBox.Width;
-                int pictureHeight = _viewState.MapHeight > 0 ? _viewState.MapHeight : this.s32PictureBox.Height;
+                int pictureWidth = _viewState.MapWidth;
+                int pictureHeight = _viewState.MapHeight;
 
                 if (pictureWidth <= 0 || pictureHeight <= 0)
                     return;
 
-                // 需要有 Viewport Bitmap 或傳統的 PictureBox Image
-                if (_viewportBitmap == null && this.s32PictureBox.Image == null)
+                // 如果還沒有渲染完整小地圖，先渲染
+                if (_miniMapFullBitmap == null)
+                {
+                    RenderMiniMapFull();
+                }
+
+                if (_miniMapFullBitmap == null)
                     return;
 
                 int miniWidth = 260;
@@ -1814,52 +1821,32 @@ namespace L1FlyMapViewer
                 int offsetX = (miniWidth - scaledWidth) / 2;
                 int offsetY = (miniHeight - scaledHeight) / 2;
 
-                // 建立基底圖（不含紅框）
-                if (miniMapBaseImage != null)
-                    miniMapBaseImage.Dispose();
-                miniMapBaseImage = new Bitmap(miniWidth, miniHeight);
-                using (Graphics g = Graphics.FromImage(miniMapBaseImage))
-                {
-                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
-                    g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
-
-                    g.FillRectangle(Brushes.Black, 0, 0, miniWidth, miniHeight);
-
-                    // 使用 Viewport Bitmap 或傳統方式
-                    if (_viewportBitmap != null && _viewState.RenderWidth > 0)
-                    {
-                        // 計算 Viewport Bitmap 在小地圖上的位置
-                        int vpX = (int)(_viewState.RenderOriginX * scale) + offsetX;
-                        int vpY = (int)(_viewState.RenderOriginY * scale) + offsetY;
-                        int vpW = (int)(_viewState.RenderWidth * scale);
-                        int vpH = (int)(_viewState.RenderHeight * scale);
-                        g.DrawImage(_viewportBitmap, vpX, vpY, vpW, vpH);
-                    }
-                    else if (this.s32PictureBox.Image != null)
-                    {
-                        g.DrawImage(this.s32PictureBox.Image, offsetX, offsetY, scaledWidth, scaledHeight);
-                    }
-                }
-
                 // 建立顯示圖（含紅框）
-                Bitmap miniMap = (Bitmap)miniMapBaseImage.Clone();
+                Bitmap miniMap = new Bitmap(miniWidth, miniHeight);
                 using (Graphics g = Graphics.FromImage(miniMap))
                 {
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    g.FillRectangle(Brushes.Black, 0, 0, miniWidth, miniHeight);
+
+                    // 繪製完整的小地圖底圖
+                    g.DrawImage(_miniMapFullBitmap, offsetX, offsetY, scaledWidth, scaledHeight);
+
                     // 繪製視窗位置紅框
-                    if (this.s32MapPanel.Width > 0 && this.s32MapPanel.Height > 0 && pictureWidth > 0 && pictureHeight > 0)
+                    if (this.s32MapPanel.Width > 0 && this.s32MapPanel.Height > 0)
                     {
-                        float viewPortScaleX = (float)scaledWidth / pictureWidth;
-                        float viewPortScaleY = (float)scaledHeight / pictureHeight;
+                        // 使用 ViewState 的捲動位置（世界座標）
+                        int scrollX = _viewState.ScrollX;
+                        int scrollY = _viewState.ScrollY;
 
-                        // 使用 ViewState 的捲動位置（世界座標，需要乘以縮放轉為螢幕座標）
-                        int scrollX = (int)(_viewState.ScrollX * s32ZoomLevel);
-                        int scrollY = (int)(_viewState.ScrollY * s32ZoomLevel);
+                        // Viewport 大小（世界座標）
+                        int viewportWidthWorld = (int)(s32MapPanel.Width / s32ZoomLevel);
+                        int viewportHeightWorld = (int)(s32MapPanel.Height / s32ZoomLevel);
 
-                        int viewX = (int)(scrollX * viewPortScaleX) + offsetX;
-                        int viewY = (int)(scrollY * viewPortScaleY) + offsetY;
-                        int viewWidth = (int)(this.s32MapPanel.Width * viewPortScaleX);
-                        int viewHeight = (int)(this.s32MapPanel.Height * viewPortScaleY);
+                        // 轉換為小地圖座標
+                        int viewX = (int)(scrollX * scale) + offsetX;
+                        int viewY = (int)(scrollY * scale) + offsetY;
+                        int viewWidth = (int)(viewportWidthWorld * scale);
+                        int viewHeight = (int)(viewportHeightWorld * scale);
 
                         using (Pen viewPortPen = new Pen(Color.Red, 2))
                         {
@@ -1868,13 +1855,92 @@ namespace L1FlyMapViewer
                     }
                 }
 
-                if (this.miniMapPictureBox.Image != null && this.miniMapPictureBox.Image != miniMapBaseImage)
+                if (this.miniMapPictureBox.Image != null)
                     this.miniMapPictureBox.Image.Dispose();
                 this.miniMapPictureBox.Image = miniMap;
             }
             catch
             {
                 // 忽略錯誤
+            }
+        }
+
+        // 渲染完整的小地圖縮圖（整張地圖）
+        private void RenderMiniMapFull()
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(_document.MapId) || !Share.MapDataList.ContainsKey(_document.MapId))
+                    return;
+
+                Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
+                int blockWidth = 64 * 24 * 2;  // 3072
+                int blockHeight = 64 * 12 * 2; // 1536
+
+                int mapWidth = _viewState.MapWidth;
+                int mapHeight = _viewState.MapHeight;
+
+                if (mapWidth <= 0 || mapHeight <= 0)
+                    return;
+
+                // 建立勾選的 S32 檔案清單
+                HashSet<string> checkedFilePaths = new HashSet<string>();
+                for (int i = 0; i < lstS32Files.Items.Count; i++)
+                {
+                    if (lstS32Files.GetItemChecked(i) && lstS32Files.Items[i] is S32FileItem item)
+                    {
+                        checkedFilePaths.Add(item.FilePath);
+                    }
+                }
+
+                // 創建整張地圖的 Bitmap
+                if (_miniMapFullBitmap != null)
+                    _miniMapFullBitmap.Dispose();
+                _miniMapFullBitmap = new Bitmap(mapWidth, mapHeight, PixelFormat.Format16bppRgb555);
+
+                ImageAttributes vAttr = new ImageAttributes();
+                vAttr.SetColorKey(Color.FromArgb(0), Color.FromArgb(0));
+
+                using (Graphics g = Graphics.FromImage(_miniMapFullBitmap))
+                {
+                    // 使用與 RenderViewport 相同的排序方式
+                    var sortedFilePaths = Utils.SortDesc(_document.S32Files.Keys);
+
+                    foreach (object filePathObj in sortedFilePaths)
+                    {
+                        string filePath = filePathObj as string;
+                        if (filePath == null || !_document.S32Files.ContainsKey(filePath)) continue;
+                        if (!checkedFilePaths.Contains(filePath)) continue;
+
+                        var s32Data = _document.S32Files[filePath];
+                        int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                        int mx = loc[0];
+                        int my = loc[1];
+
+                        // 渲染這個 S32 區塊
+                        Bitmap blockBmp = RenderS32Block(s32Data, chkLayer1.Checked, chkLayer4.Checked);
+
+                        // 繪製到整張地圖上
+                        g.DrawImage(blockBmp, new Rectangle(mx, my, blockBmp.Width, blockBmp.Height),
+                            0, 0, blockBmp.Width, blockBmp.Height, GraphicsUnit.Pixel, vAttr);
+
+                        blockBmp.Dispose();
+                    }
+                }
+            }
+            catch
+            {
+                // 忽略錯誤
+            }
+        }
+
+        // 清除小地圖快取（地圖變更時呼叫）
+        private void ClearMiniMapCache()
+        {
+            if (_miniMapFullBitmap != null)
+            {
+                _miniMapFullBitmap.Dispose();
+                _miniMapFullBitmap = null;
             }
         }
 
@@ -2250,7 +2316,7 @@ namespace L1FlyMapViewer
                 {
                     // 拖拽時只更新小地圖紅框位置和重繪（快速繪製）
                     s32PictureBox.Invalidate();
-                    UpdateMiniMapRedBox((int)(newScrollX * s32ZoomLevel), (int)(newScrollY * s32ZoomLevel));
+                    UpdateMiniMapRedBox(newScrollX, newScrollY);
                 }
             }
             catch
@@ -2260,20 +2326,19 @@ namespace L1FlyMapViewer
         }
 
         // 快速更新小地圖紅框位置（不重繪整張小地圖）
-        private Bitmap miniMapBaseImage = null;
-        private void UpdateMiniMapRedBox(int scrollX, int scrollY)
+        // scrollX, scrollY 是世界座標
+        private void UpdateMiniMapRedBox(int scrollXWorld, int scrollYWorld)
         {
             try
             {
-                // 使用 ViewState 的地圖大小或 PictureBox 大小
-                int pictureWidth = _viewState.MapWidth > 0 ? _viewState.MapWidth : this.s32PictureBox.Width;
-                int pictureHeight = _viewState.MapHeight > 0 ? _viewState.MapHeight : this.s32PictureBox.Height;
+                int pictureWidth = _viewState.MapWidth;
+                int pictureHeight = _viewState.MapHeight;
 
                 if (pictureWidth <= 0 || pictureHeight <= 0)
                     return;
 
-                // 如果沒有基底圖，先建立一張
-                if (miniMapBaseImage == null)
+                // 如果沒有完整小地圖，先渲染
+                if (_miniMapFullBitmap == null)
                 {
                     UpdateMiniMap();
                     return;
@@ -2291,17 +2356,25 @@ namespace L1FlyMapViewer
                 int offsetX = (miniWidth - scaledWidth) / 2;
                 int offsetY = (miniHeight - scaledHeight) / 2;
 
-                // 複製基底圖
-                Bitmap miniMap = (Bitmap)miniMapBaseImage.Clone();
+                // 建立顯示圖
+                Bitmap miniMap = new Bitmap(miniWidth, miniHeight);
                 using (Graphics g = Graphics.FromImage(miniMap))
                 {
-                    float viewPortScaleX = (float)scaledWidth / pictureWidth;
-                    float viewPortScaleY = (float)scaledHeight / pictureHeight;
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    g.FillRectangle(Brushes.Black, 0, 0, miniWidth, miniHeight);
 
-                    int viewX = (int)(scrollX * viewPortScaleX) + offsetX;
-                    int viewY = (int)(scrollY * viewPortScaleY) + offsetY;
-                    int viewWidth = (int)(this.s32MapPanel.Width * viewPortScaleX);
-                    int viewHeight = (int)(this.s32MapPanel.Height * viewPortScaleY);
+                    // 繪製完整的小地圖底圖
+                    g.DrawImage(_miniMapFullBitmap, offsetX, offsetY, scaledWidth, scaledHeight);
+
+                    // Viewport 大小（世界座標）
+                    int viewportWidthWorld = (int)(s32MapPanel.Width / s32ZoomLevel);
+                    int viewportHeightWorld = (int)(s32MapPanel.Height / s32ZoomLevel);
+
+                    // 轉換為小地圖座標
+                    int viewX = (int)(scrollXWorld * scale) + offsetX;
+                    int viewY = (int)(scrollYWorld * scale) + offsetY;
+                    int viewWidth = (int)(viewportWidthWorld * scale);
+                    int viewHeight = (int)(viewportHeightWorld * scale);
 
                     using (Pen viewPortPen = new Pen(Color.Red, 2))
                     {
@@ -2309,7 +2382,7 @@ namespace L1FlyMapViewer
                     }
                 }
 
-                if (this.miniMapPictureBox.Image != null && this.miniMapPictureBox.Image != miniMapBaseImage)
+                if (this.miniMapPictureBox.Image != null)
                     this.miniMapPictureBox.Image.Dispose();
                 this.miniMapPictureBox.Image = miniMap;
             }
@@ -3268,6 +3341,9 @@ namespace L1FlyMapViewer
                     lblS32Info.Text = "地圖資料不存在";
                     return;
                 }
+
+                // 清除小地圖快取（下次 UpdateMiniMap 會重新渲染）
+                ClearMiniMapCache();
 
                 Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
 
