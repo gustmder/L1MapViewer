@@ -763,8 +763,6 @@ namespace L1FlyMapViewer
             };
 
             // 貼上每個格子的資料
-            File.AppendAllText("copy_paste_debug.log", $"[PASTE] Starting loop, CellClipboard.Count={_editState.CellClipboard.Count}\n");
-            int processedCount = 0;
             foreach (var cellData in _editState.CellClipboard)
             {
                 // 計算目標全域 Layer1 座標
@@ -775,19 +773,10 @@ namespace L1FlyMapViewer
                 int targetGameX = targetGlobalX / 2;
                 int targetGameY = targetGlobalY;
 
-                // Debug: 顯示前幾筆
-                if (processedCount < 3)
-                {
-                    File.AppendAllText("copy_paste_debug.log", $"[PASTE] cellData: RelativeX={cellData.RelativeX}, RelativeY={cellData.RelativeY}, targetGlobal=({targetGlobalX},{targetGlobalY}), targetGame=({targetGameX},{targetGameY})\n");
-                    File.AppendAllText("copy_paste_debug.log", $"[PASTE]   Layer1Cell1={cellData.Layer1Cell1 != null}, Layer1Cell2={cellData.Layer1Cell2 != null}, Layer3Attr={cellData.Layer3Attr != null}, Layer4Objects.Count={cellData.Layer4Objects.Count}\n");
-                }
-                processedCount++;
-
                 // 找到目標格子所屬的 S32
                 S32Data targetS32 = GetS32DataByGameCoords(targetGameX, targetGameY);
                 if (targetS32 == null)
                 {
-                    File.AppendAllText("copy_paste_debug.log", $"[PASTE] targetS32 is NULL for targetGame=({targetGameX},{targetGameY})\n");
                     skippedCount++;
                     continue;
                 }
@@ -1042,9 +1031,6 @@ namespace L1FlyMapViewer
             if (skippedCount > 0)
                 message += $"，{skippedCount} 格超出範圍被跳過";
             this.toolStripStatusLabel1.Text = message;
-
-            // Debug log
-            File.AppendAllText("copy_paste_debug.log", $"[PASTE] Done! layer1Count={layer1Count}, layer3Count={layer3Count}, layer4Count={layer4Count}, skippedCount={skippedCount}\n");
 
             // 清除快取並重新渲染
             ClearS32BlockCache();
