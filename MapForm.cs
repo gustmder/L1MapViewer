@@ -1467,6 +1467,11 @@ namespace L1FlyMapViewer
 
         private void MapForm_Load(object sender, EventArgs e)
         {
+            // 初始化浮動圖層面板狀態（必須在載入地圖前執行）
+            SyncFloatPanelCheckboxes();
+            s32EditorPanel_Resize(null, null);
+            layerFloatPanel.BringToFront();
+
             string iniPath = Path.GetTempPath() + "mapviewer.ini";
 
             // 檢查是否有保存的天堂路徑，如果有就自動載入
@@ -1534,11 +1539,6 @@ namespace L1FlyMapViewer
                     this.comboBox1.SelectedIndex = selectedIndex;
                 }
             }
-
-            // 初始化浮動圖層面板位置和狀態
-            SyncFloatPanelCheckboxes();
-            s32EditorPanel_Resize(null, null);
-            layerFloatPanel.BringToFront();
         }
 
         private void openToolStripMenuItem_Click(object sender, EventArgs e)
@@ -3689,6 +3689,9 @@ namespace L1FlyMapViewer
         // 層選擇變更事件
         private void S32Layer_CheckedChanged(object sender, EventArgs e)
         {
+            // 清除快取（因為快取的 bitmap 是用特定圖層設定渲染的）
+            ClearS32BlockCache();
+
             // 使用防抖Timer，避免快速切換時多次渲染
             renderDebounceTimer.Stop();
             renderDebounceTimer.Start();
@@ -3698,7 +3701,7 @@ namespace L1FlyMapViewer
         // 浮動圖層面板選項變更
         private void chkFloatLayer_CheckedChanged(object sender, EventArgs e)
         {
-            // 同步到原本的 CheckBox
+            // 同步到原本的 CheckBox（會觸發 S32Layer_CheckedChanged）
             if (sender == chkFloatLayer1)
             {
                 chkLayer1.Checked = chkFloatLayer1.Checked;
@@ -3726,10 +3729,6 @@ namespace L1FlyMapViewer
 
             // 更新圖示顯示狀態
             UpdateLayerIconText();
-
-            // 觸發重新渲染
-            renderDebounceTimer.Stop();
-            renderDebounceTimer.Start();
         }
 
         // 更新浮動圖層圖示文字（顯示目前啟用的層）
@@ -4338,6 +4337,8 @@ namespace L1FlyMapViewer
             {
                 _renderedS32Blocks.Clear();
             }
+            // 重置 ViewState 渲染狀態，強制完整重新渲染（避免增量渲染複用舊 bitmap）
+            _viewState.SetRenderResult(0, 0, 0, 0, 0);
         }
 
         /// <summary>
@@ -5946,10 +5947,10 @@ namespace L1FlyMapViewer
 
             Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
 
-            // 將點擊位置轉換為原始座標（考慮縮放）
+            // 將點擊位置轉換為世界座標（考慮縮放和捲動位置）
             Point adjustedLocation = new Point(
-                (int)(e.Location.X / s32ZoomLevel),
-                (int)(e.Location.Y / s32ZoomLevel)
+                (int)(e.Location.X / s32ZoomLevel) + _viewState.ScrollX,
+                (int)(e.Location.Y / s32ZoomLevel) + _viewState.ScrollY
             );
 
             // 遍歷所有 S32 檔案
@@ -6031,10 +6032,10 @@ namespace L1FlyMapViewer
 
             Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
 
-            // 將點擊位置轉換為原始座標（考慮縮放）
+            // 將點擊位置轉換為世界座標（考慮縮放和捲動位置）
             Point adjustedLocation = new Point(
-                (int)(e.Location.X / s32ZoomLevel),
-                (int)(e.Location.Y / s32ZoomLevel)
+                (int)(e.Location.X / s32ZoomLevel) + _viewState.ScrollX,
+                (int)(e.Location.Y / s32ZoomLevel) + _viewState.ScrollY
             );
 
             // 遍歷所有 S32 檔案
