@@ -7125,6 +7125,15 @@ namespace L1FlyMapViewer
                     _editState.CopyRegionOrigin = new Point(globalX, globalY);
                     originSw.Stop();
 
+                    // 更新移動指令（顯示選取第一格的座標）
+                    if (gameX >= 0 && gameY >= 0)
+                    {
+                        _editState.SelectedGameX = gameX;
+                        _editState.SelectedGameY = gameY;
+                        toolStripCopyMoveCmd.Enabled = true;
+                        toolStripCopyMoveCmd.Text = $"移動 {gameX} {gameY} {_document.MapId}";
+                    }
+
                     // 根據是否有剪貼簿資料顯示不同提示（顯示遊戲座標）
                     if (hasLayer4Clipboard && _editState.CellClipboard.Count > 0)
                     {
@@ -13815,20 +13824,134 @@ namespace L1FlyMapViewer
 
             int totalItems = s32WithL5.Sum(x => x.count);
             Label lblSummary = new Label();
-            lblSummary.Text = $"共 {s32WithL5.Count} 個 S32 檔案有 Layer5（透明圖塊）資料，總計 {totalItems} 項。勾選要清除的項目：";
+            lblSummary.Text = $"共 {s32WithL5.Count} 個 S32 有 Layer5 資料，總計 {totalItems} 項。";
             lblSummary.Location = new Point(10, 10);
             lblSummary.Size = new Size(660, 20);
             resultForm.Controls.Add(lblSummary);
 
+            // 搜尋區域
+            Label lblSearch = new Label();
+            lblSearch.Text = "搜尋:";
+            lblSearch.Location = new Point(10, 35);
+            lblSearch.Size = new Size(40, 20);
+            resultForm.Controls.Add(lblSearch);
+
+            TextBox txtSearchX = new TextBox();
+            txtSearchX.Location = new Point(50, 32);
+            txtSearchX.Size = new Size(60, 22);
+            txtSearchX.PlaceholderText = "X";
+            resultForm.Controls.Add(txtSearchX);
+
+            TextBox txtSearchY = new TextBox();
+            txtSearchY.Location = new Point(115, 32);
+            txtSearchY.Size = new Size(60, 22);
+            txtSearchY.PlaceholderText = "Y";
+            resultForm.Controls.Add(txtSearchY);
+
+            TextBox txtSearchObjIdx = new TextBox();
+            txtSearchObjIdx.Location = new Point(180, 32);
+            txtSearchObjIdx.Size = new Size(70, 22);
+            txtSearchObjIdx.PlaceholderText = "ObjIdx";
+            resultForm.Controls.Add(txtSearchObjIdx);
+
+            Button btnSearch = new Button();
+            btnSearch.Text = "搜尋";
+            btnSearch.Location = new Point(255, 31);
+            btnSearch.Size = new Size(50, 24);
+            resultForm.Controls.Add(btnSearch);
+
+            Button btnClearSearch = new Button();
+            btnClearSearch.Text = "清除";
+            btnClearSearch.Location = new Point(310, 31);
+            btnClearSearch.Size = new Size(50, 24);
+            resultForm.Controls.Add(btnClearSearch);
+
+            Label lblSearchResult = new Label();
+            lblSearchResult.Text = "";
+            lblSearchResult.Location = new Point(370, 35);
+            lblSearchResult.Size = new Size(290, 20);
+            lblSearchResult.ForeColor = Color.Blue;
+            resultForm.Controls.Add(lblSearchResult);
+
             CheckedListBox clbItems = new CheckedListBox();
-            clbItems.Location = new Point(10, 35);
-            clbItems.Size = new Size(660, 380);
+            clbItems.Location = new Point(10, 60);
+            clbItems.Size = new Size(660, 355);
             clbItems.Font = new Font("Consolas", 9);
             clbItems.CheckOnClick = true;
 
             List<(string filePath, int itemIndex, Layer5Item item)> itemInfoList =
                 new List<(string, int, Layer5Item)>();
+            List<(string filePath, int itemIndex, Layer5Item item, string fileName)> allItems =
+                new List<(string, int, Layer5Item, string)>();
 
+            // 建立完整項目列表
+            foreach (var (filePath, fileName, count, items) in s32WithL5)
+            {
+                for (int i = 0; i < items.Count; i++)
+                {
+                    allItems.Add((filePath, i, items[i], fileName));
+                }
+            }
+
+            // 顯示項目的方法
+            Action<List<(string filePath, int itemIndex, Layer5Item item, string fileName)>> displayItems = (itemsToShow) =>
+            {
+                clbItems.Items.Clear();
+                itemInfoList.Clear();
+                if (itemsToShow.Count == 0)
+                {
+                    clbItems.Items.Add("沒有符合條件的項目");
+                    clbItems.Enabled = false;
+                }
+                else
+                {
+                    clbItems.Enabled = true;
+                    foreach (var (filePath, itemIndex, item, fileName) in itemsToShow)
+                    {
+                        string displayText = $"[{fileName}] X={item.X}, Y={item.Y}, ObjIdx={item.ObjectIndex}, Type={item.Type}";
+                        clbItems.Items.Add(displayText);
+                        itemInfoList.Add((filePath, itemIndex, item));
+                    }
+                }
+            };
+
+            // 搜尋方法
+            Action doSearch = () =>
+            {
+                string xText = txtSearchX.Text.Trim();
+                string yText = txtSearchY.Text.Trim();
+                string objIdxText = txtSearchObjIdx.Text.Trim();
+
+                if (string.IsNullOrEmpty(xText) && string.IsNullOrEmpty(yText) && string.IsNullOrEmpty(objIdxText))
+                {
+                    displayItems(allItems);
+                    lblSearchResult.Text = "";
+                    return;
+                }
+
+                int? searchX = null, searchY = null;
+                ushort? searchObjIdx = null;
+
+                if (!string.IsNullOrEmpty(xText) && int.TryParse(xText, out int x)) searchX = x;
+                if (!string.IsNullOrEmpty(yText) && int.TryParse(yText, out int y)) searchY = y;
+                if (!string.IsNullOrEmpty(objIdxText) && ushort.TryParse(objIdxText, out ushort objIdx)) searchObjIdx = objIdx;
+
+                var filtered = allItems.Where(a =>
+                    (!searchX.HasValue || a.item.X == searchX.Value) &&
+                    (!searchY.HasValue || a.item.Y == searchY.Value) &&
+                    (!searchObjIdx.HasValue || a.item.ObjectIndex == searchObjIdx.Value)
+                ).ToList();
+
+                displayItems(filtered);
+
+                var conditions = new List<string>();
+                if (searchX.HasValue) conditions.Add($"X={searchX}");
+                if (searchY.HasValue) conditions.Add($"Y={searchY}");
+                if (searchObjIdx.HasValue) conditions.Add($"ObjIdx={searchObjIdx}");
+                lblSearchResult.Text = $"找到 {filtered.Count} 個 ({string.Join(", ", conditions)})";
+            };
+
+            // 初始顯示全部
             if (s32WithL5.Count == 0)
             {
                 clbItems.Items.Add("沒有任何 S32 檔案有 Layer5 資料");
@@ -13836,17 +13959,35 @@ namespace L1FlyMapViewer
             }
             else
             {
-                foreach (var (filePath, fileName, count, items) in s32WithL5)
-                {
-                    for (int i = 0; i < items.Count; i++)
-                    {
-                        var item = items[i];
-                        string displayText = $"[{fileName}] X={item.X}, Y={item.Y}, ObjIdx={item.ObjectIndex}, Type={item.Type}";
-                        clbItems.Items.Add(displayText);
-                        itemInfoList.Add((filePath, i, item));
-                    }
-                }
+                displayItems(allItems);
             }
+
+            // 搜尋事件
+            btnSearch.Click += (s, args) => doSearch();
+
+            // Enter 鍵搜尋
+            EventHandler<KeyEventArgs> searchOnEnter = (s, args) =>
+            {
+                if (args.KeyCode == Keys.Enter)
+                {
+                    doSearch();
+                    args.SuppressKeyPress = true;
+                }
+            };
+            txtSearchX.KeyDown += (s, args) => searchOnEnter(s, args);
+            txtSearchY.KeyDown += (s, args) => searchOnEnter(s, args);
+            txtSearchObjIdx.KeyDown += (s, args) => searchOnEnter(s, args);
+
+            // 清除搜尋
+            btnClearSearch.Click += (s, args) =>
+            {
+                txtSearchX.Text = "";
+                txtSearchY.Text = "";
+                txtSearchObjIdx.Text = "";
+                displayItems(allItems);
+                lblSearchResult.Text = "";
+            };
+
             resultForm.Controls.Add(clbItems);
 
             Button btnSelectAll = new Button();
