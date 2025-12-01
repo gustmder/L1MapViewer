@@ -6788,10 +6788,10 @@ namespace L1FlyMapViewer
                 return;
             }
 
-            // 將螢幕座標轉換為原始圖片座標（考慮縮放）
+            // 將螢幕座標轉換為世界座標（考慮縮放和捲動偏移）
             var scaledPolygon = polygonPoints.Select(p => new PointF(
-                (float)(p.X / s32ZoomLevel),
-                (float)(p.Y / s32ZoomLevel)
+                (float)(p.X / s32ZoomLevel) + _viewState.ScrollX,
+                (float)(p.Y / s32ZoomLevel) + _viewState.ScrollY
             )).ToArray();
 
             // 收集多邊形內的邊界資訊 (S32Data, layer3X, layer3Y, isAttribute1)
