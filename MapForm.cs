@@ -14164,42 +14164,40 @@ namespace L1FlyMapViewer
         }
 
         // 取得 Layer5 中 ObjectIndex 不存在於 Layer4 GroupId 的項目
-        private List<(string filePath, string fileName, Layer5Item item, int itemIndex)> GetInvalidLayer5Items()
+        // 或雖然存在但該格找不到對應 GroupId 的物件
+        private List<(string filePath, string fileName, Layer5Item item, int itemIndex, string reason)> GetInvalidLayer5Items()
         {
-            var invalidItems = new List<(string filePath, string fileName, Layer5Item item, int itemIndex)>();
-
             if (_document.S32Files.Count == 0)
-                return invalidItems;
+                return new List<(string filePath, string fileName, Layer5Item item, int itemIndex, string reason)>();
 
-            // 收集所有 Layer4 的 GroupId
-            HashSet<int> validGroupIds = new HashSet<int>();
-            foreach (var s32Data in _document.S32Files.Values)
-            {
-                foreach (var obj in s32Data.Layer4)
-                {
-                    validGroupIds.Add(obj.GroupId);
-                }
-            }
+            // 取得目前 viewport 範圍
+            var viewportRect = _viewState.GetViewportWorldRect();
 
-            // 檢查 Layer5 的 ObjectIndex 是否有效
+            // 過濾出 viewport 內的 S32 檔案
+            var viewportS32Files = new Dictionary<string, S32Data>();
             foreach (var kvp in _document.S32Files)
             {
-                string filePath = kvp.Key;
-                string fileName = Path.GetFileName(kvp.Key);
                 S32Data s32Data = kvp.Value;
 
-                for (int i = 0; i < s32Data.Layer5.Count; i++)
+                // 檢查 S32 是否在 viewport 內
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                int blockWidth = 64 * 24 * 2;  // 3072
+                int blockHeight = 64 * 12 * 2; // 1536
+                Rectangle blockRect = new Rectangle(loc[0], loc[1], blockWidth, blockHeight);
+                if (blockRect.IntersectsWith(viewportRect))
                 {
-                    var item = s32Data.Layer5[i];
-                    // ObjectIndex 不存在於任何 Layer4 的 GroupId
-                    if (!validGroupIds.Contains(item.ObjectIndex))
-                    {
-                        invalidItems.Add((filePath, fileName, item, i));
-                    }
+                    viewportS32Files[kvp.Key] = s32Data;
                 }
             }
 
-            return invalidItems;
+            // 使用共用的 Layer5Checker 檢查（radius=0 表示只檢查該格）
+            var results = Layer5Checker.Check(
+                viewportS32Files,
+                radius: -1,
+                getSegInfo: s32 => (s32.SegInfo.nLinBeginX, s32.SegInfo.nLinBeginY));
+
+            // 轉換為舊格式
+            return results.Select(r => (r.FilePath, r.FileName, r.Item, r.ItemIndex, r.Reason)).ToList();
         }
 
         // 無效 TileId 資訊類別
@@ -14364,7 +14362,14 @@ namespace L1FlyMapViewer
             // 建立訊息
             var msgParts = new List<string>();
             if (invalidL5Items.Count > 0)
-                msgParts.Add($"• {invalidL5Items.Count} 個 Layer5 項目的 ObjectIndex 沒有對應的 Layer4 GroupId");
+            {
+                int noGroupCount = invalidL5Items.Count(x => x.reason == "GroupId不存在");
+                int noObjCount = invalidL5Items.Count(x => x.reason == "周圍無對應物件");
+                var l5Parts = new List<string>();
+                if (noGroupCount > 0) l5Parts.Add($"GroupId不存在:{noGroupCount}");
+                if (noObjCount > 0) l5Parts.Add($"周圍無物件:{noObjCount}");
+                msgParts.Add($"• {invalidL5Items.Count} 個 Layer5 異常 ({string.Join(", ", l5Parts)})");
+            }
             if (invalidTileItems.Count > 0)
             {
                 // 統計各層的無效 TileId 數量
@@ -14412,7 +14417,7 @@ namespace L1FlyMapViewer
                 tabControl.TabPages.Add(tabL5);
 
                 Label lblL5Summary = new Label();
-                lblL5Summary.Text = $"以下 {invalidL5Items.Count} 個 Layer5 項目的 ObjectIndex 不存在於任何 Layer4 的 GroupId：";
+                lblL5Summary.Text = $"以下 {invalidL5Items.Count} 個 Layer5 項目異常（GroupId不存在或周圍一格內無對應物件）：";
                 lblL5Summary.Location = new Point(5, 5);
                 lblL5Summary.Size = new Size(tabL5.ClientSize.Width - 10, 20);
                 lblL5Summary.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
@@ -14425,9 +14430,9 @@ namespace L1FlyMapViewer
                 clbL5Items.CheckOnClick = true;
                 clbL5Items.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
 
-                foreach (var (filePath, fileName, item, itemIndex) in invalidL5Items)
+                foreach (var (filePath, fileName, item, itemIndex, reason) in invalidL5Items)
                 {
-                    string displayText = $"[{fileName}] X={item.X}, Y={item.Y}, ObjIdx={item.ObjectIndex}, Type={item.Type}";
+                    string displayText = $"[{fileName}] X={item.X}, Y={item.Y}, ObjIdx={item.ObjectIndex}, Type={item.Type} [{reason}]";
                     clbL5Items.Items.Add(displayText);
                 }
                 tabL5.Controls.Add(clbL5Items);
@@ -14456,7 +14461,7 @@ namespace L1FlyMapViewer
                     var toDelete = new Dictionary<string, List<Layer5Item>>();
                     foreach (int idx in clbL5Items.CheckedIndices)
                     {
-                        var (filePath, _, item, _) = invalidL5Items[idx];
+                        var (filePath, _, item, _, _) = invalidL5Items[idx];
                         if (!toDelete.ContainsKey(filePath)) toDelete[filePath] = new List<Layer5Item>();
                         toDelete[filePath].Add(item);
                     }
@@ -14479,7 +14484,7 @@ namespace L1FlyMapViewer
                 {
                     if (MessageBox.Show($"確定要清除所有 {invalidL5Items.Count} 個異常項目嗎？", "確認刪除全部", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
                     var toDelete = new Dictionary<string, List<Layer5Item>>();
-                    foreach (var (filePath, _, item, _) in invalidL5Items)
+                    foreach (var (filePath, _, item, _, _) in invalidL5Items)
                     {
                         if (!toDelete.ContainsKey(filePath)) toDelete[filePath] = new List<Layer5Item>();
                         toDelete[filePath].Add(item);
