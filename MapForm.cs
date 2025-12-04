@@ -9225,13 +9225,6 @@ namespace L1FlyMapViewer
                 DeleteAllLayer4ByTileId(tileInfo.TileId);
             };
 
-            // 高亮顯示使用此 TileId 的物件
-            ToolStripMenuItem highlightItem = new ToolStripMenuItem("在地圖上高亮顯示");
-            highlightItem.Click += (s, ev) =>
-            {
-                HighlightTileOnMap(tileInfo.TileId);
-            };
-
             // 查看 Tile 詳細資訊
             ToolStripMenuItem infoItem = new ToolStripMenuItem("查看詳細資訊");
             infoItem.Click += (s, ev) =>
@@ -9239,12 +9232,202 @@ namespace L1FlyMapViewer
                 ShowTileInfoWithPreview(tileInfo);
             };
 
+            // 匯出選中的 Tile
+            ToolStripMenuItem exportSelectedItem = new ToolStripMenuItem("匯出選中的 Tile 圖片");
+            exportSelectedItem.Click += (s, ev) =>
+            {
+                var selectedTiles = new List<TileInfo>();
+                foreach (ListViewItem item in lvTiles.SelectedItems)
+                {
+                    if (item.Tag is TileInfo ti)
+                        selectedTiles.Add(ti);
+                }
+                if (selectedTiles.Count > 0)
+                    ExportTilesToZip(selectedTiles);
+            };
+
+            // 匯出全部 Tile
+            ToolStripMenuItem exportAllItem = new ToolStripMenuItem($"匯出全部 Tile ({lvTiles.Items.Count} 個)");
+            exportAllItem.Click += (s, ev) =>
+            {
+                var allTiles = new List<TileInfo>();
+                foreach (ListViewItem item in lvTiles.Items)
+                {
+                    if (item.Tag is TileInfo ti)
+                        allTiles.Add(ti);
+                }
+                if (allTiles.Count > 0)
+                    ExportTilesToZip(allTiles);
+            };
+
             menu.Items.Add(infoItem);
-            menu.Items.Add(highlightItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(deleteLayer4Item);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(exportSelectedItem);
+            menu.Items.Add(exportAllItem);
 
             menu.Show(lvTiles, e.Location);
+        }
+
+        // 匯出 Tile 到 ZIP 檔案
+        private void ExportTilesToZip(List<TileInfo> tiles)
+        {
+            if (tiles.Count == 0)
+            {
+                MessageBox.Show("沒有要匯出的 Tile", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 詢問匯出選項
+            using (var optionForm = new Form())
+            {
+                optionForm.Text = "匯出選項";
+                optionForm.ClientSize = new Size(300, 150);
+                optionForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+                optionForm.StartPosition = FormStartPosition.CenterParent;
+                optionForm.MaximizeBox = false;
+                optionForm.MinimizeBox = false;
+
+                var chkExportTil = new CheckBox { Text = "匯出 .til 原始檔案", Location = new Point(20, 15), Size = new Size(260, 24), Checked = true };
+                var chkExportPng = new CheckBox { Text = "匯出 .png 預覽圖片", Location = new Point(20, 45), Size = new Size(260, 24), Checked = false };
+
+                var lblInfo = new Label { Text = $"共 {tiles.Select(t => t.TileId).Distinct().Count()} 個 til 檔案", Location = new Point(20, 75), Size = new Size(260, 20), ForeColor = Color.Gray };
+
+                var btnOK = new Button { Text = "匯出", Location = new Point(100, 110), Size = new Size(80, 28), DialogResult = DialogResult.OK };
+                var btnCancel = new Button { Text = "取消", Location = new Point(190, 110), Size = new Size(80, 28), DialogResult = DialogResult.Cancel };
+
+                optionForm.Controls.AddRange(new Control[] { chkExportTil, chkExportPng, lblInfo, btnOK, btnCancel });
+                optionForm.AcceptButton = btnOK;
+                optionForm.CancelButton = btnCancel;
+
+                if (optionForm.ShowDialog() != DialogResult.OK)
+                    return;
+
+                if (!chkExportTil.Checked && !chkExportPng.Checked)
+                {
+                    MessageBox.Show("請至少選擇一種匯出格式", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                bool exportTil = chkExportTil.Checked;
+                bool exportPng = chkExportPng.Checked;
+
+                using (var saveDialog = new SaveFileDialog())
+                {
+                    saveDialog.Filter = "ZIP 檔案|*.zip";
+                    saveDialog.FileName = $"Tiles_Export_{DateTime.Now:yyyyMMdd_HHmmss}.zip";
+                    saveDialog.Title = "匯出 Tile";
+
+                    if (saveDialog.ShowDialog() != DialogResult.OK)
+                        return;
+
+                    try
+                    {
+                        // 按 TileId 分組
+                        var tilesByNumber = tiles.GroupBy(t => t.TileId).OrderBy(g => g.Key).ToList();
+
+                        using (var zipStream = new FileStream(saveDialog.FileName, FileMode.Create))
+                        using (var archive = new System.IO.Compression.ZipArchive(zipStream, System.IO.Compression.ZipArchiveMode.Create))
+                        {
+                            int tilExportedCount = 0;
+                            int pngExportedCount = 0;
+                            int errorCount = 0;
+
+                            foreach (var group in tilesByNumber)
+                            {
+                                int tileId = group.Key;
+
+                                try
+                                {
+                                    // 載入 til 檔案
+                                    string key = $"{tileId}.til";
+                                    byte[] data = L1PakReader.UnPack("Tile", key);
+                                    if (data == null)
+                                    {
+                                        errorCount++;
+                                        continue;
+                                    }
+
+                                    // 匯出 .til 原始檔案
+                                    if (exportTil)
+                                    {
+                                        string tilEntryName = $"{tileId}.til";
+                                        var tilEntry = archive.CreateEntry(tilEntryName, System.IO.Compression.CompressionLevel.Optimal);
+                                        using (var entryStream = tilEntry.Open())
+                                        {
+                                            entryStream.Write(data, 0, data.Length);
+                                        }
+                                        tilExportedCount++;
+                                    }
+
+                                    // 匯出 .png 預覽圖片
+                                    if (exportPng)
+                                    {
+                                        var tilArray = L1Til.Parse(data);
+                                        string folderName = $"preview/til_{tileId:D6}";
+
+                                        foreach (var tile in group)
+                                        {
+                                            if (tile.IndexId >= tilArray.Count)
+                                            {
+                                                errorCount++;
+                                                continue;
+                                            }
+
+                                            byte[] tilData = tilArray[tile.IndexId];
+                                            // 使用既有的 RenderTileEnlarged 方法來正確渲染 2.5D 格式
+                                            using (var bitmap = RenderTileEnlarged(tilData, tileId, 48))
+                                            {
+                                                if (bitmap != null)
+                                                {
+                                                    string entryName = $"{folderName}/index_{tile.IndexId:D3}.png";
+                                                    var entry = archive.CreateEntry(entryName, System.IO.Compression.CompressionLevel.Optimal);
+
+                                                    using (var entryStream = entry.Open())
+                                                    {
+                                                        bitmap.Save(entryStream, System.Drawing.Imaging.ImageFormat.Png);
+                                                    }
+                                                    pngExportedCount++;
+                                                }
+                                                else
+                                                {
+                                                    errorCount++;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                catch
+                                {
+                                    errorCount++;
+                                }
+                            }
+
+                            var resultParts = new List<string>();
+                            if (exportTil) resultParts.Add($".til 檔案: {tilExportedCount} 個");
+                            if (exportPng) resultParts.Add($".png 圖片: {pngExportedCount} 個");
+                            if (errorCount > 0) resultParts.Add($"失敗: {errorCount} 個");
+
+                            // 儲存結果資訊，等關閉檔案後再顯示
+                            string resultMessage = $"匯出完成！\n\n{string.Join("\n", resultParts)}\n\n儲存至: {saveDialog.FileName}";
+                            string savedFileName = System.IO.Path.GetFileName(saveDialog.FileName);
+
+                            // 先關閉 ZIP 檔案
+                            archive.Dispose();
+                            zipStream.Close();
+
+                            // 再顯示訊息
+                            MessageBox.Show(resultMessage, "匯出結果", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            this.toolStripStatusLabel1.Text = $"已匯出 Tile 到 {savedFileName}";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"匯出失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
         }
 
         // 刪除所有使用指定 TileId 的 Layer4 物件
@@ -10104,7 +10287,48 @@ namespace L1FlyMapViewer
                     }
                 }
 
-                // 第五步：寫入第四層（物件）
+                // 第五步：寫入第四層（物件）- 重新編排 GroupId 從 0 開始
+                // 收集所有 Layer5 引用的 GroupId
+                var layer5ReferencedGroups = new HashSet<int>(s32Data.Layer5.Select(l5 => (int)l5.ObjectIndex));
+
+                // 將所有群組分組
+                var allGroups = s32Data.Layer4
+                    .GroupBy(o => o.GroupId)
+                    .ToList();
+
+                // 排序：有 Layer5 引用的在前，其餘按原 GroupId 排序
+                var sortedGroups = allGroups
+                    .OrderByDescending(g => layer5ReferencedGroups.Contains(g.Key) ? 1 : 0)
+                    .ThenBy(g => g.Key)
+                    .ToList();
+
+                // 建立舊 GroupId -> 新 GroupId 的映射
+                var groupIdMapping = new Dictionary<int, int>();
+                for (int idx = 0; idx < sortedGroups.Count; idx++)
+                {
+                    groupIdMapping[sortedGroups[idx].Key] = idx;
+                }
+
+                // 更新記憶體中的 Layer4 GroupId
+                foreach (var obj in s32Data.Layer4)
+                {
+                    if (groupIdMapping.TryGetValue(obj.GroupId, out int newId))
+                    {
+                        obj.GroupId = newId;
+                    }
+                }
+
+                // 更新記憶體中的 Layer5 ObjectIndex
+                foreach (var l5Item in s32Data.Layer5)
+                {
+                    int oldIndex = l5Item.ObjectIndex;
+                    if (groupIdMapping.TryGetValue(oldIndex, out int newIndex))
+                    {
+                        l5Item.ObjectIndex = (ushort)newIndex;
+                    }
+                }
+
+                // 重新分組（使用新的 GroupId）
                 var groupedObjects = s32Data.Layer4
                     .GroupBy(o => o.GroupId)
                     .OrderBy(g => g.Key)
@@ -10115,7 +10339,7 @@ namespace L1FlyMapViewer
                 foreach (var group in groupedObjects)
                 {
                     var objects = group.OrderBy(o => o.Layer).ToList();
-                    bw.Write((short)group.Key); // GroupId
+                    bw.Write((short)group.Key); // GroupId (新編號)
                     bw.Write((ushort)objects.Count); // 該組的物件數
 
                     foreach (var obj in objects)
@@ -12615,99 +12839,78 @@ namespace L1FlyMapViewer
 
             // 創建替換對話框
             Form replaceForm = new Form();
-            replaceForm.Text = "批次替換地板";
-            replaceForm.Size = new Size(400, 280);
+            replaceForm.Text = "批次替換 TileId";
+            replaceForm.Size = new Size(420, 350);
             replaceForm.FormBorderStyle = FormBorderStyle.FixedDialog;
             replaceForm.StartPosition = FormStartPosition.CenterParent;
             replaceForm.MaximizeBox = false;
             replaceForm.MinimizeBox = false;
 
-            // 來源 TileId
-            Label lblSrcTileId = new Label();
-            lblSrcTileId.Text = "來源 TileId:";
-            lblSrcTileId.Location = new Point(20, 20);
-            lblSrcTileId.Size = new Size(100, 20);
-            replaceForm.Controls.Add(lblSrcTileId);
+            // 圖層選擇
+            GroupBox gbLayer = new GroupBox();
+            gbLayer.Text = "選擇圖層";
+            gbLayer.Location = new Point(15, 10);
+            gbLayer.Size = new Size(375, 50);
+            replaceForm.Controls.Add(gbLayer);
 
-            TextBox txtSrcTileId = new TextBox();
-            txtSrcTileId.Location = new Point(130, 18);
-            txtSrcTileId.Size = new Size(100, 20);
-            replaceForm.Controls.Add(txtSrcTileId);
+            RadioButton rbLayer1 = new RadioButton { Text = "Layer1 (地板)", Location = new Point(15, 20), Size = new Size(110, 20), Checked = true };
+            RadioButton rbLayer2 = new RadioButton { Text = "Layer2 (索引)", Location = new Point(135, 20), Size = new Size(110, 20) };
+            RadioButton rbLayer4 = new RadioButton { Text = "Layer4 (物件)", Location = new Point(255, 20), Size = new Size(110, 20) };
+            gbLayer.Controls.AddRange(new Control[] { rbLayer1, rbLayer2, rbLayer4 });
 
-            // 來源 IndexId
-            Label lblSrcIndexId = new Label();
-            lblSrcIndexId.Text = "來源 IndexId:";
-            lblSrcIndexId.Location = new Point(20, 50);
-            lblSrcIndexId.Size = new Size(100, 20);
-            replaceForm.Controls.Add(lblSrcIndexId);
+            // 來源設定
+            GroupBox gbSource = new GroupBox();
+            gbSource.Text = "來源";
+            gbSource.Location = new Point(15, 65);
+            gbSource.Size = new Size(375, 80);
+            replaceForm.Controls.Add(gbSource);
 
-            TextBox txtSrcIndexId = new TextBox();
-            txtSrcIndexId.Location = new Point(130, 48);
-            txtSrcIndexId.Size = new Size(100, 20);
-            replaceForm.Controls.Add(txtSrcIndexId);
+            Label lblSrcTileId = new Label { Text = "TileId:", Location = new Point(15, 25), Size = new Size(55, 20) };
+            TextBox txtSrcTileId = new TextBox { Location = new Point(75, 22), Size = new Size(100, 22) };
+            Label lblSrcIndexId = new Label { Text = "IndexId:", Location = new Point(190, 25), Size = new Size(55, 20) };
+            TextBox txtSrcIndexId = new TextBox { Location = new Point(250, 22), Size = new Size(100, 22) };
+            CheckBox chkMatchIndexId = new CheckBox { Text = "比對 IndexId", Location = new Point(15, 50), Size = new Size(120, 20), Checked = true };
+            gbSource.Controls.AddRange(new Control[] { lblSrcTileId, txtSrcTileId, lblSrcIndexId, txtSrcIndexId, chkMatchIndexId });
 
-            // 分隔線
-            Label lblSeparator = new Label();
-            lblSeparator.Text = "↓ 替換為 ↓";
-            lblSeparator.Location = new Point(20, 85);
-            lblSeparator.Size = new Size(350, 20);
-            lblSeparator.TextAlign = ContentAlignment.MiddleCenter;
-            lblSeparator.ForeColor = Color.Blue;
-            replaceForm.Controls.Add(lblSeparator);
+            // 目標設定
+            GroupBox gbTarget = new GroupBox();
+            gbTarget.Text = "替換為";
+            gbTarget.Location = new Point(15, 150);
+            gbTarget.Size = new Size(375, 80);
+            replaceForm.Controls.Add(gbTarget);
 
-            // 目標 TileId
-            Label lblDstTileId = new Label();
-            lblDstTileId.Text = "目標 TileId:";
-            lblDstTileId.Location = new Point(20, 115);
-            lblDstTileId.Size = new Size(100, 20);
-            replaceForm.Controls.Add(lblDstTileId);
+            Label lblDstTileId = new Label { Text = "TileId:", Location = new Point(15, 25), Size = new Size(55, 20) };
+            TextBox txtDstTileId = new TextBox { Location = new Point(75, 22), Size = new Size(100, 22) };
+            Label lblDstIndexId = new Label { Text = "IndexId:", Location = new Point(190, 25), Size = new Size(55, 20) };
+            TextBox txtDstIndexId = new TextBox { Location = new Point(250, 22), Size = new Size(100, 22) };
+            CheckBox chkReplaceIndexId = new CheckBox { Text = "替換 IndexId", Location = new Point(15, 50), Size = new Size(120, 20), Checked = true };
+            gbTarget.Controls.AddRange(new Control[] { lblDstTileId, txtDstTileId, lblDstIndexId, txtDstIndexId, chkReplaceIndexId });
 
-            TextBox txtDstTileId = new TextBox();
-            txtDstTileId.Location = new Point(130, 113);
-            txtDstTileId.Size = new Size(100, 20);
-            replaceForm.Controls.Add(txtDstTileId);
-
-            // 目標 IndexId
-            Label lblDstIndexId = new Label();
-            lblDstIndexId.Text = "目標 IndexId:";
-            lblDstIndexId.Location = new Point(20, 145);
-            lblDstIndexId.Size = new Size(100, 20);
-            replaceForm.Controls.Add(lblDstIndexId);
-
-            TextBox txtDstIndexId = new TextBox();
-            txtDstIndexId.Location = new Point(130, 143);
-            txtDstIndexId.Size = new Size(100, 20);
-            replaceForm.Controls.Add(txtDstIndexId);
-
-            // 預覽按鈕
-            Button btnPreview = new Button();
-            btnPreview.Text = "預覽";
-            btnPreview.Location = new Point(80, 190);
-            btnPreview.Size = new Size(80, 30);
-            replaceForm.Controls.Add(btnPreview);
-
-            // 執行按鈕
-            Button btnExecute = new Button();
-            btnExecute.Text = "執行替換";
-            btnExecute.Location = new Point(170, 190);
-            btnExecute.Size = new Size(80, 30);
-            replaceForm.Controls.Add(btnExecute);
-
-            // 取消按鈕
-            Button btnCancel = new Button();
-            btnCancel.Text = "取消";
-            btnCancel.Location = new Point(260, 190);
-            btnCancel.Size = new Size(80, 30);
+            // 按鈕
+            Button btnPreview = new Button { Text = "預覽", Location = new Point(70, 245), Size = new Size(80, 30) };
+            Button btnExecute = new Button { Text = "執行替換", Location = new Point(160, 245), Size = new Size(80, 30) };
+            Button btnCancel = new Button { Text = "取消", Location = new Point(250, 245), Size = new Size(80, 30) };
             btnCancel.Click += (s, args) => replaceForm.Close();
-            replaceForm.Controls.Add(btnCancel);
+            replaceForm.Controls.AddRange(new Control[] { btnPreview, btnExecute, btnCancel });
+
+            // 結果標籤
+            Label lblResult = new Label { Text = "", Location = new Point(15, 285), Size = new Size(375, 20), ForeColor = Color.Blue };
+            replaceForm.Controls.Add(lblResult);
 
             // 預覽功能
             btnPreview.Click += (s, args) =>
             {
-                if (!int.TryParse(txtSrcTileId.Text, out int srcTileId) ||
-                    !int.TryParse(txtSrcIndexId.Text, out int srcIndexId))
+                if (!int.TryParse(txtSrcTileId.Text, out int srcTileId))
                 {
-                    MessageBox.Show("請輸入有效的來源 TileId 和 IndexId", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("請輸入有效的來源 TileId", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                int srcIndexId = 0;
+                bool matchIndex = chkMatchIndexId.Checked;
+                if (matchIndex && !int.TryParse(txtSrcIndexId.Text, out srcIndexId))
+                {
+                    MessageBox.Show("請輸入有效的來源 IndexId", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
@@ -12719,12 +12922,37 @@ namespace L1FlyMapViewer
                     S32Data s32Data = kvp.Value;
                     bool hasMatch = false;
 
-                    for (int y = 0; y < 64; y++)
+                    if (rbLayer1.Checked)
                     {
-                        for (int x = 0; x < 128; x++)
+                        for (int y = 0; y < 64; y++)
                         {
-                            var cell = s32Data.Layer1[y, x];
-                            if (cell.TileId == srcTileId && cell.IndexId == srcIndexId)
+                            for (int x = 0; x < 128; x++)
+                            {
+                                var cell = s32Data.Layer1[y, x];
+                                if (cell.TileId == srcTileId && (!matchIndex || cell.IndexId == srcIndexId))
+                                {
+                                    matchCount++;
+                                    hasMatch = true;
+                                }
+                            }
+                        }
+                    }
+                    else if (rbLayer2.Checked)
+                    {
+                        foreach (var item in s32Data.Layer2)
+                        {
+                            if (item.TileId == srcTileId && (!matchIndex || item.IndexId == srcIndexId))
+                            {
+                                matchCount++;
+                                hasMatch = true;
+                            }
+                        }
+                    }
+                    else if (rbLayer4.Checked)
+                    {
+                        foreach (var obj in s32Data.Layer4)
+                        {
+                            if (obj.TileId == srcTileId && (!matchIndex || obj.IndexId == srcIndexId))
                             {
                                 matchCount++;
                                 hasMatch = true;
@@ -12735,25 +12963,41 @@ namespace L1FlyMapViewer
                     if (hasMatch) s32Count++;
                 }
 
-                MessageBox.Show($"找到 {matchCount} 個匹配的格子\n分布在 {s32Count} 個 S32 檔案中",
-                    "預覽結果", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                string layerName = rbLayer1.Checked ? "Layer1" : (rbLayer2.Checked ? "Layer2" : "Layer4");
+                lblResult.Text = $"[{layerName}] 找到 {matchCount} 個匹配項目，分布在 {s32Count} 個 S32 檔案";
             };
 
             // 執行替換功能
             btnExecute.Click += (s, args) =>
             {
                 if (!int.TryParse(txtSrcTileId.Text, out int srcTileId) ||
-                    !int.TryParse(txtSrcIndexId.Text, out int srcIndexId) ||
-                    !int.TryParse(txtDstTileId.Text, out int dstTileId) ||
-                    !int.TryParse(txtDstIndexId.Text, out int dstIndexId))
+                    !int.TryParse(txtDstTileId.Text, out int dstTileId))
                 {
-                    MessageBox.Show("請輸入有效的 TileId 和 IndexId", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("請輸入有效的來源和目標 TileId", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
-                // 確認執行
+                int srcIndexId = 0, dstIndexId = 0;
+                bool matchIndex = chkMatchIndexId.Checked;
+                bool replaceIndex = chkReplaceIndexId.Checked;
+
+                if (matchIndex && !int.TryParse(txtSrcIndexId.Text, out srcIndexId))
+                {
+                    MessageBox.Show("請輸入有效的來源 IndexId", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+                if (replaceIndex && !int.TryParse(txtDstIndexId.Text, out dstIndexId))
+                {
+                    MessageBox.Show("請輸入有效的目標 IndexId", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                string layerName = rbLayer1.Checked ? "Layer1" : (rbLayer2.Checked ? "Layer2" : "Layer4");
+                string matchInfo = matchIndex ? $"TileId={srcTileId}, IndexId={srcIndexId}" : $"TileId={srcTileId}";
+                string replaceInfo = replaceIndex ? $"TileId={dstTileId}, IndexId={dstIndexId}" : $"TileId={dstTileId}";
+
                 var confirmResult = MessageBox.Show(
-                    $"確定要將所有 TileId={srcTileId}, IndexId={srcIndexId} 的格子\n替換為 TileId={dstTileId}, IndexId={dstIndexId} 嗎？\n\n此操作會影響所有已載入的 S32 檔案。",
+                    $"確定要在 [{layerName}] 將所有 {matchInfo}\n替換為 {replaceInfo} 嗎？\n\n此操作會影響所有已載入的 S32 檔案。",
                     "確認替換",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Warning);
@@ -12768,17 +13012,45 @@ namespace L1FlyMapViewer
                     S32Data s32Data = kvp.Value;
                     bool hasModified = false;
 
-                    for (int y = 0; y < 64; y++)
+                    if (rbLayer1.Checked)
                     {
-                        for (int x = 0; x < 128; x++)
+                        for (int y = 0; y < 64; y++)
                         {
-                            var cell = s32Data.Layer1[y, x];
-                            if (cell.TileId == srcTileId && cell.IndexId == srcIndexId)
+                            for (int x = 0; x < 128; x++)
                             {
-                                // 替換 TileId 和 IndexId
-                                cell.TileId = dstTileId;
-                                cell.IndexId = dstIndexId;
-                                cell.IsModified = true;
+                                var cell = s32Data.Layer1[y, x];
+                                if (cell.TileId == srcTileId && (!matchIndex || cell.IndexId == srcIndexId))
+                                {
+                                    cell.TileId = dstTileId;
+                                    if (replaceIndex) cell.IndexId = dstIndexId;
+                                    cell.IsModified = true;
+                                    replacedCount++;
+                                    hasModified = true;
+                                }
+                            }
+                        }
+                    }
+                    else if (rbLayer2.Checked)
+                    {
+                        foreach (var item in s32Data.Layer2)
+                        {
+                            if (item.TileId == srcTileId && (!matchIndex || item.IndexId == srcIndexId))
+                            {
+                                item.TileId = (ushort)dstTileId;
+                                if (replaceIndex) item.IndexId = (byte)dstIndexId;
+                                replacedCount++;
+                                hasModified = true;
+                            }
+                        }
+                    }
+                    else if (rbLayer4.Checked)
+                    {
+                        foreach (var obj in s32Data.Layer4)
+                        {
+                            if (obj.TileId == srcTileId && (!matchIndex || obj.IndexId == srcIndexId))
+                            {
+                                obj.TileId = dstTileId;
+                                if (replaceIndex) obj.IndexId = dstIndexId;
                                 replacedCount++;
                                 hasModified = true;
                             }
@@ -12787,28 +13059,23 @@ namespace L1FlyMapViewer
 
                     if (hasModified)
                     {
-                        // 新增目標 TileId 到 Layer6（如果不存在）
                         if (!s32Data.Layer6.Contains(dstTileId))
                         {
                             s32Data.Layer6.Add(dstTileId);
                         }
-
-                        // 標記 S32 為已修改
                         s32Data.IsModified = true;
                         modifiedS32Files.Add(kvp.Key);
                     }
                 }
 
-                // 重新渲染地圖
+                ClearS32BlockCache();
                 RenderS32Map();
-
-                // 更新 Tile 清單
                 UpdateTileList();
 
-                MessageBox.Show($"替換完成！\n共替換 {replacedCount} 個格子\n影響 {modifiedS32Files.Count} 個 S32 檔案\n\n請記得儲存修改。",
+                MessageBox.Show($"替換完成！\n共替換 {replacedCount} 個項目\n影響 {modifiedS32Files.Count} 個 S32 檔案\n\n請記得儲存修改。",
                     "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                this.toolStripStatusLabel1.Text = $"已替換 {replacedCount} 個格子，影響 {modifiedS32Files.Count} 個 S32 檔案";
+                this.toolStripStatusLabel1.Text = $"[{layerName}] 已替換 {replacedCount} 個項目，影響 {modifiedS32Files.Count} 個 S32 檔案";
                 replaceForm.Close();
             };
 

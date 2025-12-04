@@ -1,10 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using L1MapViewer.Converter;
 using L1MapViewer.Helper;
 using L1MapViewer.Models;
+using L1MapViewer.Reader;
 
 namespace L1MapViewer.CLI
 {
@@ -59,6 +64,8 @@ namespace L1MapViewer.CLI
                         return CmdFix(cmdArgs);
                     case "coords":
                         return CmdCoords(cmdArgs);
+                    case "export-tiles":
+                        return CmdExportTiles(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -101,6 +108,8 @@ L1MapViewer CLI - S32 檔案解析工具
   export <s32檔案> <輸出檔>   匯出 S32 資訊為 JSON
   fix <s32檔案> [--apply]     修復異常資料（如 X>=128 的 Layer4 物件）
   coords <地圖資料夾>         計算地圖的遊戲座標範圍（startX, endX, startY, endY）
+  export-tiles <s32檔案或資料夾> <輸出.zip> [--til] [--png]
+                              匯出 S32 使用的 Tile 到 ZIP（預設只匯出 .til）
   help                        顯示此幫助資訊
 
 範例:
@@ -834,6 +843,322 @@ L1MapViewer CLI - S32 檔案解析工具
             Console.WriteLine($"可複製格式: {coordText}");
 
             return 0;
+        }
+
+        /// <summary>
+        /// export-tiles 命令 - 匯出 Tiles 到 ZIP
+        /// </summary>
+        private static int CmdExportTiles(string[] args)
+        {
+            if (args.Length < 2)
+            {
+                Console.WriteLine("用法: -cli export-tiles <s32檔案或資料夾> <輸出.zip> [--til] [--png]");
+                Console.WriteLine("  --til: 只匯出 .til 原始檔案");
+                Console.WriteLine("  --png: 只匯出 .png 預覽圖片");
+                Console.WriteLine("  不指定則同時匯出 .til 和 .png");
+                return 1;
+            }
+
+            string inputPath = args[0];
+            string outputPath = args[1];
+
+            // 解析選項
+            bool hasTilFlag = args.Contains("--til");
+            bool hasPngFlag = args.Contains("--png");
+
+            // 預設只匯出 .til，需要明確指定 --png 才匯出預覽圖片
+            bool exportTil = !hasTilFlag && !hasPngFlag || hasTilFlag;
+            bool exportPng = hasPngFlag;
+
+            // 收集 S32 檔案
+            List<string> s32Files = new List<string>();
+            if (File.Exists(inputPath))
+            {
+                s32Files.Add(inputPath);
+            }
+            else if (Directory.Exists(inputPath))
+            {
+                s32Files.AddRange(Directory.GetFiles(inputPath, "*.s32"));
+            }
+            else
+            {
+                Console.WriteLine($"檔案或資料夾不存在: {inputPath}");
+                return 1;
+            }
+
+            if (s32Files.Count == 0)
+            {
+                Console.WriteLine("找不到 S32 檔案");
+                return 1;
+            }
+
+            // 從 S32 路徑推斷 client 路徑並設定 Share.LineagePath
+            string firstS32 = s32Files[0];
+            string clientPath = FindClientPath(firstS32);
+            if (string.IsNullOrEmpty(clientPath))
+            {
+                Console.WriteLine($"無法找到 client 資料夾（需要 Tile.idx 和 Tile.pak）");
+                Console.WriteLine($"請確保 S32 檔案位於 client/map/xxx/ 結構中");
+                return 1;
+            }
+            Share.LineagePath = clientPath;
+
+            Console.WriteLine($"=== 匯出 Tiles ===");
+            Console.WriteLine($"輸入: {inputPath}");
+            Console.WriteLine($"Client: {clientPath}");
+            Console.WriteLine($"S32 檔案數: {s32Files.Count}");
+            Console.WriteLine($"匯出 .til: {(exportTil ? "是" : "否")}");
+            Console.WriteLine($"匯出 .png: {(exportPng ? "是" : "否")}");
+            Console.WriteLine();
+
+            // 收集所有使用的 TileId
+            HashSet<int> allTileIds = new HashSet<int>();
+            Dictionary<int, HashSet<int>> tileIndexIds = new Dictionary<int, HashSet<int>>(); // TileId -> IndexIds
+
+            foreach (var s32File in s32Files)
+            {
+                var s32 = S32Parser.ParseFile(s32File);
+
+                // 從 Layer1 收集
+                for (int y = 0; y < 64; y++)
+                {
+                    for (int x = 0; x < 128; x++)
+                    {
+                        var cell = s32.Layer1[y, x];
+                        if (cell != null && cell.TileId > 0)
+                        {
+                            allTileIds.Add(cell.TileId);
+                            if (!tileIndexIds.ContainsKey(cell.TileId))
+                                tileIndexIds[cell.TileId] = new HashSet<int>();
+                            tileIndexIds[cell.TileId].Add(cell.IndexId);
+                        }
+                    }
+                }
+
+                // 從 Layer4 收集
+                foreach (var obj in s32.Layer4)
+                {
+                    if (obj.TileId > 0)
+                    {
+                        allTileIds.Add(obj.TileId);
+                        if (!tileIndexIds.ContainsKey(obj.TileId))
+                            tileIndexIds[obj.TileId] = new HashSet<int>();
+                        tileIndexIds[obj.TileId].Add(obj.IndexId);
+                    }
+                }
+            }
+
+            Console.WriteLine($"找到 {allTileIds.Count} 個不重複的 TileId");
+            Console.WriteLine();
+
+            // 匯出到 ZIP
+            int tilExportedCount = 0;
+            int pngExportedCount = 0;
+            int errorCount = 0;
+
+            try
+            {
+                using (var zipStream = new FileStream(outputPath, FileMode.Create))
+                using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create))
+                {
+                    foreach (var tileId in allTileIds.OrderBy(id => id))
+                    {
+                        Console.Write($"\r處理 TileId {tileId}...                    ");
+
+                        try
+                        {
+                            // 載入 til 檔案
+                            string key = $"{tileId}.til";
+                            byte[] data = L1PakReader.UnPack("Tile", key);
+                            if (data == null)
+                            {
+                                errorCount++;
+                                continue;
+                            }
+
+                            // 匯出 .til 原始檔案
+                            if (exportTil)
+                            {
+                                string tilEntryName = $"{tileId}.til";
+                                var tilEntry = archive.CreateEntry(tilEntryName, CompressionLevel.Optimal);
+                                using (var entryStream = tilEntry.Open())
+                                {
+                                    entryStream.Write(data, 0, data.Length);
+                                }
+                                tilExportedCount++;
+                            }
+
+                            // 匯出 .png 預覽圖片
+                            if (exportPng)
+                            {
+                                var tilArray = L1Til.Parse(data);
+                                string folderName = $"preview/til_{tileId:D6}";
+
+                                // 匯出所有 IndexIds（不只是使用到的）
+                                for (int indexId = 0; indexId < tilArray.Count; indexId++)
+                                {
+                                    byte[] tilData = tilArray[indexId];
+                                    using (var bitmap = RenderTileToBitmap(tilData, 48))
+                                    {
+                                        if (bitmap != null)
+                                        {
+                                            string entryName = $"{folderName}/index_{indexId:D3}.png";
+                                            var entry = archive.CreateEntry(entryName, CompressionLevel.Optimal);
+
+                                            using (var entryStream = entry.Open())
+                                            {
+                                                bitmap.Save(entryStream, ImageFormat.Png);
+                                            }
+                                            pngExportedCount++;
+                                        }
+                                        else
+                                        {
+                                            errorCount++;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"\n  錯誤: {ex.Message}");
+                            errorCount++;
+                        }
+                    }
+                }
+
+                Console.WriteLine("\r                                              ");
+                Console.WriteLine();
+                Console.WriteLine($"=== 匯出結果 ===");
+                if (exportTil) Console.WriteLine($".til 檔案: {tilExportedCount} 個");
+                if (exportPng) Console.WriteLine($".png 圖片: {pngExportedCount} 個");
+                if (errorCount > 0) Console.WriteLine($"失敗: {errorCount} 個");
+                Console.WriteLine($"輸出: {outputPath}");
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"匯出失敗: {ex.Message}");
+                return 1;
+            }
+        }
+
+        /// <summary>
+        /// 從 S32 檔案路徑尋找 client 路徑（往上找直到找到 Tile.idx）
+        /// </summary>
+        private static string FindClientPath(string s32FilePath)
+        {
+            string dir = Path.GetDirectoryName(s32FilePath);
+            while (!string.IsNullOrEmpty(dir))
+            {
+                string tileIdx = Path.Combine(dir, "Tile.idx");
+                string tilePak = Path.Combine(dir, "Tile.pak");
+                if (File.Exists(tileIdx) && File.Exists(tilePak))
+                {
+                    return dir;
+                }
+                dir = Path.GetDirectoryName(dir);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 渲染 til 資料為 Bitmap (2.5D 菱形格式)
+        /// </summary>
+        private static unsafe Bitmap RenderTileToBitmap(byte[] tilData, int size)
+        {
+            try
+            {
+                Bitmap bitmap = new Bitmap(size, size, PixelFormat.Format16bppRgb555);
+
+                Rectangle rect = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
+                BitmapData bmpData = bitmap.LockBits(rect, ImageLockMode.ReadWrite, bitmap.PixelFormat);
+                int rowpix = bmpData.Stride;
+                byte* ptr = (byte*)bmpData.Scan0;
+
+                fixed (byte* til_ptr_fixed = tilData)
+                {
+                    byte* til_ptr = til_ptr_fixed;
+                    byte type = *(til_ptr++);
+
+                    double scale = size / 48.0;
+                    int offsetX = (int)((size - 24 * scale) / 2);
+                    int offsetY = (int)((size - 24 * scale) / 2);
+
+                    if (type == 1 || type == 9 || type == 17)
+                    {
+                        // 下半部 2.5D 方塊
+                        for (int ty = 0; ty < 24; ty++)
+                        {
+                            int n = (ty <= 11) ? (ty + 1) * 2 : (23 - ty) * 2;
+                            int tx = 0;
+                            for (int p = 0; p < n; p++)
+                            {
+                                ushort color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));
+
+                                int baseX = (int)(offsetX + tx * scale);
+                                int baseY = (int)(offsetY + ty * scale);
+
+                                for (int sy = 0; sy < (int)scale + 1; sy++)
+                                {
+                                    for (int sx = 0; sx < (int)scale + 1; sx++)
+                                    {
+                                        int px = baseX + sx;
+                                        int py = baseY + sy;
+                                        if (px >= 0 && px < size && py >= 0 && py < size)
+                                        {
+                                            int v = py * rowpix + (px * 2);
+                                            *(ptr + v) = (byte)(color & 0x00FF);
+                                            *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
+                                        }
+                                    }
+                                }
+                                tx++;
+                            }
+                        }
+                    }
+                    else if (type == 0 || type == 8 || type == 16)
+                    {
+                        // 上半部 2.5D 方塊
+                        for (int ty = 0; ty < 24; ty++)
+                        {
+                            int n = (ty <= 11) ? (ty + 1) * 2 : (23 - ty) * 2;
+                            int tx = 24 - n;
+                            for (int p = 0; p < n; p++)
+                            {
+                                ushort color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));
+
+                                int baseX = (int)(offsetX + tx * scale);
+                                int baseY = (int)(offsetY + ty * scale);
+
+                                for (int sy = 0; sy < (int)scale + 1; sy++)
+                                {
+                                    for (int sx = 0; sx < (int)scale + 1; sx++)
+                                    {
+                                        int px = baseX + sx;
+                                        int py = baseY + sy;
+                                        if (px >= 0 && px < size && py >= 0 && py < size)
+                                        {
+                                            int v = py * rowpix + (px * 2);
+                                            *(ptr + v) = (byte)(color & 0x00FF);
+                                            *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
+                                        }
+                                    }
+                                }
+                                tx++;
+                            }
+                        }
+                    }
+                }
+
+                bitmap.UnlockBits(bmpData);
+                return bitmap;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         /// <summary>
