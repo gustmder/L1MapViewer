@@ -320,8 +320,11 @@ namespace L1MapViewer.Helper {
                     //"北邊峽谷(初級村)" 0 2031 32700 32704 32832 32784 ;隱藏之谷-北邊峽谷 #1
                     if (line.Contains("\"")) {
                         string[] split = line.Split('"');
+                        if (split.Length < 3) continue; // 跳過格式不正確的行
                         string name = split[1]; //說話之島
-                        string[] info = split[2].Split(';')[0].Trim().Split(' '); //0 0 32545 32905 32606 32987 100 1                        
+                        string[] info = split[2].Split(';')[0].Trim().Split(' '); //0 0 32545 32905 32606 32987 100 1
+
+                        if (info.Length < 5) continue; // 跳過資料不足的行
 
                         if (info.Length == 5) { //台版天R
                             string mapid = info[0];

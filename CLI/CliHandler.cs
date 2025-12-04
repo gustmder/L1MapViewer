@@ -1,15 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using L1FlyMapViewer;
 using L1MapViewer.Converter;
 using L1MapViewer.Helper;
 using L1MapViewer.Models;
 using L1MapViewer.Reader;
+using static L1MapViewer.Other.Struct;
 
 namespace L1MapViewer.CLI
 {
@@ -66,6 +69,8 @@ namespace L1MapViewer.CLI
                         return CmdCoords(cmdArgs);
                     case "export-tiles":
                         return CmdExportTiles(cmdArgs);
+                    case "list-maps":
+                        return CmdListMaps(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -1042,6 +1047,107 @@ L1MapViewer CLI - S32 檔案解析工具
                 Console.WriteLine($"匯出失敗: {ex.Message}");
                 return 1;
             }
+        }
+
+        /// <summary>
+        /// list-maps 命令 - 測試讀取地圖列表
+        /// </summary>
+        private static int CmdListMaps(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: -cli list-maps <client路徑>");
+                return 1;
+            }
+
+            string clientPath = args[0];
+            if (!Directory.Exists(clientPath))
+            {
+                Console.WriteLine($"路徑不存在: {clientPath}");
+                return 1;
+            }
+
+            string mapPath = Path.Combine(clientPath, "map");
+            if (!Directory.Exists(mapPath))
+            {
+                Console.WriteLine($"map 資料夾不存在: {mapPath}");
+                return 1;
+            }
+
+            Console.WriteLine($"=== 測試讀取地圖列表 ===");
+            Console.WriteLine($"Client 路徑: {clientPath}");
+            Console.WriteLine();
+
+            // 設定 Share.LineagePath
+            Share.LineagePath = clientPath;
+            Console.WriteLine($"[1] Share.LineagePath = {Share.LineagePath}");
+
+            // 測試讀取 Zone3desc
+            Console.WriteLine();
+            Console.WriteLine("[2] 測試 LoadZone3descTbl...");
+            var sw = Stopwatch.StartNew();
+            try
+            {
+                L1MapHelper.LoadZone3descTbl();
+                sw.Stop();
+                Console.WriteLine($"    完成! 耗時: {sw.ElapsedMilliseconds}ms, 項目數: {Share.Zone3descList.Count}");
+            }
+            catch (Exception ex)
+            {
+                sw.Stop();
+                Console.WriteLine($"    錯誤: {ex.Message}");
+                Console.WriteLine($"    堆疊: {ex.StackTrace}");
+            }
+
+            // 測試讀取 ZoneXml
+            Console.WriteLine();
+            Console.WriteLine("[3] 測試 LoadZoneXml...");
+            sw.Restart();
+            try
+            {
+                L1MapHelper.LoadZoneXml();
+                sw.Stop();
+                Console.WriteLine($"    完成! 耗時: {sw.ElapsedMilliseconds}ms, 項目數: {Share.ZoneList.Count}");
+            }
+            catch (Exception ex)
+            {
+                sw.Stop();
+                Console.WriteLine($"    錯誤: {ex.Message}");
+                Console.WriteLine($"    堆疊: {ex.StackTrace}");
+            }
+
+            // 測試完整讀取地圖列表
+            Console.WriteLine();
+            Console.WriteLine("[4] 測試 L1MapHelper.Read...");
+            sw.Restart();
+            try
+            {
+                var maps = L1MapHelper.Read(clientPath);
+                sw.Stop();
+                Console.WriteLine($"    完成! 耗時: {sw.ElapsedMilliseconds}ms");
+                Console.WriteLine($"    地圖數量: {maps.Count}");
+                Console.WriteLine($"    檔案數量: {L1MapHelper.LastTotalFileCount}");
+
+                // 列出前 10 個地圖
+                Console.WriteLine();
+                Console.WriteLine("前 10 個地圖:");
+                int count = 0;
+                foreach (var kvp in maps.OrderBy(k => k.Key))
+                {
+                    if (count++ >= 10) break;
+                    Console.WriteLine($"    {kvp.Key}: {kvp.Value.szName} ({kvp.Value.FullFileNameList.Count} 個檔案)");
+                }
+                if (maps.Count > 10)
+                    Console.WriteLine($"    ... 還有 {maps.Count - 10} 個地圖");
+            }
+            catch (Exception ex)
+            {
+                sw.Stop();
+                Console.WriteLine($"    錯誤: {ex.Message}");
+                Console.WriteLine($"    堆疊: {ex.StackTrace}");
+            }
+
+            return 0;
         }
 
         /// <summary>

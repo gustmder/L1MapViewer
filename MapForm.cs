@@ -9260,8 +9260,25 @@ namespace L1FlyMapViewer
                     ExportTilesToZip(allTiles);
             };
 
+            // 重新編號 TileId（支援多選）
+            int selectedCount = lvTiles.SelectedItems.Count;
+            ToolStripMenuItem renumberItem = new ToolStripMenuItem($"重新編號 TileId ({selectedCount} 個)");
+            renumberItem.Enabled = selectedCount > 0;
+            renumberItem.Click += (s, ev) =>
+            {
+                var selectedTiles = new List<TileInfo>();
+                foreach (ListViewItem item in lvTiles.SelectedItems)
+                {
+                    if (item.Tag is TileInfo ti)
+                        selectedTiles.Add(ti);
+                }
+                if (selectedTiles.Count > 0)
+                    RenumberTileIds(selectedTiles);
+            };
+
             menu.Items.Add(infoItem);
             menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(renumberItem);
             menu.Items.Add(deleteLayer4Item);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(exportSelectedItem);
@@ -9427,6 +9444,273 @@ namespace L1FlyMapViewer
                         MessageBox.Show($"匯出失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
                 }
+            }
+        }
+
+        // 重新編號 TileId
+        private void RenumberTileIds(List<TileInfo> tiles)
+        {
+            if (tiles.Count == 0) return;
+
+            // 按原始 TileId 排序
+            var sortedTiles = tiles.OrderBy(t => t.TileId).ToList();
+            var oldTileIds = sortedTiles.Select(t => t.TileId).Distinct().ToList();
+
+            // 顯示輸入對話框
+            using (var inputForm = new Form())
+            {
+                inputForm.Text = "重新編號 TileId";
+                inputForm.ClientSize = new Size(350, 180);
+                inputForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+                inputForm.StartPosition = FormStartPosition.CenterParent;
+                inputForm.MaximizeBox = false;
+                inputForm.MinimizeBox = false;
+
+                var lblInfo = new Label
+                {
+                    Text = $"選中 {oldTileIds.Count} 個 TileId:\n{string.Join(", ", oldTileIds.Take(10))}{(oldTileIds.Count > 10 ? " ..." : "")}",
+                    Location = new Point(15, 15),
+                    Size = new Size(320, 40)
+                };
+
+                var lblStart = new Label { Text = "起始編號:", Location = new Point(15, 65), Size = new Size(80, 20) };
+                var txtStart = new TextBox { Text = oldTileIds.Min().ToString(), Location = new Point(100, 62), Size = new Size(100, 24) };
+
+                var lblPreview = new Label
+                {
+                    Text = "",
+                    Location = new Point(15, 95),
+                    Size = new Size(320, 40),
+                    ForeColor = Color.Gray
+                };
+
+                // 預覽重編結果
+                Action updatePreview = () =>
+                {
+                    if (int.TryParse(txtStart.Text, out int startId) && startId > 0)
+                    {
+                        var preview = new List<string>();
+                        for (int i = 0; i < Math.Min(oldTileIds.Count, 5); i++)
+                        {
+                            preview.Add($"{oldTileIds[i]} → {startId + i}");
+                        }
+                        if (oldTileIds.Count > 5)
+                            preview.Add("...");
+                        lblPreview.Text = "預覽: " + string.Join(", ", preview);
+                    }
+                    else
+                    {
+                        lblPreview.Text = "請輸入有效的起始編號 (> 0)";
+                    }
+                };
+
+                txtStart.TextChanged += (s, ev) => updatePreview();
+                updatePreview();
+
+                var btnOK = new Button { Text = "確定", Location = new Point(160, 140), Size = new Size(80, 28), DialogResult = DialogResult.OK };
+                var btnCancel = new Button { Text = "取消", Location = new Point(250, 140), Size = new Size(80, 28), DialogResult = DialogResult.Cancel };
+
+                inputForm.Controls.AddRange(new Control[] { lblInfo, lblStart, txtStart, lblPreview, btnOK, btnCancel });
+                inputForm.AcceptButton = btnOK;
+                inputForm.CancelButton = btnCancel;
+
+                if (inputForm.ShowDialog() != DialogResult.OK)
+                    return;
+
+                if (!int.TryParse(txtStart.Text, out int startTileId) || startTileId <= 0)
+                {
+                    MessageBox.Show("請輸入有效的起始編號 (> 0)", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // 建立 oldTileId -> newTileId 的對應表
+                var tileIdMapping = new Dictionary<int, int>();
+                for (int i = 0; i < oldTileIds.Count; i++)
+                {
+                    tileIdMapping[oldTileIds[i]] = startTileId + i;
+                }
+
+                // 檢查是否有衝突（新編號與現有未選中的 TileId 重複）
+                var allCurrentTileIds = new HashSet<int>();
+                foreach (var s32Data in _document.S32Files.Values)
+                {
+                    foreach (var cell in s32Data.Layer1)
+                    {
+                        if (cell != null && cell.TileId > 0)
+                            allCurrentTileIds.Add(cell.TileId);
+                    }
+                    foreach (var obj in s32Data.Layer4)
+                    {
+                        if (obj.TileId > 0)
+                            allCurrentTileIds.Add(obj.TileId);
+                    }
+                }
+
+                // 移除要重編的 TileId
+                foreach (var oldId in oldTileIds)
+                {
+                    allCurrentTileIds.Remove(oldId);
+                }
+
+                // 檢查新編號是否與現有編號衝突
+                var conflicts = new List<int>();
+                foreach (var newId in tileIdMapping.Values)
+                {
+                    if (allCurrentTileIds.Contains(newId))
+                        conflicts.Add(newId);
+                }
+
+                if (conflicts.Count > 0)
+                {
+                    var result = MessageBox.Show(
+                        $"新的 TileId 與現有 TileId 有衝突:\n{string.Join(", ", conflicts.Take(10))}{(conflicts.Count > 10 ? " ..." : "")}\n\n是否繼續？（會合併這些 TileId）",
+                        "警告",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning);
+                    if (result != DialogResult.Yes)
+                        return;
+                }
+
+                // 檢查是否要同時更新 Tile.idx/Tile.pak
+                bool updateTilePak = false;
+                if (!string.IsNullOrEmpty(Share.LineagePath))
+                {
+                    var pakResult = MessageBox.Show(
+                        $"是否要同時將 til 檔案以新編號寫入 Tile.idx/Tile.pak？\n\n" +
+                        $"選擇「是」：讀取原始 til 並以新編號附加到 pak\n" +
+                        $"選擇「否」：僅更新 S32 中的引用（需手動處理 til 檔案）",
+                        "更新 Tile.pak",
+                        MessageBoxButtons.YesNoCancel,
+                        MessageBoxIcon.Question);
+                    if (pakResult == DialogResult.Cancel)
+                        return;
+                    updateTilePak = (pakResult == DialogResult.Yes);
+                }
+
+                // 確認執行
+                string confirmMsg = $"確定要重新編號嗎？\n\n" +
+                    $"這將更新所有 S32 檔案中的 Layer1、Layer2 和 Layer4 引用。\n" +
+                    $"共 {oldTileIds.Count} 個 TileId 將被重新編號。";
+                if (updateTilePak)
+                    confirmMsg += "\n\n同時會將 til 檔案以新編號寫入 Tile.pak。";
+
+                var confirmResult = MessageBox.Show(confirmMsg, "確認", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (confirmResult != DialogResult.Yes)
+                    return;
+
+                // 如果要更新 pak，先讀取所有原始 til 資料
+                Dictionary<int, byte[]> tilDataCache = new Dictionary<int, byte[]>();
+                if (updateTilePak)
+                {
+                    foreach (var oldTileId in oldTileIds)
+                    {
+                        string key = $"{oldTileId}.til";
+                        byte[] data = L1PakReader.UnPack("Tile", key);
+                        if (data != null)
+                        {
+                            tilDataCache[oldTileId] = data;
+                        }
+                    }
+                }
+
+                // 執行重編
+                int layer1Updated = 0;
+                int layer2Updated = 0;
+                int layer4Updated = 0;
+
+                foreach (var s32Data in _document.S32Files.Values)
+                {
+                    // 更新 Layer1
+                    for (int y = 0; y < 64; y++)
+                    {
+                        for (int x = 0; x < 128; x++)
+                        {
+                            var cell = s32Data.Layer1[y, x];
+                            if (cell != null && tileIdMapping.TryGetValue(cell.TileId, out int newTileId))
+                            {
+                                cell.TileId = newTileId;
+                                layer1Updated++;
+                            }
+                        }
+                    }
+
+                    // 更新 Layer2
+                    foreach (var item in s32Data.Layer2)
+                    {
+                        if (tileIdMapping.TryGetValue(item.TileId, out int newTileId))
+                        {
+                            item.TileId = (ushort)newTileId;
+                            layer2Updated++;
+                        }
+                    }
+
+                    // 更新 Layer4
+                    foreach (var obj in s32Data.Layer4)
+                    {
+                        if (tileIdMapping.TryGetValue(obj.TileId, out int newTileId))
+                        {
+                            obj.TileId = newTileId;
+                            layer4Updated++;
+                        }
+                    }
+                }
+
+                // 寫入 Tile.pak
+                int tilWrittenCount = 0;
+                int tilSkippedCount = 0;
+                if (updateTilePak && tilDataCache.Count > 0)
+                {
+                    var filesToWrite = new Dictionary<string, byte[]>();
+                    foreach (var kvp in tileIdMapping)
+                    {
+                        int oldId = kvp.Key;
+                        int newId = kvp.Value;
+                        if (tilDataCache.TryGetValue(oldId, out byte[] data))
+                        {
+                            string newFileName = $"{newId}.til";
+                            // 檢查新編號是否已存在
+                            if (!L1PakWriter.FileExists("Tile", newFileName))
+                            {
+                                filesToWrite[newFileName] = data;
+                            }
+                            else
+                            {
+                                tilSkippedCount++;
+                            }
+                        }
+                    }
+                    tilWrittenCount = L1PakWriter.AppendFiles("Tile", filesToWrite);
+                }
+
+                // 標記為已修改
+                foreach (var s32Data in _document.S32Files.Values)
+                {
+                    s32Data.IsModified = true;
+                }
+
+                // 重新整理 Tile 列表
+                UpdateTileList();
+                UpdateGroupThumbnailsList();
+                s32PictureBox.Invalidate();
+
+                // 建構結果訊息
+                var resultMsg = $"TileId 重新編號完成！\n\n" +
+                    $"更新 Layer1: {layer1Updated} 格\n" +
+                    $"更新 Layer2: {layer2Updated} 項\n" +
+                    $"更新 Layer4: {layer4Updated} 個物件\n";
+
+                if (updateTilePak)
+                {
+                    resultMsg += $"\n寫入 Tile.pak: {tilWrittenCount} 個 til 檔案";
+                    if (tilSkippedCount > 0)
+                        resultMsg += $"\n跳過（已存在）: {tilSkippedCount} 個";
+                }
+
+                resultMsg += $"\n\n對應表:\n{string.Join("\n", tileIdMapping.Select(kv => $"  {kv.Key} → {kv.Value}"))}";
+
+                MessageBox.Show(resultMsg, "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                toolStripStatusLabel1.Text = $"已重新編號 {oldTileIds.Count} 個 TileId";
             }
         }
 
@@ -13942,6 +14226,7 @@ namespace L1FlyMapViewer
                     // 更新 ListView 中該 S32 的項目
                     foreach (ListViewItem lvi in lvItems.Items)
                     {
+                        if (lvi.Tag == null) continue;
                         var (lvFilePath, lvItem) = ((string, Layer8Item))lvi.Tag;
                         if (lvFilePath == filePath)
                         {
@@ -13982,6 +14267,7 @@ namespace L1FlyMapViewer
                     // 更新 ListView 中該 S32 的項目
                     foreach (ListViewItem lvi in lvItems.Items)
                     {
+                        if (lvi.Tag == null) continue;
                         var (lvFilePath, lvItem) = ((string, Layer8Item))lvi.Tag;
                         if (lvFilePath == filePath)
                         {
@@ -14299,6 +14585,7 @@ namespace L1FlyMapViewer
                 Dictionary<string, List<Layer8Item>> toRemove = new Dictionary<string, List<Layer8Item>>();
                 foreach (ListViewItem lvi in lvItems.CheckedItems)
                 {
+                    if (lvi.Tag == null) continue;
                     var (filePath, item) = ((string, Layer8Item))lvi.Tag;
                     if (!toRemove.ContainsKey(filePath))
                         toRemove[filePath] = new List<Layer8Item>();
