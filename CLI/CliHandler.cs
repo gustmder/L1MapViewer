@@ -71,6 +71,8 @@ namespace L1MapViewer.CLI
                         return CmdExportTiles(cmdArgs);
                     case "list-maps":
                         return CmdListMaps(cmdArgs);
+                    case "extract-tile":
+                        return CmdExtractTile(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -115,6 +117,8 @@ L1MapViewer CLI - S32 檔案解析工具
   coords <地圖資料夾>         計算地圖的遊戲座標範圍（startX, endX, startY, endY）
   export-tiles <s32檔案或資料夾> <輸出.zip> [--til] [--png]
                               匯出 S32 使用的 Tile 到 ZIP（預設只匯出 .til）
+  extract-tile <idx路徑> <tile-id> [輸出資料夾]
+                              從指定的 Tile.idx/pak 提取特定 TileId 的所有 block
   help                        顯示此幫助資訊
 
 範例:
@@ -1003,7 +1007,8 @@ L1MapViewer CLI - S32 檔案解析工具
                                 for (int indexId = 0; indexId < tilArray.Count; indexId++)
                                 {
                                     byte[] tilData = tilArray[indexId];
-                                    using (var bitmap = RenderTileToBitmap(tilData, 48))
+                                    // 自動偵測尺寸並以原始大小匯出
+                                    using (var bitmap = RenderTileToBitmap(tilData))
                                     {
                                         if (bitmap != null)
                                         {
@@ -1151,6 +1156,266 @@ L1MapViewer CLI - S32 檔案解析工具
         }
 
         /// <summary>
+        /// extract-tile 命令 - 從指定 idx/pak 提取特定 TileId 的所有 block
+        /// </summary>
+        private static int CmdExtractTile(string[] args)
+        {
+            if (args.Length < 2)
+            {
+                Console.WriteLine("用法: -cli extract-tile <idx路徑> <tile-id> [輸出資料夾] [--downscale]");
+                Console.WriteLine("  idx路徑: Tile.idx 檔案的完整路徑");
+                Console.WriteLine("  tile-id: 要提取的 TileId");
+                Console.WriteLine("  輸出資料夾: 可選，預設為目前目錄");
+                Console.WriteLine("  --downscale: 將 R 版 (48x48) 縮小成 Classic 版 (24x24)");
+                Console.WriteLine();
+                Console.WriteLine("範例:");
+                Console.WriteLine("  -cli extract-tile \"C:\\Lin\\Tile.idx\" 1234");
+                Console.WriteLine("  -cli extract-tile \"C:\\Lin\\Tile.idx\" 1234 \"C:\\output\"");
+                Console.WriteLine("  -cli extract-tile \"C:\\Lin4R\\Tile.idx\" 1234 \"C:\\output\" --downscale");
+                return 1;
+            }
+
+            string idxPath = args[0];
+            if (!int.TryParse(args[1], out int tileId))
+            {
+                Console.WriteLine($"無效的 TileId: {args[1]}");
+                return 1;
+            }
+
+            bool downscale = args.Contains("--downscale");
+            string outputFolder = args.Length >= 3 && !args[2].StartsWith("--") ? args[2] : Directory.GetCurrentDirectory();
+
+            if (!File.Exists(idxPath))
+            {
+                Console.WriteLine($"idx 檔案不存在: {idxPath}");
+                return 1;
+            }
+
+            string pakPath = Path.ChangeExtension(idxPath, ".pak");
+            if (!File.Exists(pakPath))
+            {
+                Console.WriteLine($"pak 檔案不存在: {pakPath}");
+                return 1;
+            }
+
+            Console.WriteLine($"=== 提取 Tile ===");
+            Console.WriteLine($"idx: {idxPath}");
+            Console.WriteLine($"pak: {pakPath}");
+            Console.WriteLine($"TileId: {tileId}");
+            Console.WriteLine($"輸出: {outputFolder}");
+            Console.WriteLine($"縮小至 Classic: {(downscale ? "是" : "否")}");
+            Console.WriteLine();
+
+            try
+            {
+                // 讀取 idx 檔案
+                byte[] idxData = File.ReadAllBytes(idxPath);
+
+                // 判斷 idx 結構類型
+                string head = Encoding.Default.GetString(idxData, 0, 4).ToLower();
+                IdxType structType = IdxType.OLD;
+                int baseOffset = 4;
+
+                if (head == "_ext")
+                {
+                    structType = IdxType.EXT;
+                    baseOffset = 8;
+                }
+                else if (head == "_rms")
+                {
+                    structType = IdxType.RMS;
+                    baseOffset = 8;
+                }
+
+                Console.WriteLine($"idx 格式: {structType}");
+
+                // 搜尋指定的 TileId
+                string targetFileName = $"{tileId}.til".ToLower();
+                int position = -1;
+                int size = 0;
+                int compressSize = 0;
+                int compressType = 0;
+                string foundFileName = null;
+
+                using (var br = new BinaryReader(new MemoryStream(idxData)))
+                {
+                    br.BaseStream.Seek(baseOffset, SeekOrigin.Begin);
+
+                    while (br.BaseStream.Position < idxData.Length)
+                    {
+                        int pos = br.ReadInt32();
+                        string fileName;
+                        int fSize, cSize = 0, cType = 0;
+
+                        if (structType == IdxType.EXT)
+                        {
+                            fSize = br.ReadInt32();
+                            cSize = br.ReadInt32();
+                            cType = br.ReadInt32();
+                            fileName = Encoding.Default.GetString(br.ReadBytes(112)).TrimEnd('\0').Trim();
+                        }
+                        else if (structType == IdxType.RMS)
+                        {
+                            fSize = br.ReadInt32();
+                            cSize = br.ReadInt32();
+                            cType = br.ReadInt32();
+                            fileName = Encoding.Default.GetString(br.ReadBytes(260)).TrimEnd('\0').Trim();
+                        }
+                        else
+                        {
+                            fileName = Encoding.Default.GetString(br.ReadBytes(20)).TrimEnd('\0').Trim();
+                            fSize = br.ReadInt32();
+                        }
+
+                        if (fileName.ToLower() == targetFileName)
+                        {
+                            position = pos;
+                            size = fSize;
+                            compressSize = cSize;
+                            compressType = cType;
+                            foundFileName = fileName;
+                            break;
+                        }
+                    }
+                }
+
+                if (position < 0)
+                {
+                    Console.WriteLine($"找不到 TileId {tileId} ({targetFileName})");
+                    return 1;
+                }
+
+                Console.WriteLine($"找到: {foundFileName}");
+                Console.WriteLine($"  Position: {position} (0x{position:X8})");
+                Console.WriteLine($"  Size: {size}");
+                if (structType != IdxType.OLD)
+                {
+                    Console.WriteLine($"  CompressSize: {compressSize}");
+                    Console.WriteLine($"  CompressType: {compressType}");
+                }
+                Console.WriteLine();
+
+                // 從 pak 讀取資料
+                int readSize = (compressSize > 0) ? compressSize : size;
+                byte[] pakData;
+
+                using (var fs = new FileStream(pakPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                {
+                    fs.Seek(position, SeekOrigin.Begin);
+                    pakData = new byte[readSize];
+                    fs.Read(pakData, 0, readSize);
+                }
+
+                // 解壓縮（如果需要）
+                byte[] tilData = pakData;
+                if (compressType == 1)
+                {
+                    // zlib
+                    tilData = DecompressZlib(pakData, size);
+                    Console.WriteLine($"已解壓縮 (zlib): {pakData.Length} -> {tilData.Length} bytes");
+                }
+                else if (compressType == 2)
+                {
+                    // brotli
+                    tilData = DecompressBrotli(pakData, size);
+                    Console.WriteLine($"已解壓縮 (brotli): {pakData.Length} -> {tilData.Length} bytes");
+                }
+
+                // 判斷版本
+                var version = L1Til.GetVersion(tilData);
+                int tileSize = L1Til.GetTileSize(version);
+                Console.WriteLine($"版本: {version} ({tileSize}x{tileSize})");
+
+                // 如果需要縮小且是 R 版
+                byte[] outputTilData = tilData;
+                if (downscale && version == L1Til.TileVersion.Remaster)
+                {
+                    outputTilData = L1Til.DownscaleTil(tilData);
+                    Console.WriteLine($"已縮小: {tilData.Length} -> {outputTilData.Length} bytes");
+                    version = L1Til.TileVersion.Classic;
+                    tileSize = 24;
+                }
+
+                // 使用 L1Til.Parse 解析 til 檔案的 block
+                var blocks = L1Til.Parse(outputTilData);
+                Console.WriteLine($"Block 數量 (IndexId): {blocks.Count}");
+                Console.WriteLine();
+
+                // 建立輸出資料夾
+                string folderSuffix = downscale && L1Til.IsRemaster(tilData) ? "_downscaled" : "";
+                string tileOutputFolder = Path.Combine(outputFolder, $"tile_{tileId}{folderSuffix}");
+                Directory.CreateDirectory(tileOutputFolder);
+
+                // 輸出 til 檔案
+                string tilOutputPath = Path.Combine(tileOutputFolder, $"{tileId}.til");
+                File.WriteAllBytes(tilOutputPath, outputTilData);
+                Console.WriteLine($"已輸出: {tilOutputPath}");
+
+                // 輸出各個 block
+                for (int i = 0; i < blocks.Count; i++)
+                {
+                    byte[] blockData = blocks[i];
+                    string blockPath = Path.Combine(tileOutputFolder, $"block_{i:D3}.bin");
+                    File.WriteAllBytes(blockPath, blockData);
+
+                    // 嘗試渲染為 PNG
+                    try
+                    {
+                        using (var bitmap = RenderTileToBitmap(blockData))
+                        {
+                            if (bitmap != null)
+                            {
+                                string pngPath = Path.Combine(tileOutputFolder, $"block_{i:D3}.png");
+                                bitmap.Save(pngPath, ImageFormat.Png);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // 忽略渲染錯誤
+                    }
+                }
+
+                Console.WriteLine($"已輸出 {blocks.Count} 個 block 到: {tileOutputFolder}");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"錯誤: {ex.Message}");
+                return 1;
+            }
+        }
+
+        /// <summary>
+        /// zlib 解壓縮
+        /// </summary>
+        private static byte[] DecompressZlib(byte[] data, int expectedSize)
+        {
+            // 跳過 zlib header (2 bytes)
+            using (var ms = new MemoryStream(data, 2, data.Length - 2))
+            using (var deflate = new System.IO.Compression.DeflateStream(ms, CompressionMode.Decompress))
+            using (var output = new MemoryStream())
+            {
+                deflate.CopyTo(output);
+                return output.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// brotli 解壓縮
+        /// </summary>
+        private static byte[] DecompressBrotli(byte[] data, int expectedSize)
+        {
+            using (var ms = new MemoryStream(data))
+            using (var brotli = new System.IO.Compression.BrotliStream(ms, CompressionMode.Decompress))
+            using (var output = new MemoryStream())
+            {
+                brotli.CopyTo(output);
+                return output.ToArray();
+            }
+        }
+
+        /// <summary>
         /// 從 S32 檔案路徑尋找 client 路徑（往上找直到找到 Tile.idx）
         /// </summary>
         private static string FindClientPath(string s32FilePath)
@@ -1170,12 +1435,50 @@ L1MapViewer CLI - S32 檔案解析工具
         }
 
         /// <summary>
+        /// 從 til 資料偵測原始尺寸
+        /// 2.5D 菱形格式: 每行像素數 = 2+4+6+...+2n+...+6+4+2 = 2*(1+2+...+n)*2 = 2*n*(n+1)
+        /// 每像素 2 bytes, 加上 1 byte type
+        /// 24x24: 2*12*13*2 + 1 = 625 bytes (標準尺寸)
+        /// 48x48: 2*24*25*2 + 1 = 2401 bytes
+        /// </summary>
+        private static int DetectTilSize(byte[] tilData)
+        {
+            if (tilData == null || tilData.Length < 2)
+                return 24; // 預設
+
+            int dataLen = tilData.Length - 1; // 扣掉 type byte
+            int pixelCount = dataLen / 2;
+
+            // 反推 n: pixelCount = 2 * n * (n+1)
+            // n^2 + n - pixelCount/2 = 0
+            // n = (-1 + sqrt(1 + 2*pixelCount)) / 2
+            double n = (-1 + Math.Sqrt(1 + 2 * pixelCount)) / 2;
+            int tileSize = (int)Math.Round(n) * 2; // 菱形高度 = 2n
+
+            // 常見尺寸: 24, 48, 96
+            if (tileSize <= 24) return 24;
+            if (tileSize <= 48) return 48;
+            if (tileSize <= 96) return 96;
+            return tileSize;
+        }
+
+        /// <summary>
+        /// 渲染 til 資料為 Bitmap (2.5D 菱形格式)，自動偵測尺寸
+        /// </summary>
+        private static unsafe Bitmap RenderTileToBitmap(byte[] tilData)
+        {
+            int tileSize = DetectTilSize(tilData);
+            return RenderTileToBitmap(tilData, tileSize);
+        }
+
+        /// <summary>
         /// 渲染 til 資料為 Bitmap (2.5D 菱形格式)
         /// </summary>
         private static unsafe Bitmap RenderTileToBitmap(byte[] tilData, int size)
         {
             try
             {
+                int tileSize = DetectTilSize(tilData);
                 Bitmap bitmap = new Bitmap(size, size, PixelFormat.Format16bppRgb555);
 
                 Rectangle rect = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
@@ -1188,16 +1491,17 @@ L1MapViewer CLI - S32 檔案解析工具
                     byte* til_ptr = til_ptr_fixed;
                     byte type = *(til_ptr++);
 
-                    double scale = size / 48.0;
-                    int offsetX = (int)((size - 24 * scale) / 2);
-                    int offsetY = (int)((size - 24 * scale) / 2);
+                    int halfSize = tileSize / 2; // 24 for 48x48, 12 for 24x24
+                    double scale = (double)size / tileSize;
+                    int offsetX = (int)((size - halfSize * scale) / 2);
+                    int offsetY = (int)((size - halfSize * scale) / 2);
 
                     if (type == 1 || type == 9 || type == 17)
                     {
                         // 下半部 2.5D 方塊
-                        for (int ty = 0; ty < 24; ty++)
+                        for (int ty = 0; ty < halfSize; ty++)
                         {
-                            int n = (ty <= 11) ? (ty + 1) * 2 : (23 - ty) * 2;
+                            int n = (ty <= halfSize / 2 - 1) ? (ty + 1) * 2 : (halfSize - 1 - ty) * 2;
                             int tx = 0;
                             for (int p = 0; p < n; p++)
                             {
@@ -1227,10 +1531,10 @@ L1MapViewer CLI - S32 檔案解析工具
                     else if (type == 0 || type == 8 || type == 16)
                     {
                         // 上半部 2.5D 方塊
-                        for (int ty = 0; ty < 24; ty++)
+                        for (int ty = 0; ty < halfSize; ty++)
                         {
-                            int n = (ty <= 11) ? (ty + 1) * 2 : (23 - ty) * 2;
-                            int tx = 24 - n;
+                            int n = (ty <= halfSize / 2 - 1) ? (ty + 1) * 2 : (halfSize - 1 - ty) * 2;
+                            int tx = halfSize - n;
                             for (int p = 0; p < n; p++)
                             {
                                 ushort color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));

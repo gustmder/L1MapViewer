@@ -120,6 +120,9 @@ namespace L1FlyMapViewer
         // 整個 .til 檔案快取 - key: tileId, value: parsed tile array
         private System.Collections.Concurrent.ConcurrentDictionary<int, List<byte[]>> _tilFileCache = new System.Collections.Concurrent.ConcurrentDictionary<int, List<byte[]>>();
 
+        // R 版 tile 快取 - key: tileId, value: isRemaster
+        private System.Collections.Concurrent.ConcurrentDictionary<int, bool> _tilRemasterCache = new System.Collections.Concurrent.ConcurrentDictionary<int, bool>();
+
         /// <summary>
         /// 預載入地圖用到的所有 tile 檔案（背景執行）
         /// </summary>
@@ -2109,6 +2112,12 @@ namespace L1FlyMapViewer
                 return;
             }
 
+            // 切換資料夾時清除所有快取（不同資料夾的 tile/idx 內容不同）
+            _tilFileCache.Clear();
+            _tilRemasterCache.Clear();
+            tileDataCache.Clear();
+            Share.IdxDataList.Clear();  // 清除 idx 快取，強制重新讀取新資料夾的 idx
+
             Utils.ShowProgressBar(true, this);
             this.toolStripStatusLabel1.Text = "正在讀取地圖列表...";
 
@@ -2171,6 +2180,9 @@ namespace L1FlyMapViewer
                             }
                         }
 
+                        // 先設為 -1 再設回來，強制觸發 SelectedIndexChanged 事件
+                        // 這樣即使選擇相同的 index，也會重新載入 S32 檔案
+                        this.comboBox1.SelectedIndex = -1;
                         this.comboBox1.SelectedIndex = selectedIndex;
                     }
 
@@ -3393,6 +3405,7 @@ namespace L1FlyMapViewer
             cachedAggregatedTiles.Clear();
             tileDataCache.Clear();
             _tilFileCache.Clear();
+            _tilRemasterCache.Clear();
 
             // 清除 viewport bitmap
             lock (_viewportBitmapLock)
@@ -6398,9 +6411,14 @@ namespace L1FlyMapViewer
                         if (tile.Thumbnail != null)
                         {
                             imageList.Images.Add(tile.Thumbnail);
+
+                            // 檢查是否為 R 版
+                            bool isRemaster = _tilRemasterCache.TryGetValue(tile.TileId, out bool r) && r;
+                            string rMark = isRemaster ? "(R)" : "";
+
                             var item = new ListViewItem
                             {
-                                Text = $"ID:{tile.TileId}\n×{tile.UsageCount}",
+                                Text = $"ID:{tile.TileId}{rMark}\n×{tile.UsageCount}",
                                 ImageIndex = index,
                                 Tag = tile
                             };
@@ -6409,7 +6427,10 @@ namespace L1FlyMapViewer
                         }
                     }
 
-                    lblTileList.Text = $"顯示 {lvTiles.Items.Count} 個 Tile (來自 {_document.S32Files.Count} 個 S32 檔案)";
+                    // 計算 Tile.idx 中 1-9999 範圍內已使用的 TileId 數量
+                    int usedInIdx = GetTileIdxUsedCount();
+                    int availableSlots = 9999 - usedInIdx;
+                    lblTileList.Text = $"顯示 {lvTiles.Items.Count} 個 Tile (剩餘 {availableSlots} 個空位)";
                 });
             });
         }
@@ -6522,9 +6543,13 @@ namespace L1FlyMapViewer
                 {
                     imageList.Images.Add(tile.Thumbnail);
 
+                    // 檢查是否為 R 版
+                    bool isRemaster = _tilRemasterCache.TryGetValue(tile.TileId, out bool r) && r;
+                    string rMark = isRemaster ? "(R)" : "";
+
                     var item = new ListViewItem
                     {
-                        Text = $"ID:{tile.TileId}\n×{tile.UsageCount}",
+                        Text = $"ID:{tile.TileId}{rMark}\n×{tile.UsageCount}",
                         ImageIndex = index,
                         Tag = tile
                     };
@@ -6533,9 +6558,13 @@ namespace L1FlyMapViewer
                 }
             }
 
+            // 計算 Tile.idx 中 1-9999 範圍內已使用的 TileId 數量
+            int usedInIdx = GetTileIdxUsedCount();
+            int availableSlots = 9999 - usedInIdx;
+
             string statusText = string.IsNullOrWhiteSpace(searchText)
-                ? $"顯示 {lvTiles.Items.Count} 個 Tile (來自 {_document.S32Files.Count} 個 S32 檔案)"
-                : $"搜尋結果: {lvTiles.Items.Count}/{totalCount} 個 Tile";
+                ? $"顯示 {lvTiles.Items.Count} 個 Tile (剩餘 {availableSlots} 個空位)"
+                : $"搜尋結果: {lvTiles.Items.Count}/{totalCount} 個 Tile (剩餘 {availableSlots} 個空位)";
             lblTileList.Text = statusText;
         }
 
@@ -6545,11 +6574,52 @@ namespace L1FlyMapViewer
             UpdateTileList(txtTileSearch.Text);
         }
 
+        // 計算 Tile.idx 中 1-9999 範圍內已使用的 TileId 數量
+        private int GetTileIdxUsedCount()
+        {
+            try
+            {
+                // 觸發載入 Tile.idx（如果還沒載入）
+                L1IdxReader.Find("Tile", "1.til");
+
+                if (Share.IdxDataList.TryGetValue("Tile", out var tileIdx))
+                {
+                    int count = 0;
+                    foreach (var key in tileIdx.Keys)
+                    {
+                        // 檔名格式為 "xxx.til"，解析出數字
+                        if (key.EndsWith(".til"))
+                        {
+                            string numPart = key.Substring(0, key.Length - 4);
+                            if (int.TryParse(numPart, out int tileId) && tileId >= 1 && tileId <= 9999)
+                            {
+                                count++;
+                            }
+                        }
+                    }
+                    return count;
+                }
+            }
+            catch
+            {
+                // 忽略錯誤
+            }
+            return 0;
+        }
+
         // 載入 Tile 縮圖（使用快取）
         private Bitmap LoadTileThumbnail(int tileId, int indexId)
         {
             try
             {
+                // 檢查是否已有快取的版本資訊
+                bool isRemaster = _tilRemasterCache.GetOrAdd(tileId, _ =>
+                {
+                    string key = $"{tileId}.til";
+                    byte[] rawData = L1PakReader.UnPack("Tile", key);
+                    return rawData != null && L1Til.IsRemaster(rawData);
+                });
+
                 // 使用已存在的 til 檔案快取
                 List<byte[]> tilArray = _tilFileCache.GetOrAdd(tileId, _ =>
                 {
@@ -9296,11 +9366,16 @@ namespace L1FlyMapViewer
                 return;
             }
 
+            // 檢查是否有 R 版 Tile
+            var distinctTileIds = tiles.Select(t => t.TileId).Distinct().ToList();
+            int remasterCount = distinctTileIds.Count(id => _tilRemasterCache.TryGetValue(id, out bool r) && r);
+            bool hasRemasterTiles = remasterCount > 0;
+
             // 詢問匯出選項
             using (var optionForm = new Form())
             {
                 optionForm.Text = "匯出選項";
-                optionForm.ClientSize = new Size(300, 150);
+                optionForm.ClientSize = new Size(300, hasRemasterTiles ? 180 : 150);
                 optionForm.FormBorderStyle = FormBorderStyle.FixedDialog;
                 optionForm.StartPosition = FormStartPosition.CenterParent;
                 optionForm.MaximizeBox = false;
@@ -9308,13 +9383,16 @@ namespace L1FlyMapViewer
 
                 var chkExportTil = new CheckBox { Text = "匯出 .til 原始檔案", Location = new Point(20, 15), Size = new Size(260, 24), Checked = true };
                 var chkExportPng = new CheckBox { Text = "匯出 .png 預覽圖片", Location = new Point(20, 45), Size = new Size(260, 24), Checked = false };
+                var chkDownscale = new CheckBox { Text = $"R版縮小至 24x24 ({remasterCount} 個)", Location = new Point(20, 75), Size = new Size(260, 24), Checked = false, Enabled = hasRemasterTiles };
 
-                var lblInfo = new Label { Text = $"共 {tiles.Select(t => t.TileId).Distinct().Count()} 個 til 檔案", Location = new Point(20, 75), Size = new Size(260, 20), ForeColor = Color.Gray };
+                int infoY = hasRemasterTiles ? 105 : 75;
+                int btnY = hasRemasterTiles ? 140 : 110;
+                var lblInfo = new Label { Text = $"共 {distinctTileIds.Count} 個 til 檔案", Location = new Point(20, infoY), Size = new Size(260, 20), ForeColor = Color.Gray };
 
-                var btnOK = new Button { Text = "匯出", Location = new Point(100, 110), Size = new Size(80, 28), DialogResult = DialogResult.OK };
-                var btnCancel = new Button { Text = "取消", Location = new Point(190, 110), Size = new Size(80, 28), DialogResult = DialogResult.Cancel };
+                var btnOK = new Button { Text = "匯出", Location = new Point(100, btnY), Size = new Size(80, 28), DialogResult = DialogResult.OK };
+                var btnCancel = new Button { Text = "取消", Location = new Point(190, btnY), Size = new Size(80, 28), DialogResult = DialogResult.Cancel };
 
-                optionForm.Controls.AddRange(new Control[] { chkExportTil, chkExportPng, lblInfo, btnOK, btnCancel });
+                optionForm.Controls.AddRange(new Control[] { chkExportTil, chkExportPng, chkDownscale, lblInfo, btnOK, btnCancel });
                 optionForm.AcceptButton = btnOK;
                 optionForm.CancelButton = btnCancel;
 
@@ -9329,6 +9407,7 @@ namespace L1FlyMapViewer
 
                 bool exportTil = chkExportTil.Checked;
                 bool exportPng = chkExportPng.Checked;
+                bool downscale = chkDownscale.Checked;
 
                 using (var saveDialog = new SaveFileDialog())
                 {
@@ -9366,6 +9445,13 @@ namespace L1FlyMapViewer
                                         continue;
                                     }
 
+                                    // 如果需要縮小且是 R 版
+                                    byte[] exportData = data;
+                                    if (downscale && L1Til.IsRemaster(data))
+                                    {
+                                        exportData = L1Til.DownscaleTil(data);
+                                    }
+
                                     // 匯出 .til 原始檔案
                                     if (exportTil)
                                     {
@@ -9373,7 +9459,7 @@ namespace L1FlyMapViewer
                                         var tilEntry = archive.CreateEntry(tilEntryName, System.IO.Compression.CompressionLevel.Optimal);
                                         using (var entryStream = tilEntry.Open())
                                         {
-                                            entryStream.Write(data, 0, data.Length);
+                                            entryStream.Write(exportData, 0, exportData.Length);
                                         }
                                         tilExportedCount++;
                                     }
@@ -9381,7 +9467,7 @@ namespace L1FlyMapViewer
                                     // 匯出 .png 預覽圖片
                                     if (exportPng)
                                     {
-                                        var tilArray = L1Til.Parse(data);
+                                        var tilArray = L1Til.Parse(exportData);
                                         string folderName = $"preview/til_{tileId:D6}";
 
                                         foreach (var tile in group)
@@ -9688,9 +9774,17 @@ namespace L1FlyMapViewer
                     s32Data.IsModified = true;
                 }
 
+                // 清除快取
+                cachedAggregatedTiles.Clear();
+                _tilFileCache.Clear();
+                _tilRemasterCache.Clear();
+
                 // 重新整理 Tile 列表
-                UpdateTileList();
+                UpdateTileList(txtTileSearch.Text);
                 UpdateGroupThumbnailsList();
+
+                // 強制重新渲染地圖
+                _viewState.SetRenderResult(0, 0, 0, 0, 0);
                 s32PictureBox.Invalidate();
 
                 // 建構結果訊息
