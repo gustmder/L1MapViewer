@@ -119,6 +119,8 @@ L1MapViewer CLI - S32 檔案解析工具
                               匯出 S32 使用的 Tile 到 ZIP（預設只匯出 .til）
   extract-tile <idx路徑> <tile-id> [輸出資料夾]
                               從指定的 Tile.idx/pak 提取特定 TileId 的所有 block
+  compare-tile <classic-idx> <remaster-idx> <tile-id> [輸出資料夾]
+                              比對 Classic 版與 R 版降級後的 Tile，輸出比較圖片
   help                        顯示此幫助資訊
 
 範例:
