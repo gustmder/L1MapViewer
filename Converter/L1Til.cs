@@ -90,7 +90,9 @@ namespace L1MapViewer.Converter {
 
         /// <summary>
         /// 將 R 版 (48x48) 的 block 縮小成 Classic 版 (24x24)
-        /// 使用 2.5D 菱形結構進行正確的 2x2 區塊平均縮放
+        /// 支援所有 block type：
+        /// - Type 0,1,8,9,16,17: 簡單菱形格式
+        /// - 其他 Type (3,34,35等): 壓縮格式，需要先解碼再降採樣再重新編碼
         /// </summary>
         public static byte[] DownscaleBlock(byte[] blockData)
         {
@@ -99,30 +101,54 @@ namespace L1MapViewer.Converter {
 
             byte type = blockData[0];
 
-            // 計算來源尺寸 (48x48 -> halfSize=24)
-            int srcDataLen = blockData.Length - 1;
+            // 判斷是否為簡單菱形格式
+            bool isSimpleDiamond = (type == 0 || type == 1 || type == 8 || type == 9 || type == 16 || type == 17);
+
+            if (isSimpleDiamond)
+            {
+                return DownscaleSimpleDiamondBlock(blockData, type);
+            }
+            else
+            {
+                // 壓縮格式：先解碼到 48x48 bitmap，降採樣到 24x24，再重新編碼
+                return DownscaleCompressedBlock(blockData, type);
+            }
+        }
+
+        /// <summary>
+        /// 降採樣簡單菱形格式的 block (type 0,1,8,9,16,17)
+        /// 48x48 有 48 行像素，每行像素數根據菱形結構決定
+        /// </summary>
+        private static byte[] DownscaleSimpleDiamondBlock(byte[] blockData, byte type)
+        {
+            // 48x48 菱形總像素數 = 2 * 24 * 25 = 1200 pixels = 2400 bytes + 1 type byte = 2401 bytes
+            // 24x24 菱形總像素數 = 2 * 12 * 13 = 312 pixels = 624 bytes + 1 type byte = 625 bytes
+
+            int srcDataLen = blockData.Length - 1; // 扣掉 type byte
             int srcPixelCount = srcDataLen / 2;
 
-            // 反推 n: pixelCount = 2 * n * (n+1), 解出 n
-            double n = (-1 + Math.Sqrt(1 + 2 * srcPixelCount)) / 2;
-            int srcHalfSize = (int)Math.Round(n);
-
-            // 如果不是 48x48 (halfSize=24)，直接返回原始資料
-            if (srcHalfSize != 24)
+            // 48x48 的像素數應該是 2400，24x24 是 624
+            // 如果不是 R 版的大小，直接返回
+            if (srcPixelCount < 1000)  // 已經是 24x24 版本
                 return blockData;
 
-            int dstHalfSize = 12;  // 目標 24x24
+            const int srcTileSize = 48;  // R 版 tile 尺寸
+            const int dstTileSize = 24;  // Classic 版 tile 尺寸
 
-            // 解析來源像素到 2D 菱形陣列
-            // 菱形每行的像素數: 行 y 的像素數 = (y < halfSize/2) ? (y+1)*2 : (halfSize-1-y)*2
+            // 解析來源像素到 2D 陣列 (48 行)
             var srcRows = new List<ushort[]>();
             int srcOffset = 1;  // 跳過 type byte
 
-            for (int y = 0; y < srcHalfSize; y++)
+            for (int ty = 0; ty < srcTileSize; ty++)
             {
-                int rowPixelCount = (y <= srcHalfSize / 2 - 1) ? (y + 1) * 2 : (srcHalfSize - 1 - y) * 2;
-                var row = new ushort[rowPixelCount];
-                for (int x = 0; x < rowPixelCount; x++)
+                int n;
+                if (ty <= srcTileSize / 2 - 1)  // ty <= 23
+                    n = (ty + 1) * 2;
+                else
+                    n = (srcTileSize - 1 - ty) * 2;
+
+                var row = new ushort[n];
+                for (int x = 0; x < n; x++)
                 {
                     if (srcOffset + 1 < blockData.Length)
                     {
@@ -133,14 +159,18 @@ namespace L1MapViewer.Converter {
                 srcRows.Add(row);
             }
 
-            // 建立目標像素陣列 (2x2 縮放)
+            // 建立目標像素陣列 (2x2 降採樣)
             var result = new List<byte> { type };
 
-            for (int dstY = 0; dstY < dstHalfSize; dstY++)
+            for (int dstY = 0; dstY < dstTileSize; dstY++)
             {
-                int dstRowPixelCount = (dstY <= dstHalfSize / 2 - 1) ? (dstY + 1) * 2 : (dstHalfSize - 1 - dstY) * 2;
+                int dstN;
+                if (dstY <= dstTileSize / 2 - 1)  // dstY <= 11
+                    dstN = (dstY + 1) * 2;
+                else
+                    dstN = (dstTileSize - 1 - dstY) * 2;
 
-                for (int dstX = 0; dstX < dstRowPixelCount; dstX++)
+                for (int dstX = 0; dstX < dstN; dstX++)
                 {
                     // 對應來源的 2x2 區塊
                     int srcY1 = dstY * 2;
@@ -182,6 +212,215 @@ namespace L1MapViewer.Converter {
             }
 
             // 加上 Parse 多讀的 1 byte (與原始格式相容)
+            result.Add(0);
+
+            return result.ToArray();
+        }
+
+        /// <summary>
+        /// 降採樣壓縮格式的 block (type 3, 34, 35 等)
+        /// 這些格式有 x_offset, y_offset, xxLen, yLen 和 segment 結構
+        /// </summary>
+        private static byte[] DownscaleCompressedBlock(byte[] blockData, byte type)
+        {
+            if (blockData.Length < 6)
+                return blockData;
+
+            // 讀取壓縮格式的 header
+            int idx = 1;  // 跳過 type byte
+            byte x_offset = blockData[idx++];
+            byte y_offset = blockData[idx++];
+            byte xxLen = blockData[idx++];
+            byte yLen = blockData[idx++];
+
+            // 判斷是否為 R 版 (48x48)
+            // R 版的 yLen 通常會大於 24，或者 y_offset + yLen > 24
+            if (yLen <= 24 && y_offset + yLen <= 24 && xxLen <= 48)
+            {
+                // 可能已經是 Classic 版
+                return blockData;
+            }
+
+            // 解碼到 48x48 像素陣列 (使用 -1 表示透明)
+            const int srcSize = 48;
+            const int dstSize = 24;
+            int[,] srcPixels = new int[srcSize, srcSize];
+            for (int y = 0; y < srcSize; y++)
+                for (int x = 0; x < srcSize; x++)
+                    srcPixels[y, x] = -1;  // -1 表示透明
+
+            // 解析壓縮資料到 srcPixels
+            for (int ty = 0; ty < yLen && idx < blockData.Length - 1; ty++)
+            {
+                int tx = x_offset;
+                byte xSegmentCount = blockData[idx++];
+
+                for (int nx = 0; nx < xSegmentCount && idx < blockData.Length - 2; nx++)
+                {
+                    int skip = blockData[idx++] / 2;  // 跳過的像素數
+                    tx += skip;
+                    int xLen = blockData[idx++];  // 這個 segment 的像素數
+
+                    for (int p = 0; p < xLen && idx + 1 < blockData.Length; p++)
+                    {
+                        ushort color = (ushort)(blockData[idx] | (blockData[idx + 1] << 8));
+                        idx += 2;
+
+                        int pixY = ty + y_offset;
+                        int pixX = tx;
+                        if (pixY < srcSize && pixX < srcSize)
+                        {
+                            srcPixels[pixY, pixX] = color;
+                        }
+                        tx++;
+                    }
+                }
+            }
+
+            // 2x2 降採樣到 24x24
+            int[,] dstPixels = new int[dstSize, dstSize];
+            for (int y = 0; y < dstSize; y++)
+                for (int x = 0; x < dstSize; x++)
+                    dstPixels[y, x] = -1;
+
+            for (int dstY = 0; dstY < dstSize; dstY++)
+            {
+                for (int dstX = 0; dstX < dstSize; dstX++)
+                {
+                    int srcY1 = dstY * 2;
+                    int srcY2 = dstY * 2 + 1;
+                    int srcX1 = dstX * 2;
+                    int srcX2 = dstX * 2 + 1;
+
+                    int r = 0, g = 0, b = 0, count = 0;
+
+                    void SamplePixel(int sy, int sx)
+                    {
+                        if (sy < srcSize && sx < srcSize && srcPixels[sy, sx] >= 0)
+                        {
+                            ushort c = (ushort)srcPixels[sy, sx];
+                            r += (c >> 10) & 0x1F;
+                            g += (c >> 5) & 0x1F;
+                            b += c & 0x1F;
+                            count++;
+                        }
+                    }
+
+                    SamplePixel(srcY1, srcX1);
+                    SamplePixel(srcY1, srcX2);
+                    SamplePixel(srcY2, srcX1);
+                    SamplePixel(srcY2, srcX2);
+
+                    if (count > 0)
+                    {
+                        r /= count;
+                        g /= count;
+                        b /= count;
+                        dstPixels[dstY, dstX] = (r << 10) | (g << 5) | b;
+                    }
+                }
+            }
+
+            // 重新編碼回壓縮格式
+            return EncodeCompressedBlock(dstPixels, type, dstSize);
+        }
+
+        /// <summary>
+        /// 將像素陣列編碼回壓縮格式
+        /// </summary>
+        private static byte[] EncodeCompressedBlock(int[,] pixels, byte type, int size)
+        {
+            var result = new List<byte>();
+            result.Add(type);
+
+            // 計算有效區域的 bounding box
+            int minX = size, minY = size, maxX = -1, maxY = -1;
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    if (pixels[y, x] >= 0)
+                    {
+                        minX = Math.Min(minX, x);
+                        minY = Math.Min(minY, y);
+                        maxX = Math.Max(maxX, x);
+                        maxY = Math.Max(maxY, y);
+                    }
+                }
+            }
+
+            // 如果沒有有效像素，返回空 block
+            if (maxX < 0)
+            {
+                result.Add(0);  // x_offset
+                result.Add(0);  // y_offset
+                result.Add(0);  // xxLen
+                result.Add(0);  // yLen
+                result.Add(0);  // Parse 多讀的 1 byte
+                return result.ToArray();
+            }
+
+            byte x_offset = (byte)minX;
+            byte y_offset = (byte)minY;
+            byte xxLen = (byte)(maxX - minX + 1);
+            byte yLen = (byte)(maxY - minY + 1);
+
+            result.Add(x_offset);
+            result.Add(y_offset);
+            result.Add(xxLen);
+            result.Add(yLen);
+
+            // 編碼每一行
+            for (int y = minY; y <= maxY; y++)
+            {
+                // 找出這一行的所有 segment
+                var segments = new List<(int start, List<ushort> pixels)>();
+                int x = minX;
+                while (x <= maxX)
+                {
+                    // 跳過透明像素
+                    while (x <= maxX && pixels[y, x] < 0)
+                        x++;
+
+                    if (x > maxX)
+                        break;
+
+                    // 收集連續的非透明像素
+                    int startX = x;
+                    var segmentPixels = new List<ushort>();
+                    while (x <= maxX && pixels[y, x] >= 0)
+                    {
+                        segmentPixels.Add((ushort)pixels[y, x]);
+                        x++;
+                    }
+                    segments.Add((startX, segmentPixels));
+                }
+
+                // 寫入 segment count
+                result.Add((byte)segments.Count);
+
+                int currentX = x_offset;
+                foreach (var seg in segments)
+                {
+                    // 寫入跳過的像素數 (乘以 2，因為原始格式是這樣)
+                    int skip = seg.start - currentX;
+                    result.Add((byte)(skip * 2));
+
+                    // 寫入這個 segment 的像素數
+                    result.Add((byte)seg.pixels.Count);
+
+                    // 寫入像素資料
+                    foreach (var color in seg.pixels)
+                    {
+                        result.Add((byte)(color & 0xFF));
+                        result.Add((byte)((color >> 8) & 0xFF));
+                    }
+
+                    currentX = seg.start + seg.pixels.Count;
+                }
+            }
+
+            // 加上 Parse 多讀的 1 byte
             result.Add(0);
 
             return result.ToArray();
