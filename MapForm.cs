@@ -3872,22 +3872,16 @@ namespace L1FlyMapViewer
                     }
                     long miniMapMs = phaseStopwatch.ElapsedMilliseconds;
 
-                    // 階段 6: Tile 列表更新（背景執行）
+                    // 階段 6: Tile 列表 + 群組縮圖更新（兩者並行背景執行）
                     phaseStopwatch.Restart();
                     if (_document.S32Files.Count > 0)
                     {
-                        UpdateTileListAsync();
-                    }
-                    long tileListMs = phaseStopwatch.ElapsedMilliseconds;  // 只計算啟動時間
-
-                    // 階段 7: 群組縮圖更新（背景執行，不計入載入時間）
-                    phaseStopwatch.Restart();
-                    if (_document.S32Files.Count > 0)
-                    {
-                        UpdateGroupThumbnailsList();
+                        UpdateGroupThumbnailsList();  // 異步，立即返回
+                        UpdateTileListAsync();        // 異步，立即返回
                         UpdateLayer5InvalidButton();
                     }
-                    long thumbnailStartMs = phaseStopwatch.ElapsedMilliseconds;
+                    long tileListMs = phaseStopwatch.ElapsedMilliseconds;  // 只計算啟動時間
+                    long thumbnailStartMs = 0;  // 已合併到上面
 
                     totalStopwatch.Stop();
                     long totalMs = totalStopwatch.ElapsedMilliseconds;
@@ -7044,42 +7038,51 @@ namespace L1FlyMapViewer
                 {
                     cachedAggregatedTiles = aggregatedTiles;
 
-                    lvTiles.Items.Clear();
-                    lvTiles.View = View.LargeIcon;
-
-                    ImageList imageList = new ImageList();
-                    imageList.ImageSize = new Size(48, 48);
-                    imageList.ColorDepth = ColorDepth.Depth32Bit;
-                    lvTiles.LargeImageList = imageList;
-
-                    int index = 0;
-                    foreach (var tileKvp in aggregatedTiles.OrderBy(t => t.Key))
+                    lvTiles.BeginUpdate();  // 暫停重繪
+                    try
                     {
-                        var tile = tileKvp.Value;
-                        if (tile.Thumbnail != null)
+                        lvTiles.Items.Clear();
+                        lvTiles.View = View.LargeIcon;
+
+                        ImageList imageList = new ImageList();
+                        imageList.ImageSize = new Size(48, 48);
+                        imageList.ColorDepth = ColorDepth.Depth32Bit;
+                        lvTiles.LargeImageList = imageList;
+
+                        // 批量準備項目
+                        var items = new List<ListViewItem>();
+                        int index = 0;
+                        foreach (var tileKvp in aggregatedTiles.OrderBy(t => t.Key))
                         {
-                            imageList.Images.Add(tile.Thumbnail);
-
-                            // 檢查是否為 R 版
-                            bool isRemaster = _tilRemasterCache.TryGetValue(tile.TileId, out bool r) && r;
-                            string rMark = isRemaster ? "(R)" : "";
-
-                            var item = new ListViewItem
+                            var tile = tileKvp.Value;
+                            if (tile.Thumbnail != null)
                             {
-                                Text = $"ID:{tile.TileId}{rMark}\n×{tile.UsageCount}",
-                                ImageIndex = index,
-                                Tag = tile
-                            };
-                            lvTiles.Items.Add(item);
-                            index++;
+                                imageList.Images.Add(tile.Thumbnail);
+
+                                // 檢查是否為 R 版
+                                bool isRemaster = _tilRemasterCache.TryGetValue(tile.TileId, out bool r) && r;
+                                string rMark = isRemaster ? "(R)" : "";
+
+                                var item = new ListViewItem
+                                {
+                                    Text = $"ID:{tile.TileId}{rMark}\n×{tile.UsageCount}",
+                                    ImageIndex = index,
+                                    Tag = tile
+                                };
+                                items.Add(item);
+                                index++;
+                            }
                         }
+
+                        // 批量添加
+                        lvTiles.Items.AddRange(items.ToArray());
+                    }
+                    finally
+                    {
+                        lvTiles.EndUpdate();  // 恢復重繪
                     }
 
-                    // 計算剩餘空位：list.til 中的最大值 - 實際使用的最大 TileId
-                    int listTilMax = GetListTilMaxId();
-                    int actualMaxId = GetActualMaxTileId();
-                    int availableSlots = listTilMax - actualMaxId;
-                    lblTileList.Text = $"顯示 {lvTiles.Items.Count} 個 Tile (剩餘 {availableSlots} 個空位, 上限 {listTilMax})";
+                    lblTileList.Text = $"Tile 列表 ({lvTiles.Items.Count})";
                 });
             });
         }
@@ -7087,135 +7090,143 @@ namespace L1FlyMapViewer
         // 更新 Tile 清單顯示（支援搜尋過濾）
         private void UpdateTileList(string searchText)
         {
-            lvTiles.Items.Clear();
-            lvTiles.View = View.LargeIcon;
-
-            // 創建 ImageList
-            ImageList imageList = new ImageList();
-            imageList.ImageSize = new Size(48, 48);
-            imageList.ColorDepth = ColorDepth.Depth32Bit;
-            lvTiles.LargeImageList = imageList;
-
-            if (_document.S32Files.Count == 0)
+            lvTiles.BeginUpdate();  // 暫停重繪
+            try
             {
-                this.toolStripStatusLabel1.Text = "沒有 S32 檔案";
-                return;
-            }
+                lvTiles.Items.Clear();
+                lvTiles.View = View.LargeIcon;
 
-            // 如果快取為空，重新聚合所有 S32 檔案的 UsedTiles
-            if (cachedAggregatedTiles.Count == 0 || string.IsNullOrEmpty(searchText))
-            {
-                cachedAggregatedTiles.Clear();
+                // 創建 ImageList
+                ImageList imageList = new ImageList();
+                imageList.ImageSize = new Size(48, 48);
+                imageList.ColorDepth = ColorDepth.Depth32Bit;
+                lvTiles.LargeImageList = imageList;
 
-                foreach (var s32Data in _document.S32Files.Values)
+                if (_document.S32Files.Count == 0)
                 {
-                    foreach (var tileKvp in s32Data.UsedTiles)
-                    {
-                        int tileId = tileKvp.Key;
-                        var tileInfo = tileKvp.Value;
+                    this.toolStripStatusLabel1.Text = "沒有 S32 檔案";
+                    return;
+                }
 
-                        if (cachedAggregatedTiles.ContainsKey(tileId))
+                // 如果快取為空，重新聚合所有 S32 檔案的 UsedTiles
+                if (cachedAggregatedTiles.Count == 0 || string.IsNullOrEmpty(searchText))
+                {
+                    cachedAggregatedTiles.Clear();
+
+                    foreach (var s32Data in _document.S32Files.Values)
+                    {
+                        foreach (var tileKvp in s32Data.UsedTiles)
                         {
-                            // 累加使用次數
-                            cachedAggregatedTiles[tileId].UsageCount += tileInfo.UsageCount;
-                        }
-                        else
-                        {
-                            // 新增 tile
-                            cachedAggregatedTiles[tileId] = new TileInfo
+                            int tileId = tileKvp.Key;
+                            var tileInfo = tileKvp.Value;
+
+                            if (cachedAggregatedTiles.ContainsKey(tileId))
                             {
-                                TileId = tileInfo.TileId,
-                                IndexId = tileInfo.IndexId,
-                                UsageCount = tileInfo.UsageCount,
-                                Thumbnail = null
-                            };
+                                // 累加使用次數
+                                cachedAggregatedTiles[tileId].UsageCount += tileInfo.UsageCount;
+                            }
+                            else
+                            {
+                                // 新增 tile
+                                cachedAggregatedTiles[tileId] = new TileInfo
+                                {
+                                    TileId = tileInfo.TileId,
+                                    IndexId = tileInfo.IndexId,
+                                    UsageCount = tileInfo.UsageCount,
+                                    Thumbnail = null
+                                };
+                            }
                         }
                     }
                 }
-            }
 
-            // 過濾 tiles
-            var filteredTiles = cachedAggregatedTiles.AsEnumerable();
-            if (!string.IsNullOrWhiteSpace(searchText))
-            {
-                searchText = searchText.Trim();
-                // 支援多種搜尋方式：
-                // 1. 精確 ID 搜尋（輸入數字）
-                // 2. 範圍搜尋（如 "100-200"）
-                // 3. 多個 ID 搜尋（如 "100,200,300"）
-                if (searchText.Contains("-"))
+                // 過濾 tiles
+                var filteredTiles = cachedAggregatedTiles.AsEnumerable();
+                if (!string.IsNullOrWhiteSpace(searchText))
                 {
-                    // 範圍搜尋
-                    var parts = searchText.Split('-');
-                    if (parts.Length == 2 &&
-                        int.TryParse(parts[0].Trim(), out int minId) &&
-                        int.TryParse(parts[1].Trim(), out int maxId))
+                    searchText = searchText.Trim();
+                    // 支援多種搜尋方式：
+                    // 1. 精確 ID 搜尋（輸入數字）
+                    // 2. 範圍搜尋（如 "100-200"）
+                    // 3. 多個 ID 搜尋（如 "100,200,300"）
+                    if (searchText.Contains("-"))
                     {
-                        filteredTiles = filteredTiles.Where(t => t.Key >= minId && t.Key <= maxId);
+                        // 範圍搜尋
+                        var parts = searchText.Split('-');
+                        if (parts.Length == 2 &&
+                            int.TryParse(parts[0].Trim(), out int minId) &&
+                            int.TryParse(parts[1].Trim(), out int maxId))
+                        {
+                            filteredTiles = filteredTiles.Where(t => t.Key >= minId && t.Key <= maxId);
+                        }
+                    }
+                    else if (searchText.Contains(","))
+                    {
+                        // 多個 ID 搜尋
+                        var ids = searchText.Split(',')
+                            .Select(s => s.Trim())
+                            .Where(s => int.TryParse(s, out _))
+                            .Select(s => int.Parse(s))
+                            .ToHashSet();
+                        filteredTiles = filteredTiles.Where(t => ids.Contains(t.Key));
+                    }
+                    else if (int.TryParse(searchText, out int exactId))
+                    {
+                        // 精確 ID 或前綴搜尋
+                        filteredTiles = filteredTiles.Where(t => t.Key.ToString().StartsWith(searchText));
+                    }
+                    else
+                    {
+                        // 文字搜尋（ID 包含此文字）
+                        filteredTiles = filteredTiles.Where(t => t.Key.ToString().Contains(searchText));
                     }
                 }
-                else if (searchText.Contains(","))
-                {
-                    // 多個 ID 搜尋
-                    var ids = searchText.Split(',')
-                        .Select(s => s.Trim())
-                        .Where(s => int.TryParse(s, out _))
-                        .Select(s => int.Parse(s))
-                        .ToHashSet();
-                    filteredTiles = filteredTiles.Where(t => ids.Contains(t.Key));
-                }
-                else if (int.TryParse(searchText, out int exactId))
-                {
-                    // 精確 ID 或前綴搜尋
-                    filteredTiles = filteredTiles.Where(t => t.Key.ToString().StartsWith(searchText));
-                }
-                else
-                {
-                    // 文字搜尋（ID 包含此文字）
-                    filteredTiles = filteredTiles.Where(t => t.Key.ToString().Contains(searchText));
-                }
-            }
 
-            int index = 0;
-            int totalCount = cachedAggregatedTiles.Count;
-            foreach (var tileKvp in filteredTiles.OrderBy(t => t.Key))
-            {
-                var tile = tileKvp.Value;
-
-                // 載入縮圖（如果還沒載入）
-                if (tile.Thumbnail == null)
+                // 批量準備項目
+                var items = new List<ListViewItem>();
+                int index = 0;
+                int totalCount = cachedAggregatedTiles.Count;
+                foreach (var tileKvp in filteredTiles.OrderBy(t => t.Key))
                 {
-                    tile.Thumbnail = LoadTileThumbnail(tile.TileId, tile.IndexId);
-                }
+                    var tile = tileKvp.Value;
 
-                if (tile.Thumbnail != null)
-                {
-                    imageList.Images.Add(tile.Thumbnail);
-
-                    // 檢查是否為 R 版
-                    bool isRemaster = _tilRemasterCache.TryGetValue(tile.TileId, out bool r) && r;
-                    string rMark = isRemaster ? "(R)" : "";
-
-                    var item = new ListViewItem
+                    // 載入縮圖（如果還沒載入）
+                    if (tile.Thumbnail == null)
                     {
-                        Text = $"ID:{tile.TileId}{rMark}\n×{tile.UsageCount}",
-                        ImageIndex = index,
-                        Tag = tile
-                    };
-                    lvTiles.Items.Add(item);
-                    index++;
+                        tile.Thumbnail = LoadTileThumbnail(tile.TileId, tile.IndexId);
+                    }
+
+                    if (tile.Thumbnail != null)
+                    {
+                        imageList.Images.Add(tile.Thumbnail);
+
+                        // 檢查是否為 R 版
+                        bool isRemaster = _tilRemasterCache.TryGetValue(tile.TileId, out bool r) && r;
+                        string rMark = isRemaster ? "(R)" : "";
+
+                        var item = new ListViewItem
+                        {
+                            Text = $"ID:{tile.TileId}{rMark}\n×{tile.UsageCount}",
+                            ImageIndex = index,
+                            Tag = tile
+                        };
+                        items.Add(item);
+                        index++;
+                    }
                 }
+
+                // 批量添加
+                lvTiles.Items.AddRange(items.ToArray());
+
+                string statusText = string.IsNullOrWhiteSpace(searchText)
+                    ? $"Tile 列表 ({lvTiles.Items.Count})"
+                    : $"搜尋結果: {lvTiles.Items.Count}/{totalCount}";
+                lblTileList.Text = statusText;
             }
-
-            // 計算剩餘空位：list.til 中的最大值 - 實際使用的最大 TileId
-            int listTilMax = GetListTilMaxId();
-            int actualMaxId = GetActualMaxTileId();
-            int availableSlots = listTilMax - actualMaxId;
-
-            string statusText = string.IsNullOrWhiteSpace(searchText)
-                ? $"顯示 {lvTiles.Items.Count} 個 Tile (剩餘 {availableSlots} 個空位, 上限 {listTilMax})"
-                : $"搜尋結果: {lvTiles.Items.Count}/{totalCount} 個 Tile (剩餘 {availableSlots} 個空位, 上限 {listTilMax})";
-            lblTileList.Text = statusText;
+            finally
+            {
+                lvTiles.EndUpdate();  // 恢復重繪
+            }
         }
 
         // Tile 搜尋框文字變更事件
@@ -10594,9 +10605,9 @@ namespace L1FlyMapViewer
                 _tilFileCache.Clear();
                 _tilRemasterCache.Clear();
 
-                // 重新整理 Tile 列表
-                UpdateTileList(txtTileSearch.Text);
-                UpdateGroupThumbnailsList();
+                // 重新整理 Tile 列表（兩者並行執行）
+                UpdateGroupThumbnailsList();  // 異步，立即返回
+                UpdateTileList(txtTileSearch.Text);  // 同步執行，但群組縮圖已在背景處理
 
                 // 強制重新渲染地圖
                 _viewState.SetRenderResult(0, 0, 0, 0, 0);
@@ -10667,10 +10678,10 @@ namespace L1FlyMapViewer
             // 重新渲染
             RenderS32Map();
 
-            // 更新 Tile 清單和群組縮圖
+            // 更新 Tile 清單和群組縮圖（並行執行）
             cachedAggregatedTiles.Clear();
-            UpdateTileList(txtTileSearch.Text);
-            UpdateGroupThumbnailsList();
+            UpdateGroupThumbnailsList();  // 異步，立即返回
+            UpdateTileList(txtTileSearch.Text);  // 同步執行，但群組縮圖已在背景處理
 
             this.toolStripStatusLabel1.Text = $"已刪除 TileId {tileId} 的所有 Layer4 物件，共 {deletedCount} 個";
         }
@@ -11984,36 +11995,48 @@ namespace L1FlyMapViewer
                         imageList.ImageSize = new Size(80, 80);
                         imageList.ColorDepth = ColorDepth.Depth32Bit;
 
-                        lvGroupThumbnails.Items.Clear();
-                        if (lvGroupThumbnails.LargeImageList != null)
+                        lvGroupThumbnails.BeginUpdate();  // 暫停重繪
+                        try
                         {
-                            lvGroupThumbnails.LargeImageList.Dispose();
-                        }
-
-                        int thumbnailIndex = 0;
-                        // 按原始排序順序添加（有 Layer5 的優先，然後按距離）
-                        foreach (var kvp in sortedGroups)
-                        {
-                            if (!thumbnailResults.TryGetValue(kvp.Key, out var result)) continue;
-
-                            imageList.Images.Add(result.thumbnail);
-
-                            string distanceText = result.distance == 0 ? "●" : $"D{result.distance}";
-                            ListViewItem item = new ListViewItem($"{distanceText} G{result.groupId} ({result.objectCount})");
-                            item.ImageIndex = thumbnailIndex;
-                            item.Tag = new GroupThumbnailInfo
+                            lvGroupThumbnails.Items.Clear();
+                            if (lvGroupThumbnails.LargeImageList != null)
                             {
-                                GroupId = result.groupId,
-                                Objects = result.objects,
-                                HasLayer5Setting = result.hasLayer5,
-                                Layer5Type = result.layer5Type
-                            };
-                            lvGroupThumbnails.Items.Add(item);
+                                lvGroupThumbnails.LargeImageList.Dispose();
+                            }
 
-                            thumbnailIndex++;
+                            // 批量準備項目
+                            var items = new List<ListViewItem>();
+                            int thumbnailIndex = 0;
+                            // 按原始排序順序添加（有 Layer5 的優先，然後按距離）
+                            foreach (var kvp in sortedGroups)
+                            {
+                                if (!thumbnailResults.TryGetValue(kvp.Key, out var result)) continue;
+
+                                imageList.Images.Add(result.thumbnail);
+
+                                string distanceText = result.distance == 0 ? "●" : $"D{result.distance}";
+                                ListViewItem item = new ListViewItem($"{distanceText} G{result.groupId} ({result.objectCount})");
+                                item.ImageIndex = thumbnailIndex;
+                                item.Tag = new GroupThumbnailInfo
+                                {
+                                    GroupId = result.groupId,
+                                    Objects = result.objects,
+                                    HasLayer5Setting = result.hasLayer5,
+                                    Layer5Type = result.layer5Type
+                                };
+                                items.Add(item);
+
+                                thumbnailIndex++;
+                            }
+
+                            // 批量添加
+                            lvGroupThumbnails.Items.AddRange(items.ToArray());
+                            lvGroupThumbnails.LargeImageList = imageList;
                         }
-
-                        lvGroupThumbnails.LargeImageList = imageList;
+                        finally
+                        {
+                            lvGroupThumbnails.EndUpdate();  // 恢復重繪
+                        }
                         lblGroupThumbnails.Text = $"附近群組 ({totalGroups}) [{elapsedMs}ms]";
                     });
                 }
@@ -12048,7 +12071,7 @@ namespace L1FlyMapViewer
         // 群組縮圖產生取消 token
         private System.Threading.CancellationTokenSource _groupThumbnailCts = null;
 
-        // 更新群組縮圖列表（可指定只顯示選取區域內的群組）- 非同步版本
+        // 更新群組縮圖列表（可指定只顯示選取區域內的群組）- 完全非同步版本
         private void UpdateGroupThumbnailsList(List<SelectedCell> selectedCells)
         {
             // 取消之前的縮圖產生任務
@@ -12073,88 +12096,118 @@ namespace L1FlyMapViewer
                 return;
             }
 
-            // 收集群組（根據是否有選取區域決定範圍）
-            var allGroupsDict = new Dictionary<int, List<(S32Data s32, ObjectTile obj)>>();
+            bool isSelectedMode = selectedCells != null && selectedCells.Count > 0;
 
-            if (selectedCells != null && selectedCells.Count > 0)
+            // 顯示載入中狀態
+            lblGroupThumbnails.Text = isSelectedMode
+                ? "選取區域群組 (收集中...)"
+                : "群組縮圖列表 (收集中...)";
+
+            // 複製需要的資料到背景執行緒
+            var s32FilesSnapshot = _document.S32Files.Values.ToList();
+            var selectedCellsSnapshot = selectedCells?.ToList();
+
+            // 整個過程都在背景執行緒執行
+            Task.Run(() =>
             {
-                // 建立選取格子的全域座標集合 (使用 Layer1 座標系統 0-127)
-                // 注意：每個 SelectedCell 對應兩個 Layer1 格子（偶數和奇數 X）
-                var selectedLayer1Cells = new HashSet<(int x, int y)>();
-                foreach (var cell in selectedCells)
-                {
-                    int layer1GlobalX = cell.S32Data.SegInfo.nLinBeginX * 2 + cell.LocalX;
-                    int layer1GlobalY = cell.S32Data.SegInfo.nLinBeginY + cell.LocalY;
-                    // 加入偶數 X 座標
-                    selectedLayer1Cells.Add((layer1GlobalX, layer1GlobalY));
-                    // 加入奇數 X 座標（同一個遊戲格子的另一半）
-                    selectedLayer1Cells.Add((layer1GlobalX + 1, layer1GlobalY));
-                }
+                if (cancellationToken.IsCancellationRequested) return;
 
-                // 遍歷所有 S32，找出全域座標落在選取格子內的 Layer4 物件
-                // 只收集選取區域內的物件（交集）
-                foreach (var s32Data in _document.S32Files.Values)
-                {
-                    int segStartX = s32Data.SegInfo.nLinBeginX;
-                    int segStartY = s32Data.SegInfo.nLinBeginY;
+                var stopwatch = Stopwatch.StartNew();
 
-                    foreach (var obj in s32Data.Layer4)
+                // 收集群組（根據是否有選取區域決定範圍）
+                var allGroupsDict = new Dictionary<int, List<(S32Data s32, ObjectTile obj)>>();
+
+                if (selectedCellsSnapshot != null && selectedCellsSnapshot.Count > 0)
+                {
+                    // 建立選取格子的全域座標集合 (使用 Layer1 座標系統 0-127)
+                    var selectedLayer1Cells = new HashSet<(int x, int y)>();
+                    foreach (var cell in selectedCellsSnapshot)
                     {
-                        // obj.X 本身就是 Layer1 局部座標 (0-127)
-                        int layer1GlobalX = segStartX * 2 + obj.X;
-                        int layer1GlobalY = segStartY + obj.Y;
+                        int layer1GlobalX = cell.S32Data.SegInfo.nLinBeginX * 2 + cell.LocalX;
+                        int layer1GlobalY = cell.S32Data.SegInfo.nLinBeginY + cell.LocalY;
+                        selectedLayer1Cells.Add((layer1GlobalX, layer1GlobalY));
+                        selectedLayer1Cells.Add((layer1GlobalX + 1, layer1GlobalY));
+                    }
 
-                        // 檢查物件是否在選取範圍內
-                        bool inSelection = selectedLayer1Cells.Contains((layer1GlobalX, layer1GlobalY));
+                    // 遍歷所有 S32，找出全域座標落在選取格子內的 Layer4 物件
+                    foreach (var s32Data in s32FilesSnapshot)
+                    {
+                        int segStartX = s32Data.SegInfo.nLinBeginX;
+                        int segStartY = s32Data.SegInfo.nLinBeginY;
 
-                        if (inSelection)
+                        foreach (var obj in s32Data.Layer4)
+                        {
+                            int layer1GlobalX = segStartX * 2 + obj.X;
+                            int layer1GlobalY = segStartY + obj.Y;
+
+                            if (selectedLayer1Cells.Contains((layer1GlobalX, layer1GlobalY)))
+                            {
+                                if (!allGroupsDict.ContainsKey(obj.GroupId))
+                                {
+                                    allGroupsDict[obj.GroupId] = new List<(S32Data, ObjectTile)>();
+                                }
+                                allGroupsDict[obj.GroupId].Add((s32Data, obj));
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // 收集所有 S32 中的群組
+                    foreach (var s32Data in s32FilesSnapshot)
+                    {
+                        foreach (var obj in s32Data.Layer4)
                         {
                             if (!allGroupsDict.ContainsKey(obj.GroupId))
                             {
                                 allGroupsDict[obj.GroupId] = new List<(S32Data, ObjectTile)>();
                             }
-                            // 只加入選取區域內的物件
                             allGroupsDict[obj.GroupId].Add((s32Data, obj));
                         }
                     }
                 }
-            }
-            else
-            {
-                // 收集所有 S32 中的群組
-                foreach (var s32Data in _document.S32Files.Values)
+
+                if (cancellationToken.IsCancellationRequested) return;
+
+                if (allGroupsDict.Count == 0)
                 {
-                    foreach (var obj in s32Data.Layer4)
+                    try
                     {
-                        if (!allGroupsDict.ContainsKey(obj.GroupId))
+                        this.BeginInvoke((MethodInvoker)delegate
                         {
-                            allGroupsDict[obj.GroupId] = new List<(S32Data, ObjectTile)>();
+                            string label = isSelectedMode ? "選取區域群組 (0)" : "群組縮圖列表 (0)";
+                            lblGroupThumbnails.Text = label;
+                        });
+                    }
+                    catch { }
+                    return;
+                }
+
+                int totalGroups = allGroupsDict.Count;
+
+                // 收集所有 Layer5 的 GroupId -> Type 對應
+                var groupLayer5Info = new Dictionary<int, byte>();
+                if (selectedCellsSnapshot != null && selectedCellsSnapshot.Count > 0)
+                {
+                    foreach (var cell in selectedCellsSnapshot)
+                    {
+                        foreach (var item in cell.S32Data.Layer5)
+                        {
+                            if (item.X == cell.LocalX && item.Y == cell.LocalY)
+                            {
+                                if (!groupLayer5Info.ContainsKey(item.ObjectIndex))
+                                {
+                                    groupLayer5Info[item.ObjectIndex] = item.Type;
+                                }
+                            }
                         }
-                        allGroupsDict[obj.GroupId].Add((s32Data, obj));
                     }
                 }
-            }
-
-            if (allGroupsDict.Count == 0)
-            {
-                string label = selectedCells != null && selectedCells.Count > 0 ? "選取區域群組 (0)" : "群組縮圖列表 (0)";
-                lblGroupThumbnails.Text = label;
-                return;
-            }
-
-            int totalGroups = allGroupsDict.Count;
-            bool isSelectedMode = selectedCells != null && selectedCells.Count > 0;
-
-            // 收集所有 Layer5 的 GroupId -> Type 對應（用於顯示邊框顏色）
-            var groupLayer5Info = new Dictionary<int, byte>();
-            if (selectedCells != null && selectedCells.Count > 0)
-            {
-                // 只收集選取格子相關的 Layer5 設定
-                foreach (var cell in selectedCells)
+                else
                 {
-                    foreach (var item in cell.S32Data.Layer5)
+                    foreach (var s32Data in s32FilesSnapshot)
                     {
-                        if (item.X == cell.LocalX && item.Y == cell.LocalY)
+                        foreach (var item in s32Data.Layer5)
                         {
                             if (!groupLayer5Info.ContainsKey(item.ObjectIndex))
                             {
@@ -12163,34 +12216,23 @@ namespace L1FlyMapViewer
                         }
                     }
                 }
-            }
-            else
-            {
-                // 收集所有 S32 的 Layer5 設定
-                foreach (var s32Data in _document.S32Files.Values)
+
+                if (cancellationToken.IsCancellationRequested) return;
+
+                // 更新 UI 顯示進度
+                try
                 {
-                    foreach (var item in s32Data.Layer5)
+                    this.BeginInvoke((MethodInvoker)delegate
                     {
-                        if (!groupLayer5Info.ContainsKey(item.ObjectIndex))
-                        {
-                            groupLayer5Info[item.ObjectIndex] = item.Type;
-                        }
-                    }
+                        lblGroupThumbnails.Text = isSelectedMode
+                            ? $"選取區域群組 (載入中 0/{totalGroups})"
+                            : $"群組縮圖列表 (載入中 0/{totalGroups})";
+                    });
                 }
-            }
+                catch { }
 
-            // 顯示載入中狀態
-            lblGroupThumbnails.Text = isSelectedMode
-                ? $"選取區域群組 (載入中 0/{totalGroups})"
-                : $"群組縮圖列表 (載入中 0/{totalGroups})";
-
-            // 準備群組資料供背景執行緒使用
-            var groupList = allGroupsDict.OrderBy(k => k.Key).ToList();
-
-            // 在背景執行緒並行產生縮圖
-            Task.Run(() =>
-            {
-                var stopwatch = Stopwatch.StartNew();
+                // 準備群組資料
+                var groupList = allGroupsDict.OrderBy(k => k.Key).ToList();
 
                 // 使用 Parallel.ForEach 並行產生縮圖
                 var thumbnailResults = new System.Collections.Concurrent.ConcurrentDictionary<int, (int groupId, int objectCount, Bitmap thumbnail, List<(S32Data s32, ObjectTile obj)> objects, bool hasLayer5, byte layer5Type)>();
@@ -12274,33 +12316,45 @@ namespace L1FlyMapViewer
                         imageList.ImageSize = new Size(80, 80);
                         imageList.ColorDepth = ColorDepth.Depth32Bit;
 
-                        lvGroupThumbnails.Items.Clear();
-                        if (lvGroupThumbnails.LargeImageList != null)
+                        lvGroupThumbnails.BeginUpdate();  // 暫停重繪
+                        try
                         {
-                            lvGroupThumbnails.LargeImageList.Dispose();
-                        }
-
-                        int thumbnailIndex = 0;
-                        foreach (var groupId in thumbnailResults.Keys.OrderBy(k => k))
-                        {
-                            var result = thumbnailResults[groupId];
-                            imageList.Images.Add(result.thumbnail);
-
-                            ListViewItem item = new ListViewItem($"G{result.groupId} ({result.objectCount})");
-                            item.ImageIndex = thumbnailIndex;
-                            item.Tag = new GroupThumbnailInfo
+                            lvGroupThumbnails.Items.Clear();
+                            if (lvGroupThumbnails.LargeImageList != null)
                             {
-                                GroupId = result.groupId,
-                                Objects = result.objects,
-                                HasLayer5Setting = result.hasLayer5,
-                                Layer5Type = result.layer5Type
-                            };
-                            lvGroupThumbnails.Items.Add(item);
+                                lvGroupThumbnails.LargeImageList.Dispose();
+                            }
 
-                            thumbnailIndex++;
+                            // 批量準備項目
+                            var items = new List<ListViewItem>();
+                            int thumbnailIndex = 0;
+                            foreach (var groupId in thumbnailResults.Keys.OrderBy(k => k))
+                            {
+                                var result = thumbnailResults[groupId];
+                                imageList.Images.Add(result.thumbnail);
+
+                                ListViewItem item = new ListViewItem($"G{result.groupId} ({result.objectCount})");
+                                item.ImageIndex = thumbnailIndex;
+                                item.Tag = new GroupThumbnailInfo
+                                {
+                                    GroupId = result.groupId,
+                                    Objects = result.objects,
+                                    HasLayer5Setting = result.hasLayer5,
+                                    Layer5Type = result.layer5Type
+                                };
+                                items.Add(item);
+
+                                thumbnailIndex++;
+                            }
+
+                            // 批量添加
+                            lvGroupThumbnails.Items.AddRange(items.ToArray());
+                            lvGroupThumbnails.LargeImageList = imageList;
                         }
-
-                        lvGroupThumbnails.LargeImageList = imageList;
+                        finally
+                        {
+                            lvGroupThumbnails.EndUpdate();  // 恢復重繪
+                        }
 
                         string labelText = isSelectedMode
                             ? $"選取區域群組 ({totalGroups}) [{elapsedMs}ms]"
