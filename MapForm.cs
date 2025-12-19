@@ -82,11 +82,14 @@ namespace L1FlyMapViewer
         // 拖曳結束後延遲渲染 Timer
         private System.Windows.Forms.Timer dragRenderTimer;
 
-        // 效能 Log 檔案路徑
+        // 效能 Log 檔案路徑（開關由 Program.PerfLogEnabled 控制，啟動時加 --perf-log）
         private static readonly string _perfLogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "perf.log");
-        private void LogPerf(string message)
+        private static void LogPerf(string message)
         {
-            try { File.AppendAllText(_perfLogPath, $"{DateTime.Now:HH:mm:ss.fff} {message}{Environment.NewLine}"); } catch { }
+            if (!L1MapViewerCore.Program.PerfLogEnabled) return;
+            string line = $"{DateTime.Now:HH:mm:ss.fff} {message}";
+            Console.WriteLine(line);
+            try { File.AppendAllText(_perfLogPath, line + Environment.NewLine); } catch { }
         }
 
         // 通行性編輯模式
@@ -304,7 +307,7 @@ namespace L1FlyMapViewer
                     RenderS32Map();
                 }
             };
-
+            
             // 初始化縮放防抖Timer（150ms延遲）
             zoomDebounceTimer = new System.Windows.Forms.Timer();
             zoomDebounceTimer.Interval = 150;
@@ -313,18 +316,18 @@ namespace L1FlyMapViewer
                 zoomDebounceTimer.Stop();
                 ApplyS32Zoom(pendingS32ZoomLevel);
             };
-
+            
             // 初始化拖曳渲染延遲Timer（150ms延遲）
             dragRenderTimer = new System.Windows.Forms.Timer();
             dragRenderTimer.Interval = 150;
             dragRenderTimer.Tick += (s, e) =>
             {
                 var timerSw = Stopwatch.StartNew();
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [DRAG-TIMER] tick start");
+                LogPerf($"[DRAG-TIMER] tick start");
                 dragRenderTimer.Stop();
                 CheckAndRerenderIfNeeded();
                 timerSw.Stop();
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [DRAG-TIMER] tick end, total={timerSw.ElapsedMilliseconds}ms");
+                LogPerf($"[DRAG-TIMER] tick end, total={timerSw.ElapsedMilliseconds}ms");
             };
 
             // 註冊滑鼠滾輪事件用於縮放
@@ -2552,6 +2555,7 @@ namespace L1FlyMapViewer
         /// </summary>
         private void UpdateMiniMap()
         {
+            var sw = Stopwatch.StartNew();
             try
             {
                 int mapWidth = _viewState.MapWidth;
@@ -2563,6 +2567,7 @@ namespace L1FlyMapViewer
                 // 如果沒有快取且沒有在渲染中，啟動背景渲染
                 if (_miniMapFullBitmap == null && !_miniMapRendering)
                 {
+                    LogPerf($"[MINIMAP-UPDATE] starting full render (no cache)");
                     // 先顯示一個「渲染中」的佔位圖
                     ShowMiniMapPlaceholder();
                     RenderMiniMapFullAsync();
@@ -2571,6 +2576,11 @@ namespace L1FlyMapViewer
 
                 // 更新紅框顯示
                 UpdateMiniMapRedBox();
+                sw.Stop();
+                if (sw.ElapsedMilliseconds > 5)
+                {
+                    LogPerf($"[MINIMAP-UPDATE] redbox only, took {sw.ElapsedMilliseconds}ms");
+                }
             }
             catch
             {
@@ -2590,7 +2600,7 @@ namespace L1FlyMapViewer
                 using (var font = new Font("Microsoft JhengHei", 12))
                 using (var brush = new SolidBrush(Color.Gray))
                 {
-                    string text = "小地圖渲染中...";
+                    string text = "小地圖繪製中...";
                     var size = g.MeasureString(text, font);
                     g.DrawString(text, font, brush,
                         (MINIMAP_SIZE - size.Width) / 2,
@@ -2653,7 +2663,7 @@ namespace L1FlyMapViewer
                         out stats);
 
                     string mode = stats.IsSimplified ? "simplified" : "full";
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [MINIMAP] total={stats.TotalMs}ms | blocks={s32Count}, size={stats.ScaledWidth}x{stats.ScaledHeight}, mode={mode}");
+                    LogPerf($"[MINIMAP] total={stats.TotalMs}ms | blocks={s32Count}, size={stats.ScaledWidth}x{stats.ScaledHeight}, mode={mode}");
 
                     // 回到 UI 執行緒更新
                     this.BeginInvoke((MethodInvoker)delegate
@@ -5077,7 +5087,7 @@ namespace L1FlyMapViewer
                 // 標記正在渲染
                 _isRendering = true;
                 var renderSw = Stopwatch.StartNew();
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [RENDER-START] worldRect={worldRect.Width}x{worldRect.Height}");
+                LogPerf($"[RENDER-START] worldRect={worldRect.Width}x{worldRect.Height}");
 
                 int blockWidth = 64 * 24 * 2;  // 3072
                 int blockHeight = 64 * 12 * 2; // 1536
@@ -5129,9 +5139,11 @@ namespace L1FlyMapViewer
                 // 檢查取消
                 if (cancellationToken.IsCancellationRequested)
                 {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [RENDER-CANCELLED] before parallel render");
+                    LogPerf($"[RENDER-CANCELLED] before parallel render");
                     _isRendering = false;
                     viewportBitmap.Dispose();
+                    LogPerf($"[RENDER-VIEWMAP DISPOSED]");
+
                     return;
                 }
 
@@ -5151,7 +5163,7 @@ namespace L1FlyMapViewer
                 // 檢查取消
                 if (cancellationToken.IsCancellationRequested)
                 {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [RENDER-CANCELLED] after parallel render");
+                    LogPerf($"[RENDER-CANCELLED] after parallel render");
                     _isRendering = false;
                     viewportBitmap.Dispose();
                     return;
@@ -5167,7 +5179,7 @@ namespace L1FlyMapViewer
                 drawSw.Stop();
                 totalDrawImageMs = drawSw.ElapsedMilliseconds;
                 renderSw.Stop();
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [RENDER] total={renderSw.ElapsedMilliseconds}ms | createBmp={createBmpMs}ms, getBlock={totalGetBlockMs}ms, drawImage={totalDrawImageMs}ms | blocks={renderedCount}, cacheHit={_cacheHits}, cacheMiss={_cacheMisses}");
+                LogPerf($"[RENDER] total={renderSw.ElapsedMilliseconds}ms | createBmp={createBmpMs}ms, getBlock={totalGetBlockMs}ms, drawImage={totalDrawImageMs}ms | blocks={renderedCount}, cacheHit={_cacheHits}, cacheMiss={_cacheMisses}");
                 _cacheHits = 0;
                 _cacheMisses = 0;
 
@@ -5274,7 +5286,7 @@ namespace L1FlyMapViewer
                         lockSw.Stop();
 
                         invokeSw.Stop();
-                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [RENDER-COMPLETE] size={viewportBitmap.Width}x{viewportBitmap.Height}, lockTime={lockSw.ElapsedMilliseconds}ms, invokeTime={invokeSw.ElapsedMilliseconds}ms");
+                        LogPerf($"[RENDER-COMPLETE] size={viewportBitmap.Width}x{viewportBitmap.Height}, lockTime={lockSw.ElapsedMilliseconds}ms, invokeTime={invokeSw.ElapsedMilliseconds}ms");
 
                         // 強制重繪
                         s32PictureBox.Invalidate();
@@ -5314,7 +5326,7 @@ namespace L1FlyMapViewer
 
             if (needsRerender)
             {
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [RERENDER-TRIGGERED] ScrollX={_viewState.ScrollX}, ScrollY={_viewState.ScrollY}");
+                LogPerf($"[RERENDER-TRIGGERED] ScrollX={_viewState.ScrollX}, ScrollY={_viewState.ScrollY}");
                 RenderS32Map();
             }
             else
@@ -6871,7 +6883,7 @@ namespace L1FlyMapViewer
                 }
 
                 sw.Stop();
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [TILELIST] total={sw.ElapsedMilliseconds}ms | tiles={aggregatedTiles.Count}");
+                LogPerf($"[TILELIST] total={sw.ElapsedMilliseconds}ms | tiles={aggregatedTiles.Count}");
 
                 // 回到 UI 執行緒更新列表
                 this.BeginInvoke((MethodInvoker)delegate
@@ -6930,6 +6942,10 @@ namespace L1FlyMapViewer
         // 更新 Tile 清單顯示（支援搜尋過濾）
         private void UpdateTileList(string searchText)
         {
+            Console.WriteLine("Update tile list start");
+            Stopwatch sw = new Stopwatch();
+            sw.Start();
+                
             lvTiles.BeginUpdate();  // 暫停重繪
             try
             {
@@ -7067,6 +7083,8 @@ namespace L1FlyMapViewer
             {
                 lvTiles.EndUpdate();  // 恢復重繪
             }
+            sw.Stop();
+            Console.WriteLine("Update tile list end:"+sw.ElapsedMilliseconds+"ms");
         }
 
         // Tile 搜尋框文字變更事件
@@ -7430,13 +7448,22 @@ namespace L1FlyMapViewer
         // S32 地圖點擊事件 - 更新高亮和狀態列
         private void s32PictureBox_MouseClick(object sender, MouseEventArgs e)
         {
+            var sw = Stopwatch.StartNew();
+            LogPerf($"[MOUSE-CLICK] start, button={e.Button}, isDragging={isMainMapDragging}");
+
             // 如果正在選擇區域，不處理點擊
             if (isSelectingRegion)
+            {
+                LogPerf($"[MOUSE-CLICK] skip - selecting region");
                 return;
+            }
 
             // 獲取當前地圖資訊以計算正確的 baseY
             if (string.IsNullOrEmpty(_document.MapId) || !Share.MapDataList.ContainsKey(_document.MapId))
+            {
+                LogPerf($"[MOUSE-CLICK] skip - no map");
                 return;
+            }
 
             Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
 
@@ -7528,11 +7555,15 @@ namespace L1FlyMapViewer
                                     UpdateLayer4GroupsList(s32Data, x, y);
                                 }
                             }
+                            sw.Stop();
+                            LogPerf($"[MOUSE-CLICK] found cell, total={sw.ElapsedMilliseconds}ms");
                             return;
                         }
                     }
                 }
             }
+            sw.Stop();
+            LogPerf($"[MOUSE-CLICK] no cell found, total={sw.ElapsedMilliseconds}ms, s32Count={_document.S32Files.Count}");
         }
 
         // S32 地圖雙擊事件 - 顯示格子詳細資訊或新增 S32
@@ -8110,7 +8141,7 @@ namespace L1FlyMapViewer
                 // 取消正在進行的背景渲染（釋放 GDI+ 鎖，避免 UI 凍結）
                 if (_isRendering)
                 {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [DRAG-START] Cancelling render...");
+                    LogPerf($"[DRAG-START] Cancelling render...");
                     lock (_viewportRenderLock)
                     {
                         _viewportRenderCts?.Cancel();
@@ -8118,7 +8149,7 @@ namespace L1FlyMapViewer
                 }
                 else
                 {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [DRAG-START] No render in progress");
+                    LogPerf($"[DRAG-START] No render in progress");
                 }
 
                 // 重置拖曳效能計數器
@@ -8180,6 +8211,12 @@ namespace L1FlyMapViewer
             // 中鍵拖拽移動視圖
             if (isMainMapDragging)
             {
+                // 每 50 次記錄一次，避免 log 過多
+                if (_dragMoveCount % 50 == 0)
+                {
+                    LogPerf($"[DRAG-MOVE] count={_dragMoveCount}");
+                }
+
                 int deltaX = e.X - mainMapDragStartPoint.X;
                 int deltaY = e.Y - mainMapDragStartPoint.Y;
 
@@ -8261,7 +8298,7 @@ namespace L1FlyMapViewer
                 double fps = dragMs > 0 ? (_dragPaintCount * 1000.0 / dragMs) : 0;
 
                 // 輸出拖曳效能統計
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [DRAG-END] duration={dragMs}ms, moves={_dragMoveCount}, paints={_dragPaintCount}, FPS={fps:F1}");
+                LogPerf($"[DRAG-END] duration={dragMs}ms, moves={_dragMoveCount}, paints={_dragPaintCount}, FPS={fps:F1}");
 
                 isMainMapDragging = false;
                 this.s32PictureBox.Cursor = Cursors.Default;
@@ -8274,7 +8311,7 @@ namespace L1FlyMapViewer
                 dragRenderTimer.Start();
 
                 upSw.Stop();
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [MOUSE-UP-MIDDLE] total={upSw.ElapsedMilliseconds}ms");
+                LogPerf($"[MOUSE-UP-MIDDLE] total={upSw.ElapsedMilliseconds}ms");
                 return;
             }
 
@@ -8397,6 +8434,11 @@ namespace L1FlyMapViewer
         // S32 PictureBox 繪製事件 - 繪製 Viewport 和選擇框或多邊形
         private void s32PictureBox_Paint(object sender, PaintEventArgs e)
         {
+            if (isMainMapDragging)
+            {
+                LogPerf($"[PAINT-ENTER] dragging, moves={_dragMoveCount}");
+            }
+
             var paintSw = Stopwatch.StartNew();
             long lockWaitMs = 0;
             long drawImageMs = 0;
@@ -8409,28 +8451,32 @@ namespace L1FlyMapViewer
             {
                 lockSw.Stop();
                 lockWaitMs = lockSw.ElapsedMilliseconds;
-
+                if (lockWaitMs > 10)
+                {
+                    LogPerf($"[PAINT-LOCK] waited {lockWaitMs}ms for lock");
+                }
+            
                 if (_viewportBitmap != null && _viewState.RenderWidth > 0)
                 {
                     bmpW = _viewportBitmap.Width;
                     bmpH = _viewportBitmap.Height;
-
+            
                     // 計算 Viewport Bitmap 在 PictureBox 上的繪製位置
                     // _viewState.RenderOriginX/Y 是已渲染區域的世界座標原點
                     // _viewState.ScrollX/Y 是當前視圖的世界座標位置
                     // 繪製位置 = (RenderOrigin - Scroll) * ZoomLevel
                     int drawX = (int)((_viewState.RenderOriginX - _viewState.ScrollX) * s32ZoomLevel);
                     int drawY = (int)((_viewState.RenderOriginY - _viewState.ScrollY) * s32ZoomLevel);
-
+            
                     // Viewport Bitmap 是未縮放的，需要縮放繪製
                     drawW = (int)(_viewState.RenderWidth * s32ZoomLevel);
                     drawH = (int)(_viewState.RenderHeight * s32ZoomLevel);
-
+            
                     var drawSw = Stopwatch.StartNew();
                     e.Graphics.DrawImage(_viewportBitmap, drawX, drawY, drawW, drawH);
                     drawSw.Stop();
                     drawImageMs = drawSw.ElapsedMilliseconds;
-
+            
                     // 拖曳時計數 Paint 次數
                     if (isMainMapDragging)
                     {
@@ -8447,12 +8493,12 @@ namespace L1FlyMapViewer
             // 拖曳時記錄慢的 Paint（> 30ms）或每 20 次記一次
             if (isMainMapDragging && (paintSw.ElapsedMilliseconds > 30 || _dragPaintCount % 20 == 1))
             {
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [PAINT-DRAG] total={paintSw.ElapsedMilliseconds}ms, lockWait={lockWaitMs}ms, drawImage={drawImageMs}ms, bmp={bmpW}x{bmpH}, draw={drawW}x{drawH}");
+                LogPerf($"[PAINT-DRAG] total={paintSw.ElapsedMilliseconds}ms, lockWait={lockWaitMs}ms, drawImage={drawImageMs}ms, bmp={bmpW}x{bmpH}, draw={drawW}x{drawH}");
             }
             // 非拖曳時只在超過 10ms 時記錄
             else if (!isMainMapDragging && paintSw.ElapsedMilliseconds > 10)
             {
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [PAINT] total={paintSw.ElapsedMilliseconds}ms, lockWait={lockWaitMs}ms, drawImage={drawImageMs}ms, bmp={bmpW}x{bmpH}, draw={drawW}x{drawH}");
+                LogPerf($"[PAINT] total={paintSw.ElapsedMilliseconds}ms, lockWait={lockWaitMs}ms, drawImage={drawImageMs}ms, bmp={bmpW}x{bmpH}, draw={drawW}x{drawH}");
             }
 
             // 通行性編輯模式：繪製多邊形
@@ -11970,6 +12016,8 @@ namespace L1FlyMapViewer
         // 更新群組縮圖列表（可指定只顯示選取區域內的群組）- 完全非同步版本
         private void UpdateGroupThumbnailsList(List<SelectedCell> selectedCells)
         {
+            var setupSw = Stopwatch.StartNew();
+
             // 取消之前的縮圖產生任務
             if (_groupThumbnailCts != null)
             {
@@ -12003,12 +12051,19 @@ namespace L1FlyMapViewer
             var s32FilesSnapshot = _document.S32Files.Values.ToList();
             var selectedCellsSnapshot = selectedCells?.ToList();
 
+            setupSw.Stop();
+            long setupMs = setupSw.ElapsedMilliseconds;
+            int s32Count = s32FilesSnapshot.Count;
+            int selectedCount = selectedCellsSnapshot?.Count ?? 0;
+            LogPerf($"[THUMBNAILS-START] setup={setupMs}ms, s32={s32Count}, selected={selectedCount}");
+
             // 整個過程都在背景執行緒執行
             Task.Run(() =>
             {
                 if (cancellationToken.IsCancellationRequested) return;
 
                 var stopwatch = Stopwatch.StartNew();
+                var phaseSw = Stopwatch.StartNew();
 
                 // 收集群組（根據是否有選取區域決定範圍）
                 var allGroupsDict = new Dictionary<int, List<(S32Data s32, ObjectTile obj)>>();
@@ -12065,6 +12120,10 @@ namespace L1FlyMapViewer
 
                 if (cancellationToken.IsCancellationRequested) return;
 
+                phaseSw.Stop();
+                long collectGroupsMs = phaseSw.ElapsedMilliseconds;
+                phaseSw.Restart();
+
                 if (allGroupsDict.Count == 0)
                 {
                     try
@@ -12114,6 +12173,10 @@ namespace L1FlyMapViewer
                 }
 
                 if (cancellationToken.IsCancellationRequested) return;
+
+                phaseSw.Stop();
+                long collectLayer5Ms = phaseSw.ElapsedMilliseconds;
+                phaseSw.Restart();
 
                 // 更新 UI 顯示進度
                 try
@@ -12179,8 +12242,13 @@ namespace L1FlyMapViewer
                     }
                 });
 
+                phaseSw.Stop();
+                long generateThumbnailsMs = phaseSw.ElapsedMilliseconds;
+
                 stopwatch.Stop();
                 long elapsedMs = stopwatch.ElapsedMilliseconds;
+
+                LogPerf($"[THUMBNAILS-DONE] total={elapsedMs}ms | collectGroups={collectGroupsMs}ms, collectLayer5={collectLayer5Ms}ms, generateThumbnails={generateThumbnailsMs}ms | groups={totalGroups}");
 
                 // 如果被取消就不更新 UI
                 if (cancellationToken.IsCancellationRequested)
@@ -12198,6 +12266,8 @@ namespace L1FlyMapViewer
                 {
                     this.BeginInvoke((MethodInvoker)delegate
                     {
+                        var uiSw = Stopwatch.StartNew();
+
                         if (cancellationToken.IsCancellationRequested)
                         {
                             foreach (var result in thumbnailResults.Values)
@@ -12252,6 +12322,8 @@ namespace L1FlyMapViewer
                             lvGroupThumbnails.EndUpdate();  // 恢復重繪
                         }
 
+                        uiSw.Stop();
+
                         string labelText = isSelectedMode
                             ? $"選取區域群組 ({totalGroups}) [{elapsedMs}ms]"
                             : $"群組縮圖列表 ({totalGroups}) [{elapsedMs}ms]";
@@ -12265,8 +12337,7 @@ namespace L1FlyMapViewer
                                 $"Thumbnails: {elapsedMs}ms");
                         }
 
-                        // Console log thumbnail timing
-                        Console.WriteLine($"[THUMBNAILS] Completed: {totalGroups} groups in {elapsedMs} ms");
+                        LogPerf($"[THUMBNAILS-UI] updateListView={uiSw.ElapsedMilliseconds}ms | groups={totalGroups}");
                     });
                 }
                 catch { }
