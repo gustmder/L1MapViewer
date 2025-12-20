@@ -244,6 +244,15 @@ namespace L1FlyMapViewer
         }
 
         /// <summary>
+        /// 建立 Layer4 空間索引，用於快速查找附近的 Layer4 物件
+        /// </summary>
+        private void BuildLayer4SpatialIndex()
+        {
+            _layer4SpatialIndex.Build(_document.S32Files.Values);
+            LogPerf($"[LAYER4-INDEX] Built index for {_layer4SpatialIndex.TotalObjects:N0} objects, {_layer4SpatialIndex.GridCellCount:N0} grid cells, in {_layer4SpatialIndex.BuildTimeMs}ms");
+        }
+
+        /// <summary>
         /// 使用空間索引快速查找與指定區域相交的 S32 檔案
         /// </summary>
         private HashSet<string> GetS32FilesInRect(Rectangle worldRect)
@@ -284,6 +293,9 @@ namespace L1FlyMapViewer
         // 每個 S32 block 大小為 3072x1536，使用此索引可快速查找 worldRect 內的 S32
         private Dictionary<(int gridX, int gridY), List<string>> _s32SpatialIndex = new Dictionary<(int, int), List<string>>();
         private const int SPATIAL_GRID_SIZE = 3072;  // 與 S32 block 寬度相同
+
+        // Layer4 空間索引 - 用於快速查找附近的 Layer4 物件
+        private Layer4SpatialIndex _layer4SpatialIndex = new Layer4SpatialIndex();
 
         // 勾選的 S32 檔案快取（避免每次渲染都遍歷 UI）
         private HashSet<string> _checkedS32Files = new HashSet<string>();
@@ -3508,6 +3520,7 @@ namespace L1FlyMapViewer
             lstS32Files.Items.Clear();
             _checkedS32Files.Clear();  // 清空快取
             _document.S32Files.Clear();
+            _layer4SpatialIndex.Clear();  // 清空 Layer4 空間索引
             _document.MapId = mapId;
             lblS32Files.Text = "S32 檔案清單";  // 重置標籤
 
@@ -3663,6 +3676,9 @@ namespace L1FlyMapViewer
 
                 // 建立空間索引（用於快速查找 worldRect 內的 S32）
                 BuildS32SpatialIndex();
+
+                // 建立 Layer4 空間索引（用於快速查找附近物件）
+                BuildLayer4SpatialIndex();
 
                 // 預載入所有 tile 檔案（背景執行，與 UI 更新並行）
                 PreloadTilesAsync(_document.S32Files.Values.ToList());
@@ -11759,42 +11775,17 @@ namespace L1FlyMapViewer
                 }
             }
 
-            // 收集附近的群組，記錄距離和 Layer5 設定
+            // 使用空間索引收集附近的群組（從 O(n) 降到 O(1)）
+            var indexedGroups = _layer4SpatialIndex.CollectNearbyGroups(clickedGameX, clickedGameY, radius);
+
+            // 加入 Layer5 設定資訊
             var nearbyGroups = new Dictionary<int, (int distance, List<(S32Data s32, ObjectTile obj)> objects, bool hasLayer5, byte layer5Type)>();
-
-            // 遍歷所有 S32 檔案搜索附近的物件
-            foreach (var s32Data in _document.S32Files.Values)
+            foreach (var kvp in indexedGroups)
             {
-                int segStartX = s32Data.SegInfo.nLinBeginX;
-                int segStartY = s32Data.SegInfo.nLinBeginY;
-
-                foreach (var obj in s32Data.Layer4)
-                {
-                    // 計算物件的遊戲座標
-                    int objGameX = segStartX + obj.X / 2;
-                    int objGameY = segStartY + obj.Y;
-
-                    // 計算距離（曼哈頓距離）
-                    int distance = Math.Abs(objGameX - clickedGameX) + Math.Abs(objGameY - clickedGameY);
-
-                    if (distance <= radius)
-                    {
-                        if (!nearbyGroups.ContainsKey(obj.GroupId))
-                        {
-                            // 檢查該群組是否有 Layer5 設定（從點擊格子的 Layer5 中查找）
-                            bool hasLayer5 = clickedCellLayer5.TryGetValue(obj.GroupId, out byte layer5Type);
-                            nearbyGroups[obj.GroupId] = (distance, new List<(S32Data, ObjectTile)>(), hasLayer5, layer5Type);
-                        }
-
-                        // 更新最小距離
-                        var current = nearbyGroups[obj.GroupId];
-                        if (distance < current.distance)
-                        {
-                            nearbyGroups[obj.GroupId] = (distance, current.objects, current.hasLayer5, current.layer5Type);
-                        }
-                        nearbyGroups[obj.GroupId].objects.Add((s32Data, obj));
-                    }
-                }
+                int groupId = kvp.Key;
+                var (distance, objects) = kvp.Value;
+                bool hasLayer5 = clickedCellLayer5.TryGetValue(groupId, out byte layer5Type);
+                nearbyGroups[groupId] = (distance, objects, hasLayer5, layer5Type);
             }
 
             if (nearbyGroups.Count == 0)
