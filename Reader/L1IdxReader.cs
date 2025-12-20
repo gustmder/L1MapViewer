@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
+using L1FlyMapViewer;
 using static L1MapViewer.Other.Struct;
 
 namespace L1MapViewer.Reader {
