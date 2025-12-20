@@ -1,19 +1,91 @@
 # L1MapViewer
-這是一個可以預覽線上遊戲客戶端地圖資源檔的工具
->其中用到的檔案加解密算法多為社群中大神們的分享/討論出來的
 
-大概的流程是:
- - 讀取地圖檔
- - 從地圖檔獲得所需的圖形資源檔以及對應的位置
- - 從客戶端的壓縮檔中將這些圖形資源檔取出
- - 取出的圖形資源檔轉成bmp 
- - 拼成一張地圖
+Lineage 1 地圖檢視與編輯工具，可預覽、編輯線上遊戲客戶端的地圖資源檔（S32 格式）。
 
-實際效果請參考影片https://youtu.be/UVRn_-dOmng
+## Features
 
+### GUI Mode
 
-# update log
-## 20251126
-* update to net7.0 project
-* fix project files 
-* ready to build
+- 載入地圖資料夾並顯示完整地圖
+- 多圖層檢視：Layer1（地板）、Layer2（裝飾）、Layer3（屬性）、Layer4（物件）、Layer5/7（擴展資料）
+- 支援縮放、平移瀏覽
+- 即時編輯 Layer1/2/3/4/5/7 資料
+- Undo/Redo 支援
+- 群組選取與批次刪除 Layer4 物件
+- Minimap 快速導航
+- 匯出地圖為 PNG 圖片
+
+### CLI Mode
+
+執行時加上 `-cli` 參數進入命令列模式：
+
+```
+L1MapViewerCore.exe -cli <command> [arguments]
+```
+
+#### Commands
+
+**info** - 顯示 S32 檔案資訊
+```
+L1MapViewerCore.exe -cli info <s32_file>
+```
+
+**extract-tile** - 從 Tile.idx 解出指定 Tile
+```
+L1MapViewerCore.exe -cli extract-tile <tile_idx> <tile_id> <output_dir> [--downscale]
+```
+
+**render-adjacent** - 渲染多個相鄰 S32 區塊
+```
+L1MapViewerCore.exe -cli render-adjacent <map_dir> <center_x> <center_y> --size <n>
+```
+
+**benchmark-*** - 效能測試指令
+```
+L1MapViewerCore.exe -cli benchmark-viewport <map_dir> [--regions n]
+L1MapViewerCore.exe -cli benchmark-minimap <map_dir> [--runs n]
+L1MapViewerCore.exe -cli benchmark-thumbnails <map_dir>
+```
+
+## S32 File Structure
+
+每個 S32 區塊包含：
+- **Layer1**: 64x128 地板圖磚（菱形）
+- **Layer2**: 裝飾圖層
+- **Layer3**: 64x64 地圖屬性（可通行性等）
+- **Layer4**: 物件（樹木、房屋等）
+- **Layer5/7**: 擴展資料
+
+區塊大小：3072 x 1536 像素
+
+## Building
+
+需要 .NET 10.0 SDK：
+
+```bash
+dotnet build --configuration Release
+```
+
+發布單一執行檔：
+
+```bash
+dotnet publish --configuration Release --runtime win-x64 --self-contained true -o publish /p:PublishSingleFile=true
+```
+
+## Requirements
+
+- Windows 10/11
+- .NET 10.0 Runtime（framework-dependent 版本）或無需額外安裝（self-contained 版本）
+
+## Credits
+
+感謝社群中各位大神分享的檔案加解密算法。
+
+原始流程：
+1. 讀取地圖檔（S32）
+2. 從地圖檔獲得所需的圖形資源檔及對應位置
+3. 從客戶端壓縮檔中解出圖形資源
+4. 將圖形資源轉成 BMP
+5. 拼接成完整地圖
+
+Demo 影片：https://youtu.be/UVRn_-dOmng
