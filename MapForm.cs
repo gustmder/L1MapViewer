@@ -7465,103 +7465,76 @@ namespace L1FlyMapViewer
                 return;
             }
 
-            Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
-
             // 將點擊位置轉換為世界座標（考慮縮放和捲動位置）
-            Point adjustedLocation = new Point(
-                (int)(e.Location.X / s32ZoomLevel) + _viewState.ScrollX,
-                (int)(e.Location.Y / s32ZoomLevel) + _viewState.ScrollY
-            );
+            int worldX = (int)(e.Location.X / s32ZoomLevel) + _viewState.ScrollX;
+            int worldY = (int)(e.Location.Y / s32ZoomLevel) + _viewState.ScrollY;
 
-            // 遍歷所有 S32 檔案
-            foreach (var s32Data in _document.S32Files.Values)
+            // 使用優化的格子查找（先過濾 S32 範圍，減少 400x 計算量）
+            var result = CellFinder.FindCellOptimized(worldX, worldY, _document.S32Files.Values);
+            LogPerf($"[MOUSE-CLICK] search done, found={result.Found}, elapsed={result.ElapsedMs}ms, s32Checked={result.S32Checked}, cellsChecked={result.CellsChecked}");
+
+            if (result.Found)
             {
-                // 使用 GetLoc 計算區塊位置
-                int[] loc = s32Data.SegInfo.GetLoc(1.0);
-                int mx = loc[0];
-                int my = loc[1];
+                var s32Data = result.S32Data;
+                int x = result.CellX;
+                int y = result.CellY;
 
-                // 遍歷該 S32 的所有格子
-                for (int y = 0; y < 64; y++)
+                // 設置當前選中的 S32 檔案
+                currentS32FileItem = new S32FileItem
                 {
-                    for (int x = 0; x < 128; x++)
+                    FilePath = s32Data.FilePath,
+                    SegInfo = s32Data.SegInfo
+                };
+
+                // 記錄選中的格子並更新狀態列顯示第三層屬性
+                _editState.HighlightedS32Data = s32Data;
+                _editState.HighlightedCellX = x;
+                _editState.HighlightedCellY = y;
+                UpdateStatusBarWithLayer3Info(s32Data, x, y);
+
+                // 通行性編輯模式：單擊設定通行性
+                if (currentPassableEditMode != PassableEditMode.None && e.Button == MouseButtons.Left)
+                {
+                    SetCellPassable(s32Data, x, y, currentPassableEditMode == PassableEditMode.SetPassable);
+                    return;
+                }
+
+                // 區域編輯模式：右鍵變更選取區域的區域類型
+                if (currentRegionEditMode != RegionEditMode.None && e.Button == MouseButtons.Right)
+                {
+                    if (_editState.SelectedCells.Count > 0)
                     {
-                        // 使用 GetLoc + drawTilBlock 公式計算像素位置
-                        int localBaseX = 0;
-                        int localBaseY = 63 * 12;
-                        localBaseX -= 24 * (x / 2);
-                        localBaseY -= 12 * (x / 2);
+                        SetSelectedCellsRegionType(currentRegionType);
+                    }
+                    return;
+                }
 
-                        int X = mx + localBaseX + x * 24 + y * 24;
-                        int Y = my + localBaseY + y * 12;
+                // Ctrl + 左鍵：刪除該格子的所有第四層物件
+                if (e.Button == MouseButtons.Left && ModifierKeys == Keys.Control)
+                {
+                    DeleteAllLayer4ObjectsAtCell(x, y);
+                }
+                else
+                {
+                    // 重新渲染以顯示高亮
+                    RenderS32Map();
 
-                        // 菱形的四個頂點（24x24 的菱形）
-                        Point p1 = new Point(X + 0, Y + 12);   // 左
-                        Point p2 = new Point(X + 12, Y + 0);   // 上
-                        Point p3 = new Point(X + 24, Y + 12);  // 右
-                        Point p4 = new Point(X + 12, Y + 24);  // 下
-
-                        // 檢查點擊位置是否在這個菱形內（使用調整後的座標）
-                        if (IsPointInDiamond(adjustedLocation, p1, p2, p3, p4))
-                        {
-                            // 設置當前選中的 S32 檔案
-                            currentS32FileItem = new S32FileItem
-                            {
-                                FilePath = s32Data.FilePath,
-                                SegInfo = s32Data.SegInfo
-                            };
-
-                            // 記錄選中的格子並更新狀態列顯示第三層屬性
-                            _editState.HighlightedS32Data = s32Data;
-                            _editState.HighlightedCellX = x;
-                            _editState.HighlightedCellY = y;
-                            UpdateStatusBarWithLayer3Info(s32Data, x, y);
-
-                            // 通行性編輯模式：單擊設定通行性
-                            if (currentPassableEditMode != PassableEditMode.None && e.Button == MouseButtons.Left)
-                            {
-                                SetCellPassable(s32Data, x, y, currentPassableEditMode == PassableEditMode.SetPassable);
-                                return;
-                            }
-
-                            // 區域編輯模式：右鍵變更選取區域的區域類型
-                            if (currentRegionEditMode != RegionEditMode.None && e.Button == MouseButtons.Right)
-                            {
-                                if (_editState.SelectedCells.Count > 0)
-                                {
-                                    SetSelectedCellsRegionType(currentRegionType);
-                                }
-                                return;
-                            }
-
-                            // Ctrl + 左鍵：刪除該格子的所有第四層物件
-                            if (e.Button == MouseButtons.Left && ModifierKeys == Keys.Control)
-                            {
-                                DeleteAllLayer4ObjectsAtCell(x, y);
-                            }
-                            else
-                            {
-                                // 重新渲染以顯示高亮
-                                RenderS32Map();
-
-                                // 透明編輯模式下：顯示附近群組縮圖
-                                if (_editState.IsLayer5EditMode)
-                                {
-                                    UpdateNearbyGroupThumbnails(s32Data, x, y, 10);
-                                }
-                                else
-                                {
-                                    // 更新 Layer4 群組清單
-                                    UpdateLayer4GroupsList(s32Data, x, y);
-                                }
-                            }
-                            sw.Stop();
-                            LogPerf($"[MOUSE-CLICK] found cell, total={sw.ElapsedMilliseconds}ms");
-                            return;
-                        }
+                    // 透明編輯模式下：顯示附近群組縮圖
+                    if (_editState.IsLayer5EditMode)
+                    {
+                        UpdateNearbyGroupThumbnails(s32Data, x, y, 10);
+                    }
+                    else
+                    {
+                        // 更新 Layer4 群組清單
+                        UpdateLayer4GroupsList(s32Data, x, y);
                     }
                 }
+                sw.Stop();
+                LogPerf($"[MOUSE-CLICK] found cell, total={sw.ElapsedMilliseconds}ms");
+                return;
             }
+
             sw.Stop();
             LogPerf($"[MOUSE-CLICK] no cell found, total={sw.ElapsedMilliseconds}ms, s32Count={_document.S32Files.Count}");
         }
@@ -7576,65 +7549,39 @@ namespace L1FlyMapViewer
             Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
 
             // 將點擊位置轉換為世界座標（考慮縮放和捲動位置）
-            Point adjustedLocation = new Point(
-                (int)(e.Location.X / s32ZoomLevel) + _viewState.ScrollX,
-                (int)(e.Location.Y / s32ZoomLevel) + _viewState.ScrollY
-            );
+            int worldX = (int)(e.Location.X / s32ZoomLevel) + _viewState.ScrollX;
+            int worldY = (int)(e.Location.Y / s32ZoomLevel) + _viewState.ScrollY;
 
-            // 遍歷所有 S32 檔案
-            foreach (var s32Data in _document.S32Files.Values)
+            // 使用優化的格子查找
+            var result = CellFinder.FindCellOptimized(worldX, worldY, _document.S32Files.Values);
+
+            if (result.Found)
             {
-                // 使用 GetLoc 計算區塊位置
-                int[] loc = s32Data.SegInfo.GetLoc(1.0);
-                int mx = loc[0];
-                int my = loc[1];
+                var s32Data = result.S32Data;
+                int x = result.CellX;
+                int y = result.CellY;
 
-                // 遍歷該 S32 的所有格子
-                for (int y = 0; y < 64; y++)
+                // 設置當前選中的 S32 檔案
+                currentS32FileItem = new S32FileItem
                 {
-                    for (int x = 0; x < 128; x++)
-                    {
-                        // 使用 GetLoc + drawTilBlock 公式計算像素位置
-                        int localBaseX = 0;
-                        int localBaseY = 63 * 12;
-                        localBaseX -= 24 * (x / 2);
-                        localBaseY -= 12 * (x / 2);
+                    FilePath = s32Data.FilePath,
+                    SegInfo = s32Data.SegInfo
+                };
 
-                        int X = mx + localBaseX + x * 24 + y * 24;
-                        int Y = my + localBaseY + y * 12;
+                // 記錄選中的格子
+                _editState.HighlightedS32Data = s32Data;
+                _editState.HighlightedCellX = x;
+                _editState.HighlightedCellY = y;
 
-                        // 菱形的四個頂點（24x24 的菱形）
-                        Point p1 = new Point(X + 0, Y + 12);   // 左
-                        Point p2 = new Point(X + 12, Y + 0);   // 上
-                        Point p3 = new Point(X + 24, Y + 12);  // 右
-                        Point p4 = new Point(X + 12, Y + 24);  // 下
-
-                        // 檢查雙擊位置是否在這個菱形內
-                        if (IsPointInDiamond(adjustedLocation, p1, p2, p3, p4))
-                        {
-                            // 設置當前選中的 S32 檔案
-                            currentS32FileItem = new S32FileItem
-                            {
-                                FilePath = s32Data.FilePath,
-                                SegInfo = s32Data.SegInfo
-                            };
-
-                            // 記錄選中的格子
-                            _editState.HighlightedS32Data = s32Data;
-                            _editState.HighlightedCellX = x;
-                            _editState.HighlightedCellY = y;
-
-                            // 顯示格子詳細資料
-                            ShowCellLayersDialog(x, y);
-                            return;
-                        }
-                    }
-                }
+                // 顯示格子詳細資料
+                ShowCellLayersDialog(x, y);
+                return;
             }
 
             // 如果沒有雙擊到任何 S32 區塊，檢查是否要新增 S32
             if (e.Button == MouseButtons.Left)
             {
+                Point adjustedLocation = new Point(worldX, worldY);
                 TryCreateS32AtClickPosition(adjustedLocation, currentMap);
             }
         }

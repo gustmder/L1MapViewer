@@ -87,6 +87,10 @@ namespace L1MapViewer.CLI
                         return CmdBenchmarkS32ParseDetail(cmdArgs);
                     case "benchmark-tilevalidate":
                         return CmdBenchmarkTileValidate(cmdArgs);
+                    case "benchmark-cellfind":
+                        return CmdBenchmarkCellFind(cmdArgs);
+                    case "benchmark-mouseclick":
+                        return CmdBenchmarkMouseClick(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -3024,6 +3028,423 @@ L1MapViewer CLI - S32 檔案解析工具
                 Console.WriteLine($"Min: {allTimes.Min()} ms");
                 Console.WriteLine($"Max: {allTimes.Max()} ms");
             }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// 格子查找效能測試
+        /// </summary>
+        private static int CmdBenchmarkCellFind(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: benchmark-cellfind <map_path> [--runs N] [--optimized]");
+                Console.WriteLine("範例: benchmark-cellfind C:\\client\\map\\4");
+                Console.WriteLine("      benchmark-cellfind C:\\client\\map\\4 --optimized");
+                Console.WriteLine();
+                Console.WriteLine("測試從世界座標查找對應格子的效能");
+                return 1;
+            }
+
+            string mapPath = args[0];
+            int runs = 3;
+            bool useOptimized = false;
+
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (args[i] == "--runs" && i + 1 < args.Length)
+                {
+                    int.TryParse(args[++i], out runs);
+                }
+                else if (args[i] == "--optimized")
+                {
+                    useOptimized = true;
+                }
+            }
+
+            if (!Directory.Exists(mapPath))
+            {
+                Console.WriteLine($"目錄不存在: {mapPath}");
+                return 1;
+            }
+
+            var s32FilePaths = Directory.GetFiles(mapPath, "*.s32");
+            if (s32FilePaths.Length == 0)
+            {
+                Console.WriteLine($"找不到 S32 檔案: {mapPath}");
+                return 1;
+            }
+
+            // 從 S32 路徑推斷 client 路徑
+            string clientPath = FindClientPath(s32FilePaths[0]);
+            if (string.IsNullOrEmpty(clientPath))
+            {
+                Console.WriteLine($"無法找到 client 資料夾（需要 Tile.idx）");
+                return 1;
+            }
+            Share.LineagePath = clientPath;
+
+            string mapId = Path.GetFileName(mapPath);
+
+            Console.WriteLine("=== Cell Find Benchmark ===");
+            Console.WriteLine($"Map: {mapId}");
+            Console.WriteLine($"Client: {clientPath}");
+            Console.WriteLine($"S32 Files: {s32FilePaths.Length}");
+            Console.WriteLine($"Runs: {runs}");
+            Console.WriteLine($"Method: {(useOptimized ? "Optimized" : "BruteForce")}");
+            Console.WriteLine();
+
+            // 載入地圖資料
+            Console.Write("Loading map data...");
+            var sw = Stopwatch.StartNew();
+            L1MapViewer.Helper.L1MapHelper.Read(clientPath);
+            sw.Stop();
+            Console.WriteLine($" {sw.ElapsedMilliseconds} ms");
+
+            if (!Share.MapDataList.ContainsKey(mapId))
+            {
+                Console.WriteLine($"找不到地圖 {mapId}");
+                return 1;
+            }
+            var currentMap = Share.MapDataList[mapId];
+
+            // 載入所有 S32 檔案
+            Console.Write("Loading S32 files...");
+            sw.Restart();
+            var s32DataList = new List<S32Data>();
+            foreach (var kvp in currentMap.FullFileNameList)
+            {
+                string filePath = kvp.Key;
+                var segInfo = kvp.Value;
+
+                if (!segInfo.isS32) continue;
+                if (!File.Exists(filePath)) continue;
+
+                var s32 = S32Parser.ParseFile(filePath);
+                if (s32 == null) continue;
+
+                s32.FilePath = filePath;
+                s32.SegInfo = segInfo;
+                s32DataList.Add(s32);
+            }
+            sw.Stop();
+            Console.WriteLine($" {sw.ElapsedMilliseconds} ms (loaded: {s32DataList.Count})");
+
+            // 計算地圖範圍
+            int minX = int.MaxValue, minY = int.MaxValue;
+            int maxX = int.MinValue, maxY = int.MinValue;
+
+            foreach (var s32Data in s32DataList)
+            {
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                if (loc == null) continue;
+                int mx = loc[0];
+                int my = loc[1];
+
+                minX = Math.Min(minX, mx);
+                minY = Math.Min(minY, my);
+                maxX = Math.Max(maxX, mx + 3072);
+                maxY = Math.Max(maxY, my + 1536);
+            }
+
+            int mapWidth = maxX - minX;
+            int mapHeight = maxY - minY;
+            Console.WriteLine($"Map Size: {mapWidth} x {mapHeight} px");
+            Console.WriteLine($"Map Range: ({minX},{minY}) - ({maxX},{maxY})");
+            Console.WriteLine();
+
+            // 產生隨機測試點
+            var random = new Random(42); // 固定種子確保可重現
+            int testPointCount = 20;
+            var testPoints = new List<(int x, int y)>();
+
+            for (int i = 0; i < testPointCount; i++)
+            {
+                int x = minX + random.Next(mapWidth);
+                int y = minY + random.Next(mapHeight);
+                testPoints.Add((x, y));
+            }
+
+            Console.WriteLine($"Test Points: {testPointCount}");
+            Console.WriteLine();
+
+            var allTimes = new List<long>();
+            var totalCellsChecked = new List<int>();
+            var totalS32Checked = new List<int>();
+            int foundCount = 0;
+
+            for (int run = 1; run <= runs; run++)
+            {
+                Console.WriteLine($"--- Run {run}/{runs} ---");
+
+                int runCellsChecked = 0;
+                int runS32Checked = 0;
+                int runFound = 0;
+
+                sw.Restart();
+
+                foreach (var (x, y) in testPoints)
+                {
+                    CellFinder.FindResult result;
+                    if (useOptimized)
+                    {
+                        result = CellFinder.FindCellOptimized(x, y, s32DataList);
+                    }
+                    else
+                    {
+                        result = CellFinder.FindCellBruteForce(x, y, s32DataList);
+                    }
+
+                    runCellsChecked += result.CellsChecked;
+                    runS32Checked += result.S32Checked;
+                    if (result.Found) runFound++;
+                }
+
+                sw.Stop();
+                allTimes.Add(sw.ElapsedMilliseconds);
+                totalCellsChecked.Add(runCellsChecked);
+                totalS32Checked.Add(runS32Checked);
+                if (run == 1) foundCount = runFound;
+
+                Console.WriteLine($"  Time: {sw.ElapsedMilliseconds} ms");
+                Console.WriteLine($"  S32 Checked: {runS32Checked}");
+                Console.WriteLine($"  Cells Checked: {runCellsChecked:N0}");
+                Console.WriteLine($"  Found: {runFound}/{testPointCount}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("=== Summary ===");
+            Console.WriteLine($"Average Time: {allTimes.Average():F1} ms");
+            Console.WriteLine($"Min: {allTimes.Min()} ms, Max: {allTimes.Max()} ms");
+            Console.WriteLine($"Avg S32 Checked: {totalS32Checked.Average():F0}");
+            Console.WriteLine($"Avg Cells Checked: {totalCellsChecked.Average():F0}");
+            Console.WriteLine($"Found Rate: {foundCount}/{testPointCount} ({100.0 * foundCount / testPointCount:F1}%)");
+            Console.WriteLine();
+
+            // 顯示單點詳細結果
+            Console.WriteLine("=== Sample Point Details ===");
+            for (int i = 0; i < Math.Min(5, testPoints.Count); i++)
+            {
+                var (x, y) = testPoints[i];
+                var result = useOptimized
+                    ? CellFinder.FindCellOptimized(x, y, s32DataList)
+                    : CellFinder.FindCellBruteForce(x, y, s32DataList);
+
+                if (result.Found)
+                {
+                    Console.WriteLine($"  ({x}, {y}) -> S32={Path.GetFileName(result.S32Data.FilePath)}, Cell=({result.CellX},{result.CellY}), {result.ElapsedMs}ms");
+                }
+                else
+                {
+                    Console.WriteLine($"  ({x}, {y}) -> Not Found, {result.ElapsedMs}ms, checked {result.S32Checked} S32s");
+                }
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// 模擬完整 MouseClick 流程（格子查找 + 渲染）
+        /// </summary>
+        private static int CmdBenchmarkMouseClick(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: benchmark-mouseclick <map_path> [--runs N]");
+                Console.WriteLine("範例: benchmark-mouseclick C:\\client\\map\\4");
+                Console.WriteLine();
+                Console.WriteLine("模擬完整的滑鼠點擊流程：格子查找 + Viewport 渲染");
+                return 1;
+            }
+
+            string mapPath = args[0];
+            int runs = 5;
+
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (args[i] == "--runs" && i + 1 < args.Length)
+                {
+                    int.TryParse(args[++i], out runs);
+                }
+            }
+
+            if (!Directory.Exists(mapPath))
+            {
+                Console.WriteLine($"目錄不存在: {mapPath}");
+                return 1;
+            }
+
+            var s32FilePaths = Directory.GetFiles(mapPath, "*.s32");
+            if (s32FilePaths.Length == 0)
+            {
+                Console.WriteLine($"找不到 S32 檔案: {mapPath}");
+                return 1;
+            }
+
+            string clientPath = FindClientPath(s32FilePaths[0]);
+            if (string.IsNullOrEmpty(clientPath))
+            {
+                Console.WriteLine($"無法找到 client 資料夾");
+                return 1;
+            }
+            Share.LineagePath = clientPath;
+
+            string mapId = Path.GetFileName(mapPath);
+
+            Console.WriteLine("=== MouseClick Simulation Benchmark ===");
+            Console.WriteLine($"Map: {mapId}");
+            Console.WriteLine($"Client: {clientPath}");
+            Console.WriteLine($"S32 Files: {s32FilePaths.Length}");
+            Console.WriteLine($"Runs: {runs}");
+            Console.WriteLine();
+
+            // 載入地圖資料
+            Console.Write("Loading map data...");
+            var sw = Stopwatch.StartNew();
+            L1MapViewer.Helper.L1MapHelper.Read(clientPath);
+            sw.Stop();
+            Console.WriteLine($" {sw.ElapsedMilliseconds} ms");
+
+            if (!Share.MapDataList.ContainsKey(mapId))
+            {
+                Console.WriteLine($"找不到地圖 {mapId}");
+                return 1;
+            }
+            var currentMap = Share.MapDataList[mapId];
+
+            // 載入所有 S32 檔案
+            Console.Write("Loading S32 files...");
+            sw.Restart();
+            var s32Files = new Dictionary<string, S32Data>();
+            foreach (var kvp in currentMap.FullFileNameList)
+            {
+                string filePath = kvp.Key;
+                var segInfo = kvp.Value;
+
+                if (!segInfo.isS32) continue;
+                if (!File.Exists(filePath)) continue;
+
+                var s32 = S32Parser.ParseFile(filePath);
+                if (s32 == null) continue;
+
+                s32.FilePath = filePath;
+                s32.SegInfo = segInfo;
+                s32Files[filePath] = s32;
+            }
+            sw.Stop();
+            Console.WriteLine($" {sw.ElapsedMilliseconds} ms (loaded: {s32Files.Count})");
+
+            // 計算地圖範圍
+            int minX = int.MaxValue, minY = int.MaxValue;
+            int maxX = int.MinValue, maxY = int.MinValue;
+
+            foreach (var s32Data in s32Files.Values)
+            {
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                if (loc == null) continue;
+                int mx = loc[0];
+                int my = loc[1];
+
+                minX = Math.Min(minX, mx);
+                minY = Math.Min(minY, my);
+                maxX = Math.Max(maxX, mx + 3072);
+                maxY = Math.Max(maxY, my + 1536);
+            }
+
+            int mapWidth = maxX - minX;
+            int mapHeight = maxY - minY;
+            Console.WriteLine($"Map Size: {mapWidth} x {mapHeight} px");
+            Console.WriteLine();
+
+            // 模擬 viewport 大小
+            int viewportWidth = 2048;
+            int viewportHeight = 2048;
+
+            // 建立 ViewportRenderer
+            var renderer = new ViewportRenderer();
+            var checkedFiles = new HashSet<string>(s32Files.Keys);
+
+            // 產生隨機測試點
+            var random = new Random(42);
+            int testPointCount = 10;
+            var testPoints = new List<(int x, int y)>();
+
+            for (int i = 0; i < testPointCount; i++)
+            {
+                int x = minX + random.Next(mapWidth);
+                int y = minY + random.Next(mapHeight);
+                testPoints.Add((x, y));
+            }
+
+            Console.WriteLine($"Test Points: {testPointCount}");
+            Console.WriteLine($"Viewport: {viewportWidth} x {viewportHeight}");
+            Console.WriteLine();
+
+            var allCellFindTimes = new List<long>();
+            var allRenderTimes = new List<long>();
+            var allTotalTimes = new List<long>();
+
+            for (int run = 1; run <= runs; run++)
+            {
+                Console.WriteLine($"--- Run {run}/{runs} ---");
+
+                long totalCellFind = 0;
+                long totalRender = 0;
+                int foundCount = 0;
+
+                // 清除快取以模擬冷啟動
+                renderer.ClearCache();
+
+                foreach (var (clickX, clickY) in testPoints)
+                {
+                    // Step 1: Cell Find (優化版)
+                    sw.Restart();
+                    var findResult = CellFinder.FindCellOptimized(clickX, clickY, s32Files.Values);
+                    sw.Stop();
+                    long cellFindMs = sw.ElapsedMilliseconds;
+                    totalCellFind += cellFindMs;
+
+                    if (findResult.Found)
+                    {
+                        foundCount++;
+
+                        // Step 2: Render Viewport (以點擊位置為中心)
+                        int scrollX = clickX - viewportWidth / 2;
+                        int scrollY = clickY - viewportHeight / 2;
+                        var worldRect = new Rectangle(scrollX, scrollY, viewportWidth, viewportHeight);
+
+                        sw.Restart();
+                        var stats = new ViewportRenderer.RenderStats();
+                        using (var bmp = renderer.RenderViewport(worldRect, s32Files, checkedFiles,
+                            true, true, true, out stats))
+                        {
+                            // 模擬渲染完成
+                        }
+                        sw.Stop();
+                        totalRender += sw.ElapsedMilliseconds;
+                    }
+                }
+
+                long runTotal = totalCellFind + totalRender;
+                allCellFindTimes.Add(totalCellFind);
+                allRenderTimes.Add(totalRender);
+                allTotalTimes.Add(runTotal);
+
+                Console.WriteLine($"  Cell Find:  {totalCellFind,5} ms ({totalCellFind / testPointCount:F1} ms/click)");
+                Console.WriteLine($"  Render:     {totalRender,5} ms ({totalRender / foundCount:F1} ms/click)");
+                Console.WriteLine($"  Total:      {runTotal,5} ms ({runTotal / testPointCount:F1} ms/click)");
+                Console.WriteLine($"  Found: {foundCount}/{testPointCount}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("=== Summary (per click) ===");
+            Console.WriteLine($"Cell Find Avg: {allCellFindTimes.Average() / testPointCount:F1} ms");
+            Console.WriteLine($"Render Avg:    {allRenderTimes.Average() / testPointCount:F1} ms");
+            Console.WriteLine($"Total Avg:     {allTotalTimes.Average() / testPointCount:F1} ms");
+            Console.WriteLine();
+            Console.WriteLine($"Min Total: {allTotalTimes.Min() / testPointCount:F1} ms/click");
+            Console.WriteLine($"Max Total: {allTotalTimes.Max() / testPointCount:F1} ms/click");
 
             return 0;
         }
