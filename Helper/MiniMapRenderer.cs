@@ -69,9 +69,9 @@ namespace L1MapViewer.Helper
             stats.ScaledWidth = scaledWidth;
             stats.ScaledHeight = scaledHeight;
 
-            // 決定渲染模式：超過 100 個 S32 時使用簡化渲染
+            // 決定渲染模式：超過 20 個 S32 時使用簡化渲染
             int s32Count = checkedFiles.Count;
-            bool useSimplifiedRendering = s32Count > 100;
+            bool useSimplifiedRendering = s32Count > 20;
             stats.IsSimplified = useSimplifiedRendering;
 
             // 建立小地圖 Bitmap
@@ -152,8 +152,14 @@ namespace L1MapViewer.Helper
                 }
                 else
                 {
-                    // 完整渲染
-                    var blocksToRender = new List<(S32Data s32Data, int destX, int destY, int destW, int destH)>();
+                    // 完整渲染（全域 Layer 排序）- 先渲染到完整大小，再縮小
+                    var getBlockSw = Stopwatch.StartNew();
+
+                    // 收集所有需要渲染的 S32 區塊
+                    var blocksToRender = new List<(S32Data s32Data, int offsetX, int offsetY)>();
+                    int worldMinX = int.MaxValue, worldMinY = int.MaxValue;
+                    int worldMaxX = int.MinValue, worldMaxY = int.MinValue;
+
                     foreach (object filePathObj in sortedFilePaths)
                     {
                         string filePath = filePathObj as string;
@@ -165,36 +171,104 @@ namespace L1MapViewer.Helper
                         int blockX = loc[0];
                         int blockY = loc[1];
 
-                        int destX = (int)(blockX * scale);
-                        int destY = (int)(blockY * scale);
-                        int destW = (int)(BlockWidth * scale);
-                        int destH = (int)(BlockHeight * scale);
+                        worldMinX = Math.Min(worldMinX, blockX);
+                        worldMinY = Math.Min(worldMinY, blockY);
+                        worldMaxX = Math.Max(worldMaxX, blockX + BlockWidth);
+                        worldMaxY = Math.Max(worldMaxY, blockY + BlockHeight);
 
-                        blocksToRender.Add((s32Data, destX, destY, destW, destH));
+                        blocksToRender.Add((s32Data, blockX, blockY));
                     }
-
-                    // 平行渲染
-                    var getBlockSw = Stopwatch.StartNew();
-                    var renderedBlocks = new ConcurrentBag<(Bitmap bmp, int destX, int destY, int destW, int destH)>();
-
-                    System.Threading.Tasks.Parallel.ForEach(blocksToRender, block =>
-                    {
-                        Bitmap blockBmp = GetOrRenderS32Block(block.s32Data, true, false, true);
-                        renderedBlocks.Add((blockBmp, block.destX, block.destY, block.destW, block.destH));
-                    });
-                    getBlockSw.Stop();
-                    totalGetBlockMs = getBlockSw.ElapsedMilliseconds;
                     blockCount = blocksToRender.Count;
 
-                    // 順序繪製
-                    var drawSw = Stopwatch.StartNew();
-                    var orderedBlocks = renderedBlocks.OrderBy(b => b.destY).ThenBy(b => b.destX).ToList();
-                    foreach (var block in orderedBlocks)
+                    int fullWidth = worldMaxX - worldMinX;
+                    int fullHeight = worldMaxY - worldMinY;
+
+                    // 收集所有 Layer 物件
+                    var allTiles = new List<(int pixelX, int pixelY, int layer, int tileId, int indexId)>();
+
+                    foreach (var (s32Data, blockX, blockY) in blocksToRender)
                     {
-                        g.DrawImage(block.bmp,
-                            new Rectangle(block.destX, block.destY, block.destW, block.destH),
-                            0, 0, block.bmp.Width, block.bmp.Height,
-                            GraphicsUnit.Pixel, vAttr);
+                        int offsetX = blockX - worldMinX;
+                        int offsetY = blockY - worldMinY;
+
+                        // Layer 1 (地板)
+                        for (int y = 0; y < 64; y++)
+                        {
+                            for (int x = 0; x < 128; x++)
+                            {
+                                var cell = s32Data.Layer1[y, x];
+                                if (cell != null && cell.TileId > 0)
+                                {
+                                    int halfX = x / 2;
+                                    int baseX = -24 * halfX;
+                                    int baseY = 63 * 12 - 12 * halfX;
+                                    int pixelX = offsetX + baseX + x * 24 + y * 24;
+                                    int pixelY = offsetY + baseY + y * 12;
+
+                                    allTiles.Add((pixelX, pixelY, -2, cell.TileId, cell.IndexId));
+                                }
+                            }
+                        }
+
+                        // Layer 2
+                        foreach (var item in s32Data.Layer2)
+                        {
+                            if (item.TileId > 0)
+                            {
+                                int x = item.X;
+                                int y = item.Y;
+                                int halfX = x / 2;
+                                int baseX = -24 * halfX;
+                                int baseY = 63 * 12 - 12 * halfX;
+                                int pixelX = offsetX + baseX + x * 24 + y * 24;
+                                int pixelY = offsetY + baseY + y * 12;
+
+                                allTiles.Add((pixelX, pixelY, -1, item.TileId, item.IndexId));
+                            }
+                        }
+
+                        // Layer 4 (物件)
+                        foreach (var obj in s32Data.Layer4)
+                        {
+                            int halfX = obj.X / 2;
+                            int baseX = -24 * halfX;
+                            int baseY = 63 * 12 - 12 * halfX;
+                            int pixelX = offsetX + baseX + obj.X * 24 + obj.Y * 24;
+                            int pixelY = offsetY + baseY + obj.Y * 12;
+
+                            allTiles.Add((pixelX, pixelY, obj.Layer, obj.TileId, obj.IndexId));
+                        }
+                    }
+
+                    // 按 Layer 全域排序
+                    var sortedTiles = allTiles.OrderBy(t => t.layer).ToList();
+                    getBlockSw.Stop();
+                    totalGetBlockMs = getBlockSw.ElapsedMilliseconds;
+
+                    // 渲染到完整大小的 bitmap，再用高品質插值縮小
+                    var drawSw = Stopwatch.StartNew();
+                    using (var fullBitmap = new Bitmap(fullWidth, fullHeight, PixelFormat.Format16bppRgb555))
+                    {
+                        Rectangle rect = new Rectangle(0, 0, fullWidth, fullHeight);
+                        BitmapData bmpData = fullBitmap.LockBits(rect, ImageLockMode.ReadWrite, fullBitmap.PixelFormat);
+                        int rowpix = bmpData.Stride;
+
+                        unsafe
+                        {
+                            byte* ptr = (byte*)bmpData.Scan0;
+
+                            foreach (var tile in sortedTiles)
+                            {
+                                DrawTilToBufferDirect(tile.pixelX, tile.pixelY, tile.tileId, tile.indexId,
+                                    rowpix, ptr, fullWidth, fullHeight);
+                            }
+                        }
+
+                        fullBitmap.UnlockBits(bmpData);
+
+                        // 用高品質插值縮小到 minimap 大小（保留更多細節）
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        g.DrawImage(fullBitmap, 0, 0, scaledWidth, scaledHeight);
                     }
                     drawSw.Stop();
                     totalDrawImageMs = drawSw.ElapsedMilliseconds;
@@ -381,7 +455,8 @@ namespace L1MapViewer.Helper
         /// </summary>
         private Bitmap GetOrRenderS32Block(S32Data s32Data, bool showLayer1, bool showLayer2, bool showLayer4)
         {
-            string cacheKey = s32Data.FilePath;
+            // 快取 key 包含 layer 設定，避免返回錯誤的渲染結果
+            string cacheKey = $"{s32Data.FilePath}_{showLayer1}_{showLayer2}_{showLayer4}";
             if (_s32BlockCache.TryGetValue(cacheKey, out Bitmap cached))
             {
                 return cached;
