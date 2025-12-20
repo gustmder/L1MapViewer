@@ -1148,7 +1148,7 @@ namespace L1FlyMapViewer
             this.lblMaterials.Name = "lblMaterials";
             this.lblMaterials.Size = new Size(210, 20);
             this.lblMaterials.TabIndex = 2;
-            this.lblMaterials.Text = "最近使用的素材";
+            this.lblMaterials.Text = "最近的素材";
             this.lblMaterials.TextAlign = ContentAlignment.MiddleLeft;
 
             //

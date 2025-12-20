@@ -19,9 +19,11 @@ namespace L1MapViewer.Helper
         public string LibraryPath { get; set; }
 
         /// <summary>
-        /// 最近使用的素材 (檔案路徑)
+        /// 設定檔路徑
         /// </summary>
-        public List<string> RecentMaterials { get; } = new List<string>();
+        private static string SettingsFilePath => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "L1MapViewer", "recent_materials.txt");
 
         /// <summary>
         /// 最大最近使用數量
@@ -54,6 +56,62 @@ namespace L1MapViewer.Helper
             if (!Directory.Exists(LibraryPath))
             {
                 Directory.CreateDirectory(LibraryPath);
+            }
+        }
+
+        /// <summary>
+        /// 確保設定檔目錄存在
+        /// </summary>
+        private static void EnsureSettingsDirectoryExists()
+        {
+            var dir = Path.GetDirectoryName(SettingsFilePath);
+            if (!Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+        }
+
+        /// <summary>
+        /// 從設定檔讀取最近素材列表
+        /// </summary>
+        private static List<string> LoadRecentFromSettings()
+        {
+            var result = new List<string>();
+            try
+            {
+                if (File.Exists(SettingsFilePath))
+                {
+                    var lines = File.ReadAllLines(SettingsFilePath);
+                    foreach (var line in lines)
+                    {
+                        var path = line.Trim();
+                        if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                        {
+                            result.Add(path);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // 忽略讀取錯誤
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// 儲存最近素材列表到設定檔
+        /// </summary>
+        private static void SaveRecentToSettings(List<string> recentList)
+        {
+            try
+            {
+                EnsureSettingsDirectoryExists();
+                File.WriteAllLines(SettingsFilePath, recentList);
+            }
+            catch
+            {
+                // 忽略寫入錯誤
             }
         }
 
@@ -95,31 +153,34 @@ namespace L1MapViewer.Helper
         }
 
         /// <summary>
-        /// 取得最近使用的素材
+        /// 取得最近的素材（從設定檔讀取，不存在的會跳過）
         /// </summary>
         public List<Fs3pInfo> GetRecentMaterials()
         {
             var result = new List<Fs3pInfo>();
+            var recentPaths = LoadRecentFromSettings();
 
-            foreach (var path in RecentMaterials)
+            foreach (var path in recentPaths)
             {
-                if (!File.Exists(path))
-                    continue;
-
                 try
                 {
+                    Fs3pInfo info;
                     if (_indexCache.TryGetValue(path, out var cached))
                     {
-                        result.Add(cached);
+                        info = cached;
                     }
                     else
                     {
-                        var info = Fs3pParser.GetInfo(path);
+                        info = Fs3pParser.GetInfo(path);
                         if (info != null)
                         {
                             _indexCache[path] = info;
-                            result.Add(info);
                         }
+                    }
+
+                    if (info != null)
+                    {
+                        result.Add(info);
                     }
                 }
                 catch
@@ -132,21 +193,27 @@ namespace L1MapViewer.Helper
         }
 
         /// <summary>
-        /// 新增到最近使用
+        /// 新增到最近使用（儲存到設定檔）
         /// </summary>
         public void AddToRecent(string filePath)
         {
+            // 從設定檔讀取現有列表
+            var recentList = LoadRecentFromSettings();
+
             // 移除已存在的（會重新加到最前面）
-            RecentMaterials.Remove(filePath);
+            recentList.Remove(filePath);
 
             // 加到最前面
-            RecentMaterials.Insert(0, filePath);
+            recentList.Insert(0, filePath);
 
             // 限制數量
-            while (RecentMaterials.Count > MaxRecentCount)
+            while (recentList.Count > MaxRecentCount)
             {
-                RecentMaterials.RemoveAt(RecentMaterials.Count - 1);
+                recentList.RemoveAt(recentList.Count - 1);
             }
+
+            // 儲存回設定檔
+            SaveRecentToSettings(recentList);
         }
 
         /// <summary>
@@ -214,7 +281,13 @@ namespace L1MapViewer.Helper
                     File.Delete(filePath);
                 }
 
-                RecentMaterials.Remove(filePath);
+                // 從設定檔中移除
+                var recentList = LoadRecentFromSettings();
+                if (recentList.Remove(filePath))
+                {
+                    SaveRecentToSettings(recentList);
+                }
+
                 _indexCache.Remove(filePath);
 
                 return true;

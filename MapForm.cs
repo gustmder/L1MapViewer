@@ -13261,6 +13261,12 @@ namespace L1FlyMapViewer
                 menu.Items.Add(gotoItem);
                 menu.Items.Add(detailItem);
                 menu.Items.Add(new ToolStripSeparator());
+
+                ToolStripMenuItem saveMaterialItem = new ToolStripMenuItem($"儲存群組 {info.GroupId} 為素材...");
+                saveMaterialItem.Click += (s, ev) => SaveGroupsAsMaterial(new List<GroupThumbnailInfo> { info });
+                menu.Items.Add(saveMaterialItem);
+
+                menu.Items.Add(new ToolStripSeparator());
                 menu.Items.Add(deleteItem);
 
                 // 變更群組 ID 選項
@@ -13306,6 +13312,12 @@ namespace L1FlyMapViewer
                 deleteItem.Click += (s, ev) => DeleteMultipleGroupsFromMap(selectedInfos);
 
                 menu.Items.Add(copyItem);
+                menu.Items.Add(new ToolStripSeparator());
+
+                ToolStripMenuItem saveMaterialItem = new ToolStripMenuItem($"儲存 {selectedInfos.Count} 個群組為素材...");
+                saveMaterialItem.Click += (s, ev) => SaveGroupsAsMaterial(selectedInfos);
+                menu.Items.Add(saveMaterialItem);
+
                 menu.Items.Add(new ToolStripSeparator());
                 menu.Items.Add(deleteItem);
 
@@ -13518,6 +13530,167 @@ namespace L1FlyMapViewer
             }
 
             this.toolStripStatusLabel1.Text = $"已刪除群組 {groupId}，共 {deletedCount} 個物件";
+        }
+
+        // 儲存群組為素材
+        private void SaveGroupsAsMaterial(List<GroupThumbnailInfo> infos)
+        {
+            if (infos == null || infos.Count == 0)
+                return;
+
+            // 收集所有物件
+            var allObjects = new List<(S32Data s32, ObjectTile obj)>();
+            foreach (var info in infos)
+            {
+                allObjects.AddRange(info.Objects);
+            }
+
+            if (allObjects.Count == 0)
+            {
+                MessageBox.Show("選取的群組內沒有物件。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 預設素材名稱
+            string defaultName = infos.Count == 1
+                ? $"群組_{infos[0].GroupId}"
+                : $"群組_{string.Join("_", infos.Take(3).Select(i => i.GroupId))}";
+
+            using (var dialog = new L1MapViewer.Forms.ExportOptionsDialog(isFs3p: true, hasSelection: true))
+            {
+                if (dialog.ShowDialog() != DialogResult.OK)
+                    return;
+
+                try
+                {
+                    // 計算物件的世界座標範圍
+                    int minWorldX = int.MaxValue, minWorldY = int.MaxValue;
+                    int maxWorldX = int.MinValue, maxWorldY = int.MinValue;
+
+                    foreach (var (s32, obj) in allObjects)
+                    {
+                        int worldX = s32.SegInfo.nLinBeginX * 2 + obj.X;
+                        int worldY = s32.SegInfo.nLinBeginY + obj.Y;
+                        if (worldX < minWorldX) minWorldX = worldX;
+                        if (worldY < minWorldY) minWorldY = worldY;
+                        if (worldX > maxWorldX) maxWorldX = worldX;
+                        if (worldY > maxWorldY) maxWorldY = worldY;
+                    }
+
+                    // 建立 fs3p 資料
+                    var fs3p = new Fs3pData
+                    {
+                        Name = dialog.MaterialName,
+                        LayerFlags = (ushort)(dialog.LayerFlags & 0x08), // 只保留 Layer4 flag
+                        OriginOffsetX = minWorldX,
+                        OriginOffsetY = minWorldY,
+                        Width = maxWorldX - minWorldX + 1,
+                        Height = maxWorldY - minWorldY + 1
+                    };
+                    fs3p.SetCreatedNow();
+
+                    // 收集使用的 TileIds 和 GroupId 重新編號
+                    HashSet<int> usedTileIds = new HashSet<int>();
+                    Dictionary<int, int> groupIdMapping = new Dictionary<int, int>();
+                    int nextGroupId = 0;
+
+                    foreach (var (s32, obj) in allObjects)
+                    {
+                        int relX = s32.SegInfo.nLinBeginX * 2 + obj.X - minWorldX;
+                        int relY = s32.SegInfo.nLinBeginY + obj.Y - minWorldY;
+
+                        // 重新編號 GroupId
+                        if (!groupIdMapping.TryGetValue(obj.GroupId, out int newGroupId))
+                        {
+                            newGroupId = nextGroupId++;
+                            groupIdMapping[obj.GroupId] = newGroupId;
+                        }
+
+                        fs3p.Layer4Items.Add(new Fs3pLayer4Item
+                        {
+                            RelativeX = relX,
+                            RelativeY = relY,
+                            GroupId = newGroupId,
+                            Layer = (byte)obj.Layer,
+                            IndexId = (byte)obj.IndexId,
+                            TileId = (ushort)obj.TileId
+                        });
+
+                        if (obj.TileId > 0)
+                            usedTileIds.Add(obj.TileId);
+                    }
+
+                    // 打包 Tiles
+                    if (dialog.IncludeTiles)
+                    {
+                        foreach (int tileId in usedTileIds)
+                        {
+                            byte[] tilData = L1PakReader.UnPack("Tile", $"{tileId}.til");
+                            if (tilData != null)
+                            {
+                                fs3p.Tiles[tileId] = new TilePackageData
+                                {
+                                    OriginalTileId = tileId,
+                                    Md5Hash = TileHashManager.CalculateMd5(tilData),
+                                    TilData = tilData
+                                };
+                            }
+                        }
+                    }
+
+                    // 產生縮圖
+                    Bitmap thumbnail = GenerateGroupsThumbnail(infos, 128);
+                    if (thumbnail != null)
+                    {
+                        using (var ms = new MemoryStream())
+                        {
+                            thumbnail.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                            fs3p.ThumbnailPng = ms.ToArray();
+                        }
+                        thumbnail.Dispose();
+                    }
+
+                    // 儲存到素材庫
+                    var library = new MaterialLibrary();
+                    string savedPath = library.SaveMaterial(fs3p);
+
+                    toolStripStatusLabel1.Text = $"已儲存素材: {dialog.MaterialName} ({fs3p.Layer4Items.Count} 個物件, {fs3p.Tiles.Count} 圖塊)";
+
+                    // 更新素材面板
+                    RefreshMaterialsList();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"儲存素材失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        // 產生多個群組的合併縮圖
+        private Bitmap GenerateGroupsThumbnail(List<GroupThumbnailInfo> infos, int maxSize)
+        {
+            if (infos == null || infos.Count == 0)
+                return null;
+
+            try
+            {
+                // 收集所有物件
+                var allObjects = new List<(S32Data s32, ObjectTile obj)>();
+                foreach (var info in infos)
+                {
+                    allObjects.AddRange(info.Objects);
+                }
+
+                if (allObjects.Count == 0)
+                    return null;
+
+                // 使用現有的群組縮圖生成方法
+                return GenerateGroupThumbnail(allObjects, maxSize);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         // 設定群組的 Layer5 設定（透明或消失）
