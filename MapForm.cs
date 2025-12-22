@@ -2213,7 +2213,19 @@ namespace L1FlyMapViewer
         }
 
         // 匯出地圖通行資料給伺服器使用（L1J 格式）
-        private void exportToolStripMenuItem_Click(object sender, EventArgs e)
+        private void exportL1JToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            ExportPassabilityData(isL1JFormat: true);
+        }
+
+        // 匯出地圖通行資料給伺服器使用（DIR 格式）
+        private void exportDIRToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            ExportPassabilityData(isL1JFormat: false);
+        }
+
+        // 通用匯出通行資料函數
+        private void ExportPassabilityData(bool isL1JFormat)
         {
             if (string.IsNullOrEmpty(_document.MapId) || !Share.MapDataList.ContainsKey(_document.MapId))
             {
@@ -2227,18 +2239,19 @@ namespace L1FlyMapViewer
                 return;
             }
 
+            string formatName = isL1JFormat ? "L1J" : "DIR";
             using (SaveFileDialog saveDialog = new SaveFileDialog())
             {
                 saveDialog.Filter = "文字檔 (*.txt)|*.txt";
                 saveDialog.FileName = $"{_document.MapId}.txt";
-                saveDialog.Title = "匯出地圖通行資料";
+                saveDialog.Title = $"匯出地圖通行資料 ({formatName} 格式)";
 
                 if (saveDialog.ShowDialog() == DialogResult.OK)
                 {
                     try
                     {
-                        ExportMapData(saveDialog.FileName);
-                        MessageBox.Show($"已成功匯出至：\n{saveDialog.FileName}", "匯出完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        ExportMapData(saveDialog.FileName, isL1JFormat);
+                        MessageBox.Show($"已成功匯出至：\n{saveDialog.FileName}\n格式: {formatName}", "匯出完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                     catch (Exception ex)
                     {
@@ -2254,7 +2267,8 @@ namespace L1FlyMapViewer
         // - 每個格子讀 4 bytes: [Attribute1, ?, Attribute2, ?]
         // - 迴圈是 64x64，tileList_t1 存 Attribute1，tileList_t3 存 Attribute2
         // - xLength = S32數量 * 64（不是 128！）
-        private void ExportMapData(string filePath)
+        // isL1JFormat: true = L1J 格式（經過轉換），false = DIR 格式（原始 8 方向）
+        private void ExportMapData(string filePath, bool isL1JFormat = true)
         {
             Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
 
@@ -2351,8 +2365,18 @@ namespace L1FlyMapViewer
                 }
             }
 
-            // 轉換為 L1J 格式
-            int[,] l1jData = FormatL1J(tileList, xLength, yLength);
+            // 根據格式選擇輸出資料
+            int[,] outputData;
+            if (isL1JFormat)
+            {
+                // L1J 格式：經過轉換的簡化格式
+                outputData = FormatL1J(tileList, xLength, yLength);
+            }
+            else
+            {
+                // DIR 格式：直接輸出原始 8 方向 + 區域類型
+                outputData = tileList;
+            }
 
             // 寫入檔案（與 MapTool 相同格式，不含座標範圍）
             using (StreamWriter writer = new StreamWriter(filePath, false, Encoding.UTF8))
@@ -2364,7 +2388,7 @@ namespace L1FlyMapViewer
                     for (int x = 0; x < xLength; x++)
                     {
                         if (x > 0) line.Append(",");
-                        line.Append(l1jData[x, y]);
+                        line.Append(outputData[x, y]);
                     }
                     writer.WriteLine(line.ToString());
                 }

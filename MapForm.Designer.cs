@@ -11,6 +11,8 @@ namespace L1FlyMapViewer
         private MenuStrip menuStrip1;
         private ToolStripMenuItem openToolStripMenuItem;
         private ToolStripMenuItem exportToolStripMenuItem;
+        private ToolStripMenuItem exportL1JToolStripMenuItem;
+        private ToolStripMenuItem exportDIRToolStripMenuItem;
         private ToolStripMenuItem importMaterialToolStripMenuItem;
         private ToolStripMenuItem importFs32ToNewMapToolStripMenuItem;
         private ToolStripMenuItem discordToolStripMenuItem;
@@ -151,6 +153,8 @@ namespace L1FlyMapViewer
             this.menuStrip1 = new MenuStrip();
             this.openToolStripMenuItem = new ToolStripMenuItem();
             this.exportToolStripMenuItem = new ToolStripMenuItem();
+            this.exportL1JToolStripMenuItem = new ToolStripMenuItem();
+            this.exportDIRToolStripMenuItem = new ToolStripMenuItem();
             this.importMaterialToolStripMenuItem = new ToolStripMenuItem();
             this.importFs32ToNewMapToolStripMenuItem = new ToolStripMenuItem();
             this.discordToolStripMenuItem = new ToolStripMenuItem();
@@ -340,13 +344,31 @@ namespace L1FlyMapViewer
             this.importFs32ToNewMapToolStripMenuItem.Click += new System.EventHandler(this.importFs32ToNewMapToolStripMenuItem_Click);
 
             //
-            // exportToolStripMenuItem
+            // exportToolStripMenuItem (下拉選單)
             //
+            this.exportToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] {
+                this.exportL1JToolStripMenuItem,
+                this.exportDIRToolStripMenuItem
+            });
             this.exportToolStripMenuItem.Name = "exportToolStripMenuItem";
-            this.exportToolStripMenuItem.Size = new Size(122, 20);
-            this.exportToolStripMenuItem.Text = "匯出地圖通行資料";
-            this.exportToolStripMenuItem.Visible = false;
-            this.exportToolStripMenuItem.Click += new System.EventHandler(this.exportToolStripMenuItem_Click);
+            this.exportToolStripMenuItem.Size = new Size(130, 20);
+            this.exportToolStripMenuItem.Text = "輸出伺服器通行txt";
+
+            //
+            // exportL1JToolStripMenuItem
+            //
+            this.exportL1JToolStripMenuItem.Name = "exportL1JToolStripMenuItem";
+            this.exportL1JToolStripMenuItem.Size = new Size(100, 22);
+            this.exportL1JToolStripMenuItem.Text = "L1J 格式";
+            this.exportL1JToolStripMenuItem.Click += new System.EventHandler(this.exportL1JToolStripMenuItem_Click);
+
+            //
+            // exportDIRToolStripMenuItem
+            //
+            this.exportDIRToolStripMenuItem.Name = "exportDIRToolStripMenuItem";
+            this.exportDIRToolStripMenuItem.Size = new Size(100, 22);
+            this.exportDIRToolStripMenuItem.Text = "DIR 格式";
+            this.exportDIRToolStripMenuItem.Click += new System.EventHandler(this.exportDIRToolStripMenuItem_Click);
 
             //
             // discordToolStripMenuItem
