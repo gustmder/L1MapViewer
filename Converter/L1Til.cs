@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace L1MapViewer.Converter {
     class L1Til {
@@ -18,6 +19,62 @@ namespace L1MapViewer.Converter {
             Hybrid,
             /// <summary>無法判斷</summary>
             Unknown
+        }
+
+        /// <summary>
+        /// Tile Blocks 容器，支援共用 block 優化
+        /// 多個 block index 可以指向相同的 byte[] 資料
+        /// </summary>
+        public class TileBlocks
+        {
+            private Dictionary<int, byte[]> _uniqueBlocks; // offset → data
+            private int[] _blockOffsets;                    // index → offset
+
+            public TileBlocks(int[] offsets, Dictionary<int, byte[]> uniqueBlocks)
+            {
+                _blockOffsets = offsets;
+                _uniqueBlocks = uniqueBlocks;
+            }
+
+            /// <summary>取得指定 index 的 block 資料</summary>
+            public byte[] Get(int index)
+            {
+                if (index < 0 || index >= _blockOffsets.Length)
+                    return null;
+                int offset = _blockOffsets[index];
+                return _uniqueBlocks.TryGetValue(offset, out var data) ? data : null;
+            }
+
+            /// <summary>Block 總數</summary>
+            public int Count => _blockOffsets.Length;
+
+            /// <summary>不重複的 block 數量</summary>
+            public int UniqueCount => _uniqueBlocks.Count;
+
+            /// <summary>取得所有不重複的 blocks（用於降級）</summary>
+            public IEnumerable<KeyValuePair<int, byte[]>> GetUniqueBlocks()
+                => _uniqueBlocks;
+
+            /// <summary>更新指定 offset 的 block 資料（降級後）</summary>
+            public void SetBlockData(int offset, byte[] newData)
+            {
+                if (_uniqueBlocks.ContainsKey(offset))
+                    _uniqueBlocks[offset] = newData;
+            }
+
+            /// <summary>取得所有 offsets（用於 BuildTil）</summary>
+            public int[] GetOffsets() => _blockOffsets;
+
+            /// <summary>轉換為 List（相容舊程式）</summary>
+            public List<byte[]> ToList()
+            {
+                var result = new List<byte[]>();
+                for (int i = 0; i < _blockOffsets.Length; i++)
+                {
+                    result.Add(Get(i));
+                }
+                return result;
+            }
         }
 
         /// <summary>
@@ -848,16 +905,83 @@ namespace L1MapViewer.Converter {
             if (!IsRemaster(tilData))
                 return tilData; // 已經是 Classic 版，不需縮小
 
-            var blocks = Parse(tilData);
-            var downscaledBlocks = new List<byte[]>();
+            var tileBlocks = ParseToTileBlocks(tilData);
+            if (tileBlocks == null)
+                return tilData;
 
-            foreach (var block in blocks)
+            // 只對不重複的 blocks 進行降級
+            foreach (var kvp in tileBlocks.GetUniqueBlocks().ToList())
             {
-                downscaledBlocks.Add(DownscaleBlock(block));
+                int offset = kvp.Key;
+                byte[] block = kvp.Value;
+                byte[] downscaled = DownscaleBlock(block);
+                tileBlocks.SetBlockData(offset, downscaled);
             }
 
-            // 重新組裝 til 檔案
-            return BuildTil(downscaledBlocks);
+            // 重新組裝 til 檔案（保留共用結構）
+            return BuildTilFromTileBlocks(tileBlocks);
+        }
+
+        /// <summary>
+        /// 從 TileBlocks 組裝 til 檔案（保留共用 block 結構）
+        /// </summary>
+        public static byte[] BuildTilFromTileBlocks(TileBlocks tileBlocks)
+        {
+            using (var ms = new MemoryStream())
+            using (var bw = new BinaryWriter(ms))
+            {
+                int[] originalOffsets = tileBlocks.GetOffsets();
+                int blockCount = originalOffsets.Length;
+
+                // 寫入 block 數量
+                bw.Write(blockCount);
+
+                // 建立 offset 到新 offset 的映射
+                var uniqueOffsets = originalOffsets.Distinct().OrderBy(x => x).ToList();
+                var offsetMapping = new Dictionary<int, int>(); // 舊 offset → 新 offset
+                var blockDataList = new List<byte[]>();
+
+                int newOffset = 0;
+                foreach (int oldOffset in uniqueOffsets)
+                {
+                    offsetMapping[oldOffset] = newOffset;
+                    byte[] data = null;
+                    // 找到使用這個 offset 的 block 資料
+                    for (int i = 0; i < blockCount; i++)
+                    {
+                        if (originalOffsets[i] == oldOffset)
+                        {
+                            data = tileBlocks.Get(i);
+                            break;
+                        }
+                    }
+                    if (data != null)
+                    {
+                        blockDataList.Add(data);
+                        newOffset += data.Length - 1; // -1 因為 Parse 多讀了 1 byte
+                    }
+                }
+
+                // 寫入每個 block 的 offset（使用映射後的新 offset）
+                for (int i = 0; i < blockCount; i++)
+                {
+                    int oldOffset = originalOffsets[i];
+                    int mappedOffset = offsetMapping[oldOffset];
+                    bw.Write(mappedOffset);
+                }
+                // 寫入結尾 offset
+                bw.Write(newOffset);
+
+                // 寫入不重複的 block 資料
+                foreach (var block in blockDataList)
+                {
+                    int writeLen = block.Length - 1;
+                    if (writeLen > 0)
+                        bw.Write(block, 0, writeLen);
+                }
+
+                return ms.ToArray();
+            }
         }
 
         /// <summary>
@@ -897,39 +1021,56 @@ namespace L1MapViewer.Converter {
 
         //畫大地圖用的(將.til檔案 拆成更小的單位)
         public static List<byte[]> Parse(byte[] srcData) {
-            List<byte[]> result = new List<byte[]>();
+            var tileBlocks = ParseToTileBlocks(srcData);
+            return tileBlocks?.ToList() ?? new List<byte[]>();
+        }
+
+        /// <summary>
+        /// 解析 til 資料為 TileBlocks（支援共用 block 優化）
+        /// </summary>
+        public static TileBlocks ParseToTileBlocks(byte[] srcData) {
             try {
                 using (BinaryReader br = new BinaryReader(new MemoryStream(srcData))) {
 
-                    // 取得Block數量. 
+                    // 取得Block數量
                     int nAllBlockCount = br.ReadInt32();
 
-                    int[] nsBlockOffset = new int[nAllBlockCount + 1];
-                    for (int i = 0; i <= nAllBlockCount; i++) {
-                        nsBlockOffset[i] = br.ReadInt32();// 載入Block的偏移位置.
+                    // 讀取所有 offset
+                    int[] nsBlockOffset = new int[nAllBlockCount];
+                    for (int i = 0; i < nAllBlockCount; i++) {
+                        nsBlockOffset[i] = br.ReadInt32();
                     }
-                   
+                    int endOffset = br.ReadInt32(); // 最後一個 offset（資料結尾）
+
                     int nCurPosition = (int)br.BaseStream.Position;
 
-                    // 載入Block的資料.
-                    for (int i = 0; i < nAllBlockCount; i++) {
-                        int nPosition = nCurPosition + nsBlockOffset[i];
-                        br.BaseStream.Seek(nPosition, SeekOrigin.Begin);
+                    // 找出所有不重複的 offset，並讀取對應的資料
+                    var uniqueOffsets = new SortedSet<int>(nsBlockOffset);
+                    uniqueOffsets.Add(endOffset); // 加入結尾 offset 用於計算最後一個 block 的大小
 
-                        int nSize = nsBlockOffset[i + 1] - nsBlockOffset[i];
-                        if (nSize <= 0) {
-                            nSize = srcData.Length - nsBlockOffset[i];
+                    var offsetList = uniqueOffsets.ToList();
+                    var uniqueBlocks = new Dictionary<int, byte[]>();
+
+                    for (int i = 0; i < offsetList.Count - 1; i++)
+                    {
+                        int offset = offsetList[i];
+                        int nextOffset = offsetList[i + 1];
+                        int nSize = nextOffset - offset;
+
+                        if (nSize > 0)
+                        {
+                            int nPosition = nCurPosition + offset;
+                            br.BaseStream.Seek(nPosition, SeekOrigin.Begin);
+                            byte[] data = br.ReadBytes(nSize + 1); // +1 與舊版相容
+                            uniqueBlocks[offset] = data;
                         }
-
-                        // int type = br.ReadByte();
-                        byte[] data = br.ReadBytes(nSize + 1);
-                        result.Add(data);
                     }
+
+                    return new TileBlocks(nsBlockOffset, uniqueBlocks);
                 }
             } catch {
-                // Utils.outputText("L1Til_Parse發生問題的檔案:" + logFileName, "Log.txt");
+                return null;
             }
-            return result;
         }
     }
 }
