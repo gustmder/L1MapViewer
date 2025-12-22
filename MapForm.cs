@@ -2319,8 +2319,9 @@ namespace L1FlyMapViewer
                         {
                             // Attribute1 對應 tileList_t1
                             // Attribute2 對應 tileList_t3
-                            tileList_t1[gx, gy] = attr.Attribute1;
-                            tileList_t3[gx, gy] = attr.Attribute2;
+                            // 需要經過 replaceException 處理（與 MapTool 相同）
+                            tileList_t1[gx, gy] = ReplaceException(attr.Attribute1);
+                            tileList_t3[gx, gy] = ReplaceException(attr.Attribute2);
                         }
                     }
                 }
@@ -2430,6 +2431,15 @@ namespace L1FlyMapViewer
             if (x < 1 || x >= xLen || y < 1 || y >= yLen) return false;
             return (t1[x, y] & 1) == 0 && (t1[x - 1, y] & 1) == 0 &&
                    (t3[x - 1, y] & 1) == 0 && (t3[x - 1, y - 1] & 1) == 0;
+        }
+
+        // 替換例外值（完全按照 MapTool 的 replaceException 邏輯）
+        // 某些特殊屬性值需要替換為 5
+        private int ReplaceException(int value)
+        {
+            if (value == 65 || value == 69 || value == 73 || value == 33 || value == 77)
+                return 5;
+            return value;
         }
 
         // 取得區域類型（完全按照 MapTool 的 getZone 邏輯）

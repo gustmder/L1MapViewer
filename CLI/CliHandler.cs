@@ -125,6 +125,8 @@ namespace L1MapViewer.CLI
                         return CmdExtractFs32Tile(cmdArgs);
                     case "downscale-tile":
                         return CmdDownscaleTile(cmdArgs);
+                    case "export-passability":
+                        return CmdExportPassability(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -182,6 +184,8 @@ L1MapViewer CLI - S32 檔案解析工具
   import-fs32 <fs32檔案> <目標地圖資料夾> [--replace]
                               匯入 fs32 到指定地圖（--replace 全部取代模式）
   check-fs32 <fs32檔案>       檢查 fs32 完整性（Tile 索引、Remaster/Classic 版本）
+  export-passability <地圖資料夾> <輸出.txt> [--dir]
+                              匯出地圖通行資料為 L1J/DIR 格式（預設 L1J）
   help                        顯示此幫助資訊
 
 範例:
@@ -5138,5 +5142,421 @@ L1MapViewer CLI - S32 檔案解析工具
         }
 
         // CmdBenchmarkCellFind, CmdBenchmarkMouseClick 已移至 Commands/BenchmarkCommands.cs
+
+        /// <summary>
+        /// export-passability 命令 - 匯出地圖通行資料為 L1J/DIR 格式
+        /// 完全按照 MapTool 的邏輯實作
+        /// </summary>
+        private static int CmdExportPassability(string[] args)
+        {
+            if (args.Length < 2)
+            {
+                Console.WriteLine("用法: -cli export-passability <地圖資料夾> <輸出.txt> [--dir]");
+                Console.WriteLine();
+                Console.WriteLine("參數:");
+                Console.WriteLine("  <地圖資料夾>  包含 S32 檔案的地圖資料夾");
+                Console.WriteLine("  <輸出.txt>    輸出檔案路徑");
+                Console.WriteLine("  --dir         使用 DIR 格式（預設 L1J 格式）");
+                Console.WriteLine();
+                Console.WriteLine("範例:");
+                Console.WriteLine("  -cli export-passability C:\\client\\map\\4 4.txt");
+                Console.WriteLine("  -cli export-passability C:\\client\\map\\4 4_dir.txt --dir");
+                return 1;
+            }
+
+            string mapFolder = args[0];
+            string outputPath = args[1];
+            bool isDirFormat = args.Any(a => a.ToLower() == "--dir");
+
+            if (!Directory.Exists(mapFolder))
+            {
+                Console.WriteLine($"錯誤: 地圖資料夾不存在: {mapFolder}");
+                return 1;
+            }
+
+            // 讀取所有 S32/SEG 檔案（S32 優先，與 MapTool 相同：每個區塊只處理一個檔案）
+            var allFiles = Directory.GetFiles(mapFolder, "*.s32")
+                .Concat(Directory.GetFiles(mapFolder, "*.seg"))
+                .ToList();
+
+            if (allFiles.Count == 0)
+            {
+                Console.WriteLine($"錯誤: 在 {mapFolder} 中找不到 S32/SEG 檔案");
+                return 1;
+            }
+
+            // 每個區塊只保留一個檔案，S32 優先
+            var blockFiles = new Dictionary<string, string>(); // baseName -> fullPath
+            foreach (var file in allFiles)
+            {
+                string baseName = Path.GetFileNameWithoutExtension(file).ToLower();
+                string ext = Path.GetExtension(file).ToLower();
+
+                if (baseName.Length == 8)
+                {
+                    if (!blockFiles.ContainsKey(baseName))
+                    {
+                        // 第一個檔案，直接加入
+                        blockFiles[baseName] = file;
+                    }
+                    else if (ext == ".s32")
+                    {
+                        // S32 優先，覆蓋已有的 SEG
+                        blockFiles[baseName] = file;
+                    }
+                    // 如果已有 S32，忽略 SEG
+                }
+            }
+
+            var s32Files = blockFiles.Values.ToList();
+
+            Console.WriteLine($"地圖資料夾: {mapFolder}");
+            Console.WriteLine($"找到 {s32Files.Count} 個區塊檔案（S32 優先）");
+            Console.WriteLine($"輸出格式: {(isDirFormat ? "DIR" : "L1J")}");
+
+            // 計算座標範圍（與 MapTool 相同方式）
+            int minX = ushort.MaxValue;
+            int maxX = 0;
+            int minY = ushort.MaxValue;
+            int maxY = 0;
+
+            var fileCoords = new Dictionary<string, (int x, int y)>();
+
+            foreach (var file in s32Files)
+            {
+                string name = Path.GetFileNameWithoutExtension(file).ToLower();
+                if (name.Length == 8)
+                {
+                    int x = Convert.ToInt32(name.Substring(0, 4), 16);
+                    int y = Convert.ToInt32(name.Substring(4, 4), 16);
+                    fileCoords[file] = (x, y);
+                    minX = Math.Min(minX, x);
+                    maxX = Math.Max(maxX, x);
+                    minY = Math.Min(minY, y);
+                    maxY = Math.Max(maxY, y);
+                }
+            }
+
+            // 計算維度（每個 S32 是 64x64）
+            int numBlocksX = maxX - minX + 1;
+            int numBlocksY = maxY - minY + 1;
+            int xLength = numBlocksX * 64;
+            int yLength = numBlocksY * 64;
+
+            // 計算遊戲座標範圍
+            int xEnd = (maxX - 32767) * 64 + 32767;
+            int yEnd = (maxY - 32767) * 64 + 32767;
+            int xBegin = xEnd - xLength + 1;
+            int yBegin = yEnd - yLength + 1;
+
+            Console.WriteLine($"座標範圍: X({xBegin}~{xEnd}), Y({yBegin}~{yEnd})");
+            Console.WriteLine($"陣列大小: {xLength} x {yLength}");
+
+            // 建立 tileList_t1 和 tileList_t3 陣列
+            int[,] tileList_t1 = new int[xLength, yLength];
+            int[,] tileList_t3 = new int[xLength, yLength];
+
+            // 初始化為不可通行（1 = 預設值，與 MapTool 相同）
+            for (int x = 0; x < xLength; x++)
+            {
+                for (int y = 0; y < yLength; y++)
+                {
+                    tileList_t1[x, y] = 1;
+                    tileList_t3[x, y] = 1;
+                }
+            }
+
+            // 讀取每個 S32/SEG 檔案
+            Console.WriteLine("讀取 S32/SEG 檔案...");
+            int fileCount = 0;
+            foreach (var file in s32Files)
+            {
+                if (!fileCoords.ContainsKey(file)) continue;
+
+                var (fx, fy) = fileCoords[file];
+                int pp = fx - minX;  // X 偏移（以 64 為單位）
+                int ppp = fy - minY; // Y 偏移（以 64 為單位）
+
+                byte[] data = File.ReadAllBytes(file);
+                string ext = Path.GetExtension(file).ToLower();
+
+                if (ext == ".s32")
+                {
+                    ReadS32ForPassability(data, pp, ppp, tileList_t1, tileList_t3);
+                }
+                else if (ext == ".seg")
+                {
+                    ReadSegForPassability(data, pp, ppp, tileList_t1, tileList_t3);
+                }
+
+                fileCount++;
+                if (fileCount % 100 == 0)
+                {
+                    Console.Write($"\r  已處理: {fileCount}/{s32Files.Count}");
+                }
+            }
+            Console.WriteLine($"\r  已處理: {fileCount}/{s32Files.Count}");
+
+            // 計算 8 方向通行性（與 MapTool 的 decryptData 相同）
+            Console.WriteLine("計算通行性...");
+            int[,] tileList = new int[xLength, yLength];
+
+            for (int x = 0; x < xLength; x++)
+            {
+                for (int y = 0; y < yLength; y++)
+                {
+                    if (x + 1 < xLength && y + 1 < yLength && x - 1 >= 0 && y - 1 >= 0)
+                    {
+                        // D0: 下方
+                        if ((tileList_t1[x, y + 1] & 1) == 0)
+                            tileList[x, y] += 1;
+                        // D4: 上方
+                        if ((tileList_t1[x, y] & 1) == 0)
+                            tileList[x, y] += 2;
+                        // D2: 左方
+                        if ((tileList_t3[x - 1, y] & 1) == 0)
+                            tileList[x, y] += 4;
+                        // D6: 右方
+                        if ((tileList_t3[x, y] & 1) == 0)
+                            tileList[x, y] += 8;
+
+                        // D1: 左下對角
+                        if (IsPassable_D1_Cli(tileList_t1, tileList_t3, x - 1, y + 1, xLength, yLength))
+                            tileList[x, y] += 16;
+                        // D3: 左上對角
+                        if (IsPassable_D3_Cli(tileList_t1, tileList_t3, x - 1, y - 1, xLength, yLength))
+                            tileList[x, y] += 32;
+                        // D5: 右上對角
+                        if (IsPassable_D5_Cli(tileList_t1, tileList_t3, x + 1, y - 1, xLength, yLength))
+                            tileList[x, y] += 64;
+                        // D7: 右下對角
+                        if (IsPassable_D7_Cli(tileList_t1, tileList_t3, x + 1, y + 1, xLength, yLength))
+                            tileList[x, y] += 128;
+
+                        // 區域類型
+                        tileList[x, y] += GetZone_Cli(tileList_t1[x, y]);
+                    }
+                }
+            }
+
+            // 根據格式選擇輸出資料
+            int[,] outputData;
+            if (isDirFormat)
+            {
+                outputData = tileList;
+            }
+            else
+            {
+                // L1J 格式轉換
+                outputData = FormatL1J_Cli(tileList, xLength, yLength);
+            }
+
+            // 寫入檔案（不帶 BOM，與 MapTool 相同）
+            Console.WriteLine($"寫入檔案: {outputPath}");
+            using (StreamWriter writer = new StreamWriter(outputPath, false, new UTF8Encoding(false)))
+            {
+                for (int y = 0; y < yLength; y++)
+                {
+                    StringBuilder line = new StringBuilder();
+                    for (int x = 0; x < xLength; x++)
+                    {
+                        if (x > 0) line.Append(",");
+                        line.Append(outputData[x, y]);
+                    }
+                    writer.WriteLine(line.ToString());
+                }
+            }
+
+            Console.WriteLine($"完成！已匯出 {xLength}x{yLength} 格子");
+            return 0;
+        }
+
+        /// <summary>
+        /// 讀取 S32 檔案的 Layer3 屬性（與 MapTool 的 readS32 相同）
+        /// </summary>
+        private static void ReadS32ForPassability(byte[] data, int pp, int ppp, int[,] t1, int[,] t3)
+        {
+            using (var ms = new MemoryStream(data))
+            using (var br = new BinaryReader(ms))
+            {
+                int offset = 32768; // 0x8000
+                br.BaseStream.Seek(offset, SeekOrigin.Begin);
+                int tileCount = br.ReadUInt16();
+
+                // 跳過 tile 資料，到達 Layer3
+                int layer3Offset = offset + tileCount * 6 + 2;
+                br.BaseStream.Seek(layer3Offset, SeekOrigin.Begin);
+
+                // 讀取 64x64 的 Layer3 資料
+                int num4 = 0;  // x counter
+                int num5 = -1; // y counter
+
+                while (true)
+                {
+                    if (num4 % 64 == 0)
+                    {
+                        num5++;
+                        num4 = 0;
+                    }
+
+                    if (num5 >= 64) break;
+
+                    int index1 = num4 + pp * 64;  // x coordinate
+                    int index2 = num5 + ppp * 64; // y coordinate
+
+                    // 讀取 4 bytes: [Attribute1, ?, Attribute2, ?]
+                    int attr1 = br.ReadByte();
+                    br.ReadByte(); // skip
+                    int attr2 = br.ReadByte();
+                    br.ReadByte(); // skip
+
+                    // 應用 replaceException（與 MapTool 相同）
+                    t1[index1, index2] = ReplaceException_Cli(attr1);
+                    t3[index1, index2] = ReplaceException_Cli(attr2);
+
+                    num4++;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 讀取 SEG 檔案的 Layer3 屬性（與 MapTool 的 readSeg 相同）
+        /// </summary>
+        private static void ReadSegForPassability(byte[] data, int pp, int ppp, int[,] t1, int[,] t3)
+        {
+            using (var ms = new MemoryStream(data))
+            using (var br = new BinaryReader(ms))
+            {
+                int offset = 16384; // 0x4000
+                br.BaseStream.Seek(offset, SeekOrigin.Begin);
+                int tileCount = br.ReadUInt16();
+
+                // 跳過 tile 資料，到達 Layer3
+                int layer3Offset = offset + tileCount * 4 + 2;
+                br.BaseStream.Seek(layer3Offset, SeekOrigin.Begin);
+
+                // 讀取 64x64 的 Layer3 資料
+                int num3 = 0;  // x counter
+                int num4 = -1; // y counter
+
+                while (true)
+                {
+                    if (num3 % 64 == 0)
+                    {
+                        num4++;
+                        num3 = 0;
+                    }
+
+                    if (num4 >= 64) break;
+
+                    int index1 = num3 + pp * 64;  // x coordinate
+                    int index2 = num4 + ppp * 64; // y coordinate
+
+                    // SEG 只讀取 2 bytes: [Attribute1, Attribute2]
+                    int attr1 = br.ReadByte();
+                    int attr2 = br.ReadByte();
+
+                    // 應用 replaceException（與 MapTool 相同）
+                    t1[index1, index2] = ReplaceException_Cli(attr1);
+                    t3[index1, index2] = ReplaceException_Cli(attr2);
+
+                    num3++;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 替換例外值（與 MapTool 的 replaceException 相同）
+        /// </summary>
+        private static int ReplaceException_Cli(int i)
+        {
+            if (i == 65 || i == 69 || i == 73 || i == 33 || i == 77)
+                return 5;
+            return i;
+        }
+
+        /// <summary>
+        /// 取得區域類型（與 MapTool 的 getZone 相同）
+        /// </summary>
+        private static int GetZone_Cli(int tileValue)
+        {
+            int zone = 256;
+            string hex = (tileValue & 0x0F).ToString("X1");
+
+            if (hex == "0" || hex == "1" || hex == "2" || hex == "3")
+                zone = 256;
+            else if (hex == "4" || hex == "5" || hex == "6" || hex == "7" ||
+                     hex == "C" || hex == "D" || hex == "E" || hex == "F")
+                zone = 512;
+            else if (hex == "8" || hex == "9" || hex == "A" || hex == "B")
+                zone = 1024;
+
+            return zone;
+        }
+
+        /// <summary>
+        /// L1J 格式轉換（與 MapTool 的 formate_L1J 相同）
+        /// </summary>
+        private static int[,] FormatL1J_Cli(int[,] tileList, int xLength, int yLength)
+        {
+            int[,] result = new int[xLength, yLength];
+
+            for (int y = 0; y < yLength; y++)
+            {
+                for (int x = 0; x < xLength; x++)
+                {
+                    int tile = tileList[x, y];
+
+                    if ((tile & 1) == 1 || (tile & 2) == 2)
+                        result[x, y] += 2;
+
+                    if ((tile & 4) == 4 || (tile & 8) == 8)
+                        result[x, y] += 1;
+
+                    if ((tile & 1) == 1 && (tile & 2) == 2)
+                        result[x, y] += 8;
+
+                    if ((tile & 4) == 4 && (tile & 8) == 8)
+                        result[x, y] += 4;
+
+                    if ((tile & 512) == 512)
+                        result[x, y] += 16;
+
+                    if ((tile & 1024) == 1024)
+                        result[x, y] += 32;
+                }
+            }
+
+            return result;
+        }
+
+        // 對角方向通行性判斷（與 MapTool 相同）
+        private static bool IsPassable_D1_Cli(int[,] t1, int[,] t3, int x, int y, int xLen, int yLen)
+        {
+            if (x < 0 || x + 1 >= xLen || y < 0 || y >= yLen || y - 1 < 0) return false;
+            return (t1[x, y] & 1) == 0 && (t1[x + 1, y] & 1) == 0 &&
+                   (t3[x + 1, y] & 1) == 0 && (t3[x + 1, y - 1] & 1) == 0;
+        }
+
+        private static bool IsPassable_D3_Cli(int[,] t1, int[,] t3, int x, int y, int xLen, int yLen)
+        {
+            if (x < 0 || x + 1 >= xLen || y < 0 || y + 1 >= yLen) return false;
+            return (t1[x, y + 1] & 1) == 0 && (t1[x + 1, y + 1] & 1) == 0 &&
+                   (t3[x, y] & 1) == 0 && (t3[x, y + 1] & 1) == 0;
+        }
+
+        private static bool IsPassable_D5_Cli(int[,] t1, int[,] t3, int x, int y, int xLen, int yLen)
+        {
+            if (x < 1 || x >= xLen || y < 0 || y + 1 >= yLen) return false;
+            return (t1[x, y + 1] & 1) == 0 && (t1[x - 1, y + 1] & 1) == 0 &&
+                   (t3[x - 1, y] & 1) == 0 && (t3[x - 1, y + 1] & 1) == 0;
+        }
+
+        private static bool IsPassable_D7_Cli(int[,] t1, int[,] t3, int x, int y, int xLen, int yLen)
+        {
+            if (x < 1 || x >= xLen || y < 1 || y >= yLen) return false;
+            return (t1[x, y] & 1) == 0 && (t1[x - 1, y] & 1) == 0 &&
+                   (t3[x - 1, y] & 1) == 0 && (t3[x - 1, y - 1] & 1) == 0;
+        }
     }
 }

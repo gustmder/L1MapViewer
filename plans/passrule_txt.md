@@ -13,6 +13,20 @@
 
 ### 屬性值例外處理
 
+在進行任何計算之前，必須先對屬性值進行例外處理。這些特殊值會被轉換為 5：
+
+| 原始值 | 二進位 | 十六進位 | 轉換後 |
+|--------|--------|----------|--------|
+| 33 | 00100001 | 0x21 | 5 |
+| 65 | 01000001 | 0x41 | 5 |
+| 69 | 01000101 | 0x45 | 5 |
+| 73 | 01001001 | 0x49 | 5 |
+| 77 | 01001101 | 0x4D | 5 |
+
+**重要**: 這會影響區域類型判斷！例如：
+- 65 (0x41) → last hex = "1" → 原本是一般區域
+- 轉換為 5 (0x05) → last hex = "5" → 變成安全區域
+
 ```csharp
 private int replaceException(int i)
 {
@@ -267,6 +281,7 @@ private void outputTxt(int[,] data, string path)
 | 功能 | 狀態 | 備註 |
 |------|------|------|
 | L1J 格式匯出 | ✅ 已實作 | `MapForm.ExportMapData()` |
-| DIR 格式匯出 | ❌ 未實作 | 需要添加 |
+| DIR 格式匯出 | ✅ 已實作 | `MapForm.ExportMapData(isL1JFormat: false)` |
 | DEBUG 格式匯出 | ❌ 未實作 | 低優先級 |
 | 座標範圍輸出 | ❌ 未實作 | `isWriteRange` 選項 |
+| 屬性值例外處理 | ✅ 已實作 | `MapForm.ReplaceException()` |
