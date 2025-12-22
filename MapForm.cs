@@ -2272,14 +2272,26 @@ namespace L1FlyMapViewer
         // isL1JFormat: true = L1J 格式（經過轉換），false = DIR 格式（原始 8 方向）
         private void ExportMapData(string filePath, bool isL1JFormat = true)
         {
-            Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
+            // 根據實際載入的 S32 檔案計算維度（與 CLI 和 MapTool 相同方式）
+            // nLinBeginX/Y 已經是 Layer3 座標（每區塊 64 格），不需要轉換
+            int minX = int.MaxValue, maxX = int.MinValue;
+            int minY = int.MaxValue, maxY = int.MinValue;
 
-            // MapTool 的維度計算：每個 S32 是 64x64
-            // 但我們的 Layer3 也是 64x64，所以維度是一樣的
-            int xLength = currentMap.nLinLengthX / 2;  // Layer3 的 X 維度 = Layer1 / 2
-            int yLength = currentMap.nLinLengthY;
-            int xBegin = currentMap.nLinBeginX;
-            int yBegin = currentMap.nLinBeginY;
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                int blockStartX = s32Data.SegInfo.nLinBeginX;  // 已是 Layer3 座標
+                int blockStartY = s32Data.SegInfo.nLinBeginY;
+
+                minX = Math.Min(minX, blockStartX);
+                maxX = Math.Max(maxX, blockStartX + 63);  // 區塊結束 = 起始 + 63
+                minY = Math.Min(minY, blockStartY);
+                maxY = Math.Max(maxY, blockStartY + 63);
+            }
+
+            int xLength = maxX - minX + 1;
+            int yLength = maxY - minY + 1;
+            int xBegin = minX;
+            int yBegin = minY;
 
             // 建立 tileList_t1 和 tileList_t3 陣列（對應 MapTool 的格式）
             // tileList_t1[x,y] = Layer3 的 Attribute1
@@ -2300,8 +2312,8 @@ namespace L1FlyMapViewer
             // 從 S32 資料填充 tileList
             foreach (var s32Data in _document.S32Files.Values)
             {
-                // 計算這個 S32 在地圖陣列中的偏移（以 64 為單位）
-                int offsetX = (s32Data.SegInfo.nLinBeginX - xBegin) / 2;  // Layer3 座標
+                // 計算這個 S32 在地圖陣列中的偏移
+                int offsetX = s32Data.SegInfo.nLinBeginX - xBegin;
                 int offsetY = s32Data.SegInfo.nLinBeginY - yBegin;
 
                 // Layer3 是 64x64
@@ -2381,8 +2393,8 @@ namespace L1FlyMapViewer
                 outputData = tileList;
             }
 
-            // 寫入檔案（與 MapTool 相同格式，不含座標範圍）
-            using (StreamWriter writer = new StreamWriter(filePath, false, Encoding.UTF8))
+            // 寫入檔案（與 MapTool 相同格式，不含座標範圍，不含 BOM）
+            using (StreamWriter writer = new StreamWriter(filePath, false, new System.Text.UTF8Encoding(false)))
             {
                 // 寫入資料（y 為行，x 為列）
                 for (int y = 0; y < yLength; y++)
