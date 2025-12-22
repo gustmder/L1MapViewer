@@ -115,6 +115,8 @@ namespace L1MapViewer.CLI
                         return CmdCheckFs32(cmdArgs);
                     case "extract-fs32-tile":
                         return CmdExtractFs32Tile(cmdArgs);
+                    case "downscale-tile":
+                        return CmdDownscaleTile(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -1490,6 +1492,158 @@ L1MapViewer CLI - S32 檔案解析工具
             {
                 Console.WriteLine($"  ... 還有 {blocks.Count - 10} 個 block");
             }
+            return 0;
+        }
+
+        /// <summary>
+        /// downscale-tile 命令 - 診斷並降級單一 Tile
+        /// </summary>
+        private static int CmdDownscaleTile(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: -cli downscale-tile <tileId|til檔案路徑> [輸出資料夾]");
+                Console.WriteLine();
+                Console.WriteLine("診斷並降級單一 Tile（從 Remaster 48x48 降為 Classic 24x24）");
+                Console.WriteLine();
+                Console.WriteLine("參數:");
+                Console.WriteLine("  <tileId>       從 Tile.pak 讀取的 TileId（需設定 LineagePath）");
+                Console.WriteLine("  <til檔案>      直接讀取 .til 檔案");
+                Console.WriteLine("  [輸出資料夾]   可選，預設為目前目錄");
+                Console.WriteLine();
+                Console.WriteLine("範例:");
+                Console.WriteLine("  downscale-tile 4703");
+                Console.WriteLine("  downscale-tile C:\\tiles\\4703.til C:\\output");
+                return 1;
+            }
+
+            string input = args[0];
+            string outputFolder = args.Length >= 2 ? args[1] : Directory.GetCurrentDirectory();
+            byte[] tilData = null;
+            int tileId = 0;
+
+            // 判斷是 tileId 還是檔案路徑
+            if (int.TryParse(input, out tileId))
+            {
+                // 從 pak 讀取
+                Console.WriteLine($"=== 降級 Tile {tileId} ===");
+                tilData = L1PakReader.UnPack("Tile", $"{tileId}.til");
+                if (tilData == null)
+                {
+                    Console.WriteLine($"錯誤: 無法從 Tile.pak 讀取 {tileId}.til");
+                    return 1;
+                }
+                Console.WriteLine($"來源: Tile.pak");
+            }
+            else if (File.Exists(input))
+            {
+                // 從檔案讀取
+                tilData = File.ReadAllBytes(input);
+                tileId = 0;
+                string fileName = Path.GetFileNameWithoutExtension(input);
+                int.TryParse(fileName, out tileId);
+                Console.WriteLine($"=== 降級 Tile ===");
+                Console.WriteLine($"來源: {input}");
+            }
+            else
+            {
+                Console.WriteLine($"錯誤: 找不到檔案或無效的 TileId: {input}");
+                return 1;
+            }
+
+            Console.WriteLine($"原始大小: {tilData.Length} bytes");
+            Console.WriteLine();
+
+            // === 診斷 GetVersion ===
+            Console.WriteLine("=== GetVersion 診斷 ===");
+
+            int blockCount = tilData.Length >= 4 ? BitConverter.ToInt32(tilData, 0) : 0;
+            Console.WriteLine($"Block 數量: {blockCount}");
+
+            if (tilData.Length >= 12)
+            {
+                int offset0 = BitConverter.ToInt32(tilData, 4);
+                int offset1 = BitConverter.ToInt32(tilData, 8);
+                int firstBlockSize = offset1 - offset0;
+                Console.WriteLine($"第一個 Block 大小: {firstBlockSize} bytes");
+
+                // 判斷邏輯
+                if (firstBlockSize >= 1800 && firstBlockSize <= 3500)
+                {
+                    Console.WriteLine($"  → 1800 <= {firstBlockSize} <= 3500 → Remaster");
+                }
+                else if (firstBlockSize >= 10 && firstBlockSize <= 1800)
+                {
+                    Console.WriteLine($"  → 10 <= {firstBlockSize} <= 1800 → 需檢查所有 blocks");
+                }
+                else
+                {
+                    Console.WriteLine($"  → {firstBlockSize} 超出範圍 (10-3500) → Unknown ← 問題在這!");
+                }
+            }
+
+            var version = L1Til.GetVersion(tilData);
+            bool isRemaster = L1Til.IsRemaster(tilData);
+            Console.WriteLine($"GetVersion 結果: {version}");
+            Console.WriteLine($"IsRemaster: {isRemaster}");
+            Console.WriteLine();
+
+            // === Block 分析 ===
+            Console.WriteLine("=== Block 分析 ===");
+            var blocks = L1Til.Parse(tilData);
+            var (classic, remaster, hybrid, unknown) = L1Til.AnalyzeTilBlocks(tilData);
+            Console.WriteLine($"  24x24 (Classic):  {classic}");
+            Console.WriteLine($"  48x48 (Remaster): {remaster}");
+            Console.WriteLine($"  48x48 (Hybrid):   {hybrid}");
+            Console.WriteLine($"  Unknown:          {unknown}");
+            Console.WriteLine();
+
+            // 顯示前幾個 block
+            Console.WriteLine("前 5 個 Block:");
+            for (int i = 0; i < Math.Min(blocks.Count, 5); i++)
+            {
+                var analysis = L1Til.AnalyzeBlock(blocks[i]);
+                if (analysis.IsSimpleDiamond)
+                {
+                    Console.WriteLine($"  [{i:D3}] type={analysis.Type}, size={analysis.Size}b, format={analysis.Format}");
+                }
+                else
+                {
+                    Console.WriteLine($"  [{i:D3}] type={analysis.Type}, size={analysis.Size}b, " +
+                        $"offset=({analysis.XOffset},{analysis.YOffset}), len=({analysis.XxLen},{analysis.YLen}), " +
+                        $"max=({analysis.MaxX},{analysis.MaxY}), format={analysis.Format}");
+                }
+            }
+            Console.WriteLine();
+
+            // === 嘗試降級 ===
+            Console.WriteLine("=== 嘗試降級 ===");
+            if (!isRemaster)
+            {
+                Console.WriteLine("IsRemaster=false，不會進行降級");
+                Console.WriteLine("這就是為什麼這個 tile 沒有被降級!");
+                return 0;
+            }
+
+            byte[] downscaled = L1Til.DownscaleTil(tilData);
+            Console.WriteLine($"降級後大小: {downscaled.Length} bytes");
+
+            var newVersion = L1Til.GetVersion(downscaled);
+            var (newClassic, newRemaster, newHybrid, newUnknown) = L1Til.AnalyzeTilBlocks(downscaled);
+            Console.WriteLine($"降級後版本: {newVersion}");
+            Console.WriteLine($"降級後 Block 分析:");
+            Console.WriteLine($"  24x24 (Classic):  {newClassic}");
+            Console.WriteLine($"  48x48 (Remaster): {newRemaster}");
+            Console.WriteLine($"  48x48 (Hybrid):   {newHybrid}");
+            Console.WriteLine($"  Unknown:          {newUnknown}");
+
+            // 輸出檔案
+            Directory.CreateDirectory(outputFolder);
+            string outputPath = Path.Combine(outputFolder, $"{tileId}_downscaled.til");
+            File.WriteAllBytes(outputPath, downscaled);
+            Console.WriteLine();
+            Console.WriteLine($"已輸出: {outputPath}");
+
             return 0;
         }
 
