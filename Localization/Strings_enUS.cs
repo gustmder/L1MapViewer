@@ -399,6 +399,7 @@ namespace L1MapViewer.Localization
             { "Export_Layer4", "Layer4 Objects" },
             { "Export_IncludeTiles", "Include Tile Data" },
             { "Export_IncludeLayer5Events", "Include Layer5 Events (with Layer4 Objects)" },
+            { "Export_StripLayer8Ext", "Remove Layer8 Extended Data" },
             { "Export_Export", "Export" },
 
             // === Material Browser Additional ===

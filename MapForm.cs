@@ -2891,8 +2891,8 @@ namespace L1FlyMapViewer
                         return;
                     }
 
-                    // 檢查異常（在選擇儲存位置之前）
-                    if (!CheckLayer5IssuesAndConfirm(tempDocument.S32Files, "匯出", checkTileLimit: false))
+                    // 檢查異常（在選擇儲存位置之前，若會移除 L8 擴展則不檢查）
+                    if (!CheckLayer5IssuesAndConfirm(tempDocument.S32Files, "匯出", checkTileLimit: false, checkLayer8Extended: !dialog.StripLayer8Ext))
                         return;
 
                     // 選擇儲存位置
@@ -4393,13 +4393,13 @@ namespace L1FlyMapViewer
                 return;
             }
 
-            // 檢查異常（匯出不檢查 Tile 上限）
-            if (!CheckLayer5IssuesAndConfirm(_document.S32Files, "匯出", checkTileLimit: false))
-                return;
-
             using (var dialog = new L1MapViewer.Forms.ExportOptionsDialog(isFs3p: false, hasSelection: false))
             {
                 if (dialog.ShowDialog() != DialogResult.OK)
+                    return;
+
+                // 檢查異常（匯出不檢查 Tile 上限，若會移除 L8 擴展則不檢查）
+                if (!CheckLayer5IssuesAndConfirm(_document.S32Files, "匯出", checkTileLimit: false, checkLayer8Extended: !dialog.StripLayer8Ext))
                     return;
 
                 using (var saveDialog = new SaveFileDialog())
@@ -4484,13 +4484,13 @@ namespace L1FlyMapViewer
                 return;
             }
 
-            // 檢查異常（匯出不檢查 Tile 上限）
-            if (!CheckLayer5IssuesAndConfirm(checkedS32s, "匯出", checkTileLimit: false))
-                return;
-
             using (var dialog = new L1MapViewer.Forms.ExportOptionsDialog(isFs3p: false, hasSelection: true))
             {
                 if (dialog.ShowDialog() != DialogResult.OK)
+                    return;
+
+                // 檢查異常（匯出不檢查 Tile 上限，若會移除 L8 擴展則不檢查）
+                if (!CheckLayer5IssuesAndConfirm(checkedS32s, "匯出", checkTileLimit: false, checkLayer8Extended: !dialog.StripLayer8Ext))
                     return;
 
                 using (var saveDialog = new SaveFileDialog())
@@ -9590,13 +9590,13 @@ namespace L1FlyMapViewer
                 }
             }
 
-            // 檢查異常（匯出不檢查 Tile 上限）
-            if (!CheckLayer5IssuesAndConfirm(involvedS32s, "匯出", checkTileLimit: false))
-                return;
-
             using (var dialog = new L1MapViewer.Forms.ExportOptionsDialog(isFs3p: false, hasSelection: true))
             {
                 if (dialog.ShowDialog() != DialogResult.OK)
+                    return;
+
+                // 檢查異常（匯出不檢查 Tile 上限，若會移除 L8 擴展則不檢查）
+                if (!CheckLayer5IssuesAndConfirm(involvedS32s, "匯出", checkTileLimit: false, checkLayer8Extended: !dialog.StripLayer8Ext))
                     return;
 
                 using (var saveDialog = new SaveFileDialog())
@@ -20549,8 +20549,9 @@ namespace L1FlyMapViewer
         /// <param name="s32Files">要檢查的 S32 檔案字典</param>
         /// <param name="operationName">操作名稱（用於顯示訊息）</param>
         /// <param name="checkTileLimit">是否檢查 Tile 超過上限（匯出時不需要）</param>
+        /// <param name="checkLayer8Extended">是否檢查 Layer8 擴展格式（若會移除則不需要）</param>
         /// <returns>true = 繼續操作, false = 取消操作</returns>
-        private bool CheckLayer5IssuesAndConfirm(Dictionary<string, S32Data> s32Files, string operationName, bool checkTileLimit = true)
+        private bool CheckLayer5IssuesAndConfirm(Dictionary<string, S32Data> s32Files, string operationName, bool checkTileLimit = true, bool checkLayer8Extended = true)
         {
             if (s32Files == null || s32Files.Count == 0)
                 return true;
@@ -20598,13 +20599,16 @@ namespace L1FlyMapViewer
                     totalIssues += invalidTiles.Count;
                 }
 
-                // 3. Layer8 擴展格式檢查
-                var l8Extended = validS32Files.Where(kvp => kvp.Value.Layer8HasExtendedData).ToList();
-                if (l8Extended.Count > 0)
+                // 3. Layer8 擴展格式檢查（若會移除則不需要檢查）
+                if (checkLayer8Extended)
                 {
-                    int totalL8Items = l8Extended.Sum(kvp => kvp.Value.Layer8.Count);
-                    msgParts.Add($"• {l8Extended.Count} 個 S32 使用 Layer8 擴展格式（共 {totalL8Items} 個項目，可能導致閃退）");
-                    totalIssues += l8Extended.Count;
+                    var l8Extended = validS32Files.Where(kvp => kvp.Value.Layer8HasExtendedData).ToList();
+                    if (l8Extended.Count > 0)
+                    {
+                        int totalL8Items = l8Extended.Sum(kvp => kvp.Value.Layer8.Count);
+                        msgParts.Add($"• {l8Extended.Count} 個 S32 使用 Layer8 擴展格式（共 {totalL8Items} 個項目，可能導致閃退）");
+                        totalIssues += l8Extended.Count;
+                    }
                 }
 
                 // 4. Tile 超過上限檢查（匯出時不需要）

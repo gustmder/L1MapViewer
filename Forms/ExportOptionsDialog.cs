@@ -387,6 +387,8 @@ namespace L1MapViewer.Forms
             cbIncludeTiles.Text = LocalizationManager.L("Export_IncludeTiles");
             if (cbIncludeLayer5 != null)
                 cbIncludeLayer5.Text = LocalizationManager.L("Export_IncludeLayer5Events");
+            if (cbStripL8Ext != null)
+                cbStripL8Ext.Text = LocalizationManager.L("Export_StripLayer8Ext");
 
             // Buttons
             btnExport.Text = _isFs3p ? LocalizationManager.L("Button_Save") : LocalizationManager.L("Export_Export");
