@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using L1MapViewer;
 using L1MapViewer.CLI;
+using L1MapViewer.Controls;
 using L1MapViewer.Converter;
 using L1MapViewer.Helper;
 using L1MapViewer.Localization;
@@ -427,9 +428,18 @@ namespace L1FlyMapViewer
             typeof(Panel).InvokeMember("DoubleBuffered",
                 System.Reflection.BindingFlags.SetProperty | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
                 null, this.s32MapPanel, new object[] { true });
-            typeof(PictureBox).InvokeMember("DoubleBuffered",
-                System.Reflection.BindingFlags.SetProperty | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
-                null, this.s32PictureBox, new object[] { true });
+            // MapViewerControl 已內建雙緩衝，不需要額外設定
+
+            // 設定共享的 ViewState
+            _mapViewerControl.SetViewState(_viewState);
+
+            // 訂閱 MapViewerControl 事件
+            _mapViewerControl.MapMouseDown += MapViewerControl_MapMouseDown;
+            _mapViewerControl.MapMouseMove += MapViewerControl_MapMouseMove;
+            _mapViewerControl.MapMouseUp += MapViewerControl_MapMouseUp;
+            _mapViewerControl.PaintOverlay += MapViewerControl_PaintOverlay;
+            _mapViewerControl.CoordinateChanged += MapViewerControl_CoordinateChanged;
+            _mapViewerControl.RenderCompleted += MapViewerControl_RenderCompleted;
 
             // 拖曳移動視圖時更新小地圖（使用防抖避免過度更新）
             // 注意：現在使用中鍵拖曳移動視圖，不再使用 Panel AutoScroll
@@ -696,7 +706,7 @@ namespace L1FlyMapViewer
                 {
                     _editState.PassabilityPolygonPoints.Clear();
                     _editState.IsDrawingPassabilityPolygon = false;
-                    s32PictureBox.Invalidate();
+                    _mapViewerControl.Refresh();
                     this.toolStripStatusLabel1.Text = "已取消多邊形繪製";
                 }
                 // 取消素材貼上模式
@@ -786,7 +796,7 @@ namespace L1FlyMapViewer
             selectedRegion = new Rectangle();
             copyRegionBounds = new Rectangle();
             _editState.SelectedCells.Clear();
-            s32PictureBox.Invalidate();
+            _mapViewerControl.Refresh();
         }
 
         // 複製 Layer4 物件
@@ -1148,7 +1158,7 @@ namespace L1FlyMapViewer
             selectedRegion = new Rectangle();
             copyRegionBounds = new Rectangle();
             _editState.SelectedCells.Clear();
-            s32PictureBox.Invalidate();
+            _mapViewerControl.Refresh();
         }
 
         // 貼上選取區域
@@ -1566,7 +1576,7 @@ namespace L1FlyMapViewer
             selectedRegion = new Rectangle();
             copyRegionBounds = new Rectangle();
             _editState.SelectedCells.Clear();
-            s32PictureBox.Invalidate();
+            _mapViewerControl.Refresh();
             this.toolStripStatusLabel1.Text = "已取消複製/貼上模式";
         }
 
@@ -3645,8 +3655,8 @@ namespace L1FlyMapViewer
             try
             {
                 // 使用 ViewState 的地圖大小
-                int pictureWidth = _viewState.MapWidth > 0 ? _viewState.MapWidth : this.s32PictureBox.Width;
-                int pictureHeight = _viewState.MapHeight > 0 ? _viewState.MapHeight : this.s32PictureBox.Height;
+                int pictureWidth = _viewState.MapWidth > 0 ? _viewState.MapWidth : this._mapViewerControl.Width;
+                int pictureHeight = _viewState.MapHeight > 0 ? _viewState.MapHeight : this._mapViewerControl.Height;
 
                 if (pictureWidth <= 0 || pictureHeight <= 0)
                     return;
@@ -3700,7 +3710,7 @@ namespace L1FlyMapViewer
                 else
                 {
                     // 拖拽時只更新小地圖紅框位置和重繪（快速繪製）
-                    s32PictureBox.Invalidate();
+                    _mapViewerControl.Refresh();
                     UpdateMiniMapRedBox();
                 }
             }
@@ -3719,8 +3729,8 @@ namespace L1FlyMapViewer
                 try
                 {
                     // 使用 ViewState 的地圖大小
-                    int pictureWidth = _viewState.MapWidth > 0 ? _viewState.MapWidth : this.s32PictureBox.Width;
-                    int pictureHeight = _viewState.MapHeight > 0 ? _viewState.MapHeight : this.s32PictureBox.Height;
+                    int pictureWidth = _viewState.MapWidth > 0 ? _viewState.MapWidth : this._mapViewerControl.Width;
+                    int pictureHeight = _viewState.MapHeight > 0 ? _viewState.MapHeight : this._mapViewerControl.Height;
 
                     if (pictureWidth <= 0 || pictureHeight <= 0)
                         return;
@@ -4214,7 +4224,14 @@ namespace L1FlyMapViewer
                     phaseStopwatch.Restart();
                     if (_document.S32Files.Count > 0)
                     {
+                        // 同步 CheckedS32Files 到 MapDocument
+                        SyncCheckedS32FilesToDocument();
+
+                        // 使用舊的渲染（MapViewerControl 整合尚未完成）
                         RenderS32Map();
+
+                        // TODO: 完成 MapViewerControl 整合後改用這個
+                        // _mapViewerControl.LoadMap(_document);
                     }
                     long viewportRenderMs = phaseStopwatch.ElapsedMilliseconds;
 
@@ -6232,9 +6249,7 @@ namespace L1FlyMapViewer
             // 複製需要的資料（避免跨執行緒存取）
             var s32FilesSnapshot = _document.S32Files.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
-            // 先設定 PictureBox（讓 UI 立即反應）
-            s32PictureBox.Size = new Size(panelWidth, panelHeight);
-            s32PictureBox.Location = new Point(0, 0);
+            // MapViewerControl 使用 Dock=Fill，不需要手動設定大小
             s32MapPanel.AutoScroll = false;
 
             // 不使用增量渲染，每次完整重新渲染（避免多執行緒 bitmap 存取問題）
@@ -6503,22 +6518,13 @@ namespace L1FlyMapViewer
 
                         // 保存渲染結果元數據
                         _viewState.SetRenderResult(worldRect.X, worldRect.Y, worldRect.Width, worldRect.Height, _viewState.ZoomLevel);
-
-                        // 釋放舊的 Viewport Bitmap（加鎖保護）
-                        var lockSw = Stopwatch.StartNew();
-                        lock (_viewportBitmapLock)
-                        {
-                            if (_viewportBitmap != null)
-                                _viewportBitmap.Dispose();
-                            _viewportBitmap = viewportBitmap;
-                        }
-                        lockSw.Stop();
+                        Console.WriteLine($"[MapForm.Render] SetRenderResult: origin=({worldRect.X},{worldRect.Y}), size=({worldRect.Width},{worldRect.Height}), zoom={_viewState.ZoomLevel}, ViewState.hashcode={_viewState.GetHashCode()}");
 
                         invokeSw.Stop();
-                        LogPerf($"[RENDER-COMPLETE] size={viewportBitmap.Width}x{viewportBitmap.Height}, lockTime={lockSw.ElapsedMilliseconds}ms, invokeTime={invokeSw.ElapsedMilliseconds}ms");
+                        LogPerf($"[RENDER-COMPLETE] size={viewportBitmap.Width}x{viewportBitmap.Height}, invokeTime={invokeSw.ElapsedMilliseconds}ms");
 
-                        // 強制重繪
-                        s32PictureBox.Invalidate();
+                        // 傳遞 bitmap 給 MapViewerControl（MapViewerControl 取得所有權並負責 dispose）
+                        _mapViewerControl.SetExternalBitmap(viewportBitmap);
                     });
                 }
                 catch
@@ -6540,7 +6546,7 @@ namespace L1FlyMapViewer
             // 拖曳中不重新渲染，只更新顯示
             if (isMainMapDragging)
             {
-                s32PictureBox.Invalidate();
+                _mapViewerControl.Refresh();
                 return;
             }
 
@@ -6561,7 +6567,7 @@ namespace L1FlyMapViewer
             else
             {
                 // 只需要重繪（不需要重新渲染）
-                s32PictureBox.Invalidate();
+                _mapViewerControl.Refresh();
             }
         }
 
@@ -6592,6 +6598,22 @@ namespace L1FlyMapViewer
 
             // 其他情況直接渲染（不快取）
             return RenderS32Block(s32Data, showLayer1, showLayer2, showLayer4);
+        }
+
+        /// <summary>
+        /// 同步 _checkedS32Files 到 _document.CheckedS32Files，並更新地圖尺寸
+        /// </summary>
+        private void SyncCheckedS32FilesToDocument()
+        {
+            // 同步 checked files
+            _document.CheckedS32Files.Clear();
+            foreach (var filePath in _checkedS32Files)
+            {
+                _document.CheckedS32Files.Add(filePath);
+            }
+
+            // 同步地圖尺寸
+            _document.SetMapPixelSize(_viewState.MapWidth, _viewState.MapHeight);
         }
 
         /// <summary>
@@ -8733,6 +8755,119 @@ namespace L1FlyMapViewer
             return placeholder;
         }
 
+        #region MapViewerControl 事件處理
+
+        // MapViewerControl 滑鼠按下事件 - 轉發給編輯處理
+        private void MapViewerControl_MapMouseDown(object sender, MapMouseEventArgs e)
+        {
+            // 使用 MapViewerControl 提供的世界座標，轉換回螢幕座標給現有邏輯
+            var screenLocation = _mapViewerControl.WorldToScreen(e.WorldLocation);
+            var me = new MouseEventArgs(e.Button, 1, screenLocation.X, screenLocation.Y, e.Delta);
+            s32PictureBox_MouseDown(sender, me);
+        }
+
+        // MapViewerControl 滑鼠移動事件 - 轉發給編輯處理
+        private void MapViewerControl_MapMouseMove(object sender, MapMouseEventArgs e)
+        {
+            var screenLocation = _mapViewerControl.WorldToScreen(e.WorldLocation);
+            var me = new MouseEventArgs(e.Button, 0, screenLocation.X, screenLocation.Y, e.Delta);
+            s32PictureBox_MouseMove(sender, me);
+        }
+
+        // MapViewerControl 滑鼠放開事件 - 轉發給編輯處理
+        private void MapViewerControl_MapMouseUp(object sender, MapMouseEventArgs e)
+        {
+            var screenLocation = _mapViewerControl.WorldToScreen(e.WorldLocation);
+            var me = new MouseEventArgs(e.Button, 0, screenLocation.X, screenLocation.Y, e.Delta);
+            s32PictureBox_MouseUp(sender, me);
+        }
+
+        // MapViewerControl 繪製覆蓋層 - 繪製選取框、多邊形等
+        private void MapViewerControl_PaintOverlay(object sender, PaintEventArgs e)
+        {
+            // 轉發給原有的 Paint 處理（跳過 bitmap 繪製部分，只繪製編輯層）
+            DrawEditingOverlay(e.Graphics);
+        }
+
+        // MapViewerControl 座標變更事件 - 更新狀態列
+        private void MapViewerControl_CoordinateChanged(object sender, CoordinateChangedEventArgs e)
+        {
+            this.toolStripStatusLabel2.Text = $"座標: ({e.GameX}, {e.GameY})";
+        }
+
+        // MapViewerControl 渲染完成事件
+        private void MapViewerControl_RenderCompleted(object sender, RenderCompletedEventArgs e)
+        {
+            // 可選：更新渲染時間顯示
+            // LogPerf($"[RENDER-COMPLETE] {e.RenderTimeMs}ms");
+        }
+
+        // 繪製編輯覆蓋層（從 s32PictureBox_Paint 中提取）
+        private void DrawEditingOverlay(Graphics g)
+        {
+            // 通行性編輯模式：繪製多邊形
+            if (_editState.IsDrawingPassabilityPolygon && _editState.PassabilityPolygonPoints.Count > 0)
+            {
+                Color polygonColor = currentPassableEditMode == PassableEditMode.SetPassable ? Color.LimeGreen : Color.Red;
+
+                using (Pen pen = new Pen(polygonColor, 3))
+                {
+                    for (int i = 0; i < _editState.PassabilityPolygonPoints.Count - 1; i++)
+                    {
+                        g.DrawLine(pen, _editState.PassabilityPolygonPoints[i], _editState.PassabilityPolygonPoints[i + 1]);
+                    }
+                    if (_editState.PassabilityPolygonPoints.Count >= 3)
+                    {
+                        using (Pen dashPen = new Pen(polygonColor, 2) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash })
+                        {
+                            g.DrawLine(dashPen, _editState.PassabilityPolygonPoints[_editState.PassabilityPolygonPoints.Count - 1], _editState.PassabilityPolygonPoints[0]);
+                        }
+                    }
+                }
+
+                using (SolidBrush brush = new SolidBrush(polygonColor))
+                {
+                    foreach (var pt in _editState.PassabilityPolygonPoints)
+                    {
+                        g.FillEllipse(brush, pt.X - 5, pt.Y - 5, 10, 10);
+                    }
+                }
+
+                if (_editState.PassabilityPolygonPoints.Count >= 3)
+                {
+                    using (SolidBrush fillBrush = new SolidBrush(Color.FromArgb(50, polygonColor)))
+                    {
+                        g.FillPolygon(fillBrush, _editState.PassabilityPolygonPoints.ToArray());
+                    }
+                }
+                return;
+            }
+
+            // 有選中的格子時，繪製對齊格線的菱形選取框
+            if (_editState.SelectedCells.Count > 0)
+            {
+                Color color = isSelectingRegion ? Color.Green : Color.Orange;
+                DrawSelectedCells(g, _editState.SelectedCells, color);
+
+                if (isSelectingRegion)
+                {
+                    string info = $"選取 {_editState.SelectedCells.Count} 格";
+                    using (Font font = new Font("Arial", 10, FontStyle.Bold))
+                    using (SolidBrush bgBrush = new SolidBrush(Color.FromArgb(180, Color.Black)))
+                    using (SolidBrush textBrush = new SolidBrush(Color.White))
+                    {
+                        SizeF textSize = g.MeasureString(info, font);
+                        float textX = regionEndPoint.X + 15;
+                        float textY = regionEndPoint.Y - 20;
+                        g.FillRectangle(bgBrush, textX - 2, textY - 2, textSize.Width + 4, textSize.Height + 4);
+                        g.DrawString(info, font, textBrush, textX, textY);
+                    }
+                }
+            }
+        }
+
+        #endregion
+
         // S32 地圖點擊事件 - 更新高亮和狀態列
         private void s32PictureBox_MouseClick(object sender, MouseEventArgs e)
         {
@@ -9376,7 +9511,7 @@ namespace L1FlyMapViewer
                 mainMapDragStartPoint = e.Location;
                 // 使用 ViewState 的捲動位置
                 mainMapDragStartScroll = new Point(_viewState.ScrollX, _viewState.ScrollY);
-                this.s32PictureBox.Cursor = Cursors.SizeAll;
+                this._mapViewerControl.Cursor = Cursors.SizeAll;
 
                 // 停止渲染計時器，避免拖曳中觸發新渲染
                 dragRenderTimer.Stop();
@@ -9410,7 +9545,7 @@ namespace L1FlyMapViewer
             {
                 _editState.IsDrawingPassabilityPolygon = true;
                 _editState.PassabilityPolygonPoints.Add(e.Location);
-                s32PictureBox.Invalidate();
+                _mapViewerControl.Refresh();
                 this.toolStripStatusLabel1.Text = $"多邊形頂點: {_editState.PassabilityPolygonPoints.Count} 個 (Ctrl+左鍵繼續新增，右鍵完成)";
                 return;
             }
@@ -9422,7 +9557,7 @@ namespace L1FlyMapViewer
                 SetPolygonPassable(_editState.PassabilityPolygonPoints, currentPassableEditMode == PassableEditMode.SetPassable);
                 _editState.PassabilityPolygonPoints.Clear();
                 _editState.IsDrawingPassabilityPolygon = false;
-                s32PictureBox.Invalidate();
+                _mapViewerControl.Refresh();
                 return;
             }
             // 右鍵取消多邊形繪製（頂點不足）
@@ -9430,7 +9565,7 @@ namespace L1FlyMapViewer
             {
                 _editState.PassabilityPolygonPoints.Clear();
                 _editState.IsDrawingPassabilityPolygon = false;
-                s32PictureBox.Invalidate();
+                _mapViewerControl.Refresh();
                 this.toolStripStatusLabel1.Text = "已取消多邊形繪製";
                 return;
             }
@@ -9477,7 +9612,7 @@ namespace L1FlyMapViewer
                 _viewState.SetScrollSilent(newScrollX, newScrollY);
 
                 // 標記需要重繪（讓 OS 批次處理 Paint 訊息，避免同步阻塞）
-                s32PictureBox.Invalidate();
+                _mapViewerControl.Refresh();
                 _dragMoveCount++;
                 return;
             }
@@ -9505,7 +9640,7 @@ namespace L1FlyMapViewer
 
                 // 重繪以顯示選擇框
                 var invalidateSw = Stopwatch.StartNew();
-                s32PictureBox.Invalidate();
+                _mapViewerControl.Refresh();
                 invalidateSw.Stop();
 
                 totalSw.Stop();
@@ -9544,7 +9679,7 @@ namespace L1FlyMapViewer
                 LogPerf($"[DRAG-END] duration={dragMs}ms, moves={_dragMoveCount}, paints={_dragPaintCount}, FPS={fps:F1}");
 
                 isMainMapDragging = false;
-                this.s32PictureBox.Cursor = Cursors.Default;
+                this._mapViewerControl.Cursor = Cursors.Default;
 
                 // 延遲更新 MiniMap，避免阻塞拖曳結束事件
                 this.BeginInvoke((MethodInvoker)delegate { UpdateMiniMap(); });
@@ -9646,7 +9781,7 @@ namespace L1FlyMapViewer
                     else
                     {
                         // 保留選取框顯示
-                        s32PictureBox.Invalidate();
+                        _mapViewerControl.Refresh();
                     }
                     totalSw.Stop();
                     LogPerf($"[MOUSE-UP-SELECT] bounds={boundsSw.ElapsedMilliseconds}ms, origin={originSw.ElapsedMilliseconds}ms, thumb={thumbSw.ElapsedMilliseconds}ms, total={totalSw.ElapsedMilliseconds}ms, cells={_editState.SelectedCells.Count}");
@@ -9670,7 +9805,7 @@ namespace L1FlyMapViewer
 
                 // 清除選擇框
                 selectedRegion = new Rectangle();
-                s32PictureBox.Invalidate();
+                _mapViewerControl.Refresh();
             }
 
             // 右鍵顯示選取區域操作選單
@@ -9704,7 +9839,7 @@ namespace L1FlyMapViewer
             clearItem.Click += (s, e) => ClearSelectedCellsWithDialog();
             menu.Items.Add(clearItem);
 
-            menu.Show(s32PictureBox, location);
+            menu.Show(_mapViewerControl, location);
         }
 
         // 匯出選取區域為 fs32
@@ -12182,7 +12317,7 @@ namespace L1FlyMapViewer
 
                 // 強制重新渲染地圖
                 _viewState.SetRenderResult(0, 0, 0, 0, 0);
-                s32PictureBox.Invalidate();
+                _mapViewerControl.Refresh();
 
                 // 建構結果訊息
                 var resultMsg = $"TileId 重新編號完成！\n\n" +
@@ -16092,7 +16227,7 @@ namespace L1FlyMapViewer
             _editState.HighlightedCellX = obj.X;
             _editState.HighlightedCellY = obj.Y;
 
-            s32PictureBox.Invalidate();
+            _mapViewerControl.Refresh();
             UpdateMiniMap();
 
             this.toolStripStatusLabel1.Text = $"跳轉到群組 {info.GroupId}，位置 ({obj.X}, {obj.Y})，共 {info.Objects.Count} 個物件";

@@ -188,6 +188,32 @@ namespace L1MapViewer.Controls
         #region 公開方法
 
         /// <summary>
+        /// 設定共享的 ViewState（用於與外部同步）
+        /// </summary>
+        public void SetViewState(ViewState viewState)
+        {
+            if (viewState != null)
+            {
+                Console.WriteLine($"[MapViewerControl.SetViewState] replacing ViewState, old hashcode={_viewState?.GetHashCode()}, new hashcode={viewState.GetHashCode()}");
+                _viewState = viewState;
+            }
+        }
+
+        /// <summary>
+        /// 設定外部渲染的 Bitmap（用於舊版渲染整合）
+        /// </summary>
+        public void SetExternalBitmap(Bitmap bitmap)
+        {
+            Console.WriteLine($"[MapViewerControl.SetExternalBitmap] bitmap={bitmap?.Width}x{bitmap?.Height}, RenderWidth={_viewState.RenderWidth}, RenderHeight={_viewState.RenderHeight}, PictureBox.Size={_mapPictureBox.Width}x{_mapPictureBox.Height}, Visible={_mapPictureBox.Visible}");
+            lock (_viewportBitmapLock)
+            {
+                _viewportBitmap?.Dispose();
+                _viewportBitmap = bitmap;
+            }
+            _mapPictureBox.Invalidate();
+        }
+
+        /// <summary>
         /// 載入地圖
         /// </summary>
         public void LoadMap(MapDocument document)
@@ -195,11 +221,20 @@ namespace L1MapViewer.Controls
             _document = document;
 
             // 更新 ViewState
-            _viewState.MapWidth = document.MapPixelWidth;
-            _viewState.MapHeight = document.MapPixelHeight;
-            _viewState.ViewportWidth = _mapPanel.Width;
-            _viewState.ViewportHeight = _mapPanel.Height;
-            _viewState.UpdateScrollLimits(document.MapPixelWidth, document.MapPixelHeight);
+            if (document.MapPixelWidth > 0 && document.MapPixelHeight > 0)
+            {
+                _viewState.MapWidth = document.MapPixelWidth;
+                _viewState.MapHeight = document.MapPixelHeight;
+            }
+
+            // 確保 Viewport 尺寸有效
+            if (_mapPanel.Width > 0 && _mapPanel.Height > 0)
+            {
+                _viewState.ViewportWidth = _mapPanel.Width;
+                _viewState.ViewportHeight = _mapPanel.Height;
+            }
+
+            _viewState.UpdateScrollLimits(_viewState.MapWidth, _viewState.MapHeight);
 
             // 清除快取
             _renderingCore.ClearCache();
@@ -464,12 +499,19 @@ namespace L1MapViewer.Controls
         {
             if (_document == null) return;
 
+            // 確保有有效的地圖尺寸
+            if (_viewState.MapWidth <= 0 || _viewState.MapHeight <= 0) return;
+            if (_viewState.ViewportWidth <= 0 || _viewState.ViewportHeight <= 0) return;
+
             // 取消之前的渲染
             _renderCts?.Cancel();
             _renderCts = new CancellationTokenSource();
 
             var token = _renderCts.Token;
             var worldRect = _viewState.GetRenderWorldRect();
+
+            // 確保 worldRect 有效
+            if (worldRect.Width <= 0 || worldRect.Height <= 0) return;
 
             System.Threading.Tasks.Task.Run(async () =>
             {
@@ -524,6 +566,12 @@ namespace L1MapViewer.Controls
 
         private void MapPictureBox_Paint(object sender, PaintEventArgs e)
         {
+            // DEBUG: 無條件繪製邊框確認 Paint 被呼叫
+            using (var pen = new Pen(Color.Yellow, 2))
+            {
+                e.Graphics.DrawRectangle(pen, 1, 1, _mapPictureBox.Width - 3, _mapPictureBox.Height - 3);
+            }
+
             lock (_viewportBitmapLock)
             {
                 if (_viewportBitmap != null && _viewState.RenderWidth > 0)
@@ -533,8 +581,22 @@ namespace L1MapViewer.Controls
                     int drawW = (int)(_viewState.RenderWidth * _viewState.ZoomLevel);
                     int drawH = (int)(_viewState.RenderHeight * _viewState.ZoomLevel);
 
+                    Console.WriteLine($"[MapViewerControl.Paint] bmp={_viewportBitmap.Width}x{_viewportBitmap.Height}, draw=({drawX},{drawY},{drawW},{drawH}), scroll=({_viewState.ScrollX},{_viewState.ScrollY}), zoom={_viewState.ZoomLevel}");
+
                     e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
                     e.Graphics.DrawImage(_viewportBitmap, drawX, drawY, drawW, drawH);
+                }
+                else
+                {
+                    Console.WriteLine($"[MapViewerControl.Paint] SKIP: bitmap={(_viewportBitmap != null)}, RenderWidth={_viewState.RenderWidth}");
+
+                    // DEBUG: 顯示狀態資訊
+                    string debugInfo = $"bitmap={(_viewportBitmap != null)}, RenderW={_viewState.RenderWidth}, VS.hash={_viewState.GetHashCode()}";
+                    using (var font = new Font("Consolas", 10))
+                    using (var brush = new SolidBrush(Color.Red))
+                    {
+                        e.Graphics.DrawString(debugInfo, font, brush, 10, 10);
+                    }
                 }
             }
 

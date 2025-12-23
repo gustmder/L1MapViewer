@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
+using L1MapViewer.Controls;
 using L1MapViewer.Other;
 
 namespace L1FlyMapViewer
@@ -137,7 +138,7 @@ namespace L1FlyMapViewer
         private Button btnReloadMap;
         private Button btnAnalyzeAttr;
         private Panel s32MapPanel;
-        private PictureBox s32PictureBox;
+        private MapViewerControl _mapViewerControl;
         private Label lblS32Info;
 
         protected override void Dispose(bool disposing)
@@ -268,7 +269,7 @@ namespace L1FlyMapViewer
             this.btnReloadMap = new Button();
             this.btnAnalyzeAttr = new Button();
             this.s32MapPanel = new Panel();
-            this.s32PictureBox = new PictureBox();
+            this._mapViewerControl = new MapViewerControl();
             this.lblS32Info = new Label();
 
             // 浮動圖層控制面板
@@ -299,7 +300,6 @@ namespace L1FlyMapViewer
             this.s32EditorPanel.SuspendLayout();
             this.s32LayerControlPanel.SuspendLayout();
             this.s32MapPanel.SuspendLayout();
-            ((ISupportInitialize)this.s32PictureBox).BeginInit();
             this.panel1.SuspendLayout();
             ((ISupportInitialize)this.pictureBox4).BeginInit();
             ((ISupportInitialize)this.pictureBox3).BeginInit();
@@ -1034,10 +1034,10 @@ namespace L1FlyMapViewer
             //
             // s32MapPanel
             //
-            this.s32MapPanel.AutoScroll = true;
+            this.s32MapPanel.AutoScroll = false;
             this.s32MapPanel.BackColor = Color.Black;
             this.s32MapPanel.BorderStyle = BorderStyle.FixedSingle;
-            this.s32MapPanel.Controls.Add(this.s32PictureBox);
+            this.s32MapPanel.Controls.Add(this._mapViewerControl);
             this.s32MapPanel.Dock = DockStyle.Fill;
             this.s32MapPanel.Location = new Point(0, 65);
             this.s32MapPanel.Name = "s32MapPanel";
@@ -1045,21 +1045,13 @@ namespace L1FlyMapViewer
             this.s32MapPanel.TabIndex = 1;
 
             //
-            // s32PictureBox
+            // _mapViewerControl
             //
-            this.s32PictureBox.BackColor = Color.Black;
-            this.s32PictureBox.Location = new Point(0, 0);
-            this.s32PictureBox.Name = "s32PictureBox";
-            this.s32PictureBox.Size = new Size(100, 50);
-            this.s32PictureBox.SizeMode = PictureBoxSizeMode.AutoSize;
-            this.s32PictureBox.TabIndex = 0;
-            this.s32PictureBox.TabStop = false;
-            this.s32PictureBox.MouseClick += new MouseEventHandler(this.s32PictureBox_MouseClick);
-            this.s32PictureBox.MouseDoubleClick += new MouseEventHandler(this.s32PictureBox_MouseDoubleClick);
-            this.s32PictureBox.MouseDown += new MouseEventHandler(this.s32PictureBox_MouseDown);
-            this.s32PictureBox.MouseMove += new MouseEventHandler(this.s32PictureBox_MouseMove);
-            this.s32PictureBox.MouseUp += new MouseEventHandler(this.s32PictureBox_MouseUp);
-            this.s32PictureBox.Paint += new PaintEventHandler(this.s32PictureBox_Paint);
+            this._mapViewerControl.BackColor = Color.Black;
+            this._mapViewerControl.Dock = DockStyle.Fill;
+            this._mapViewerControl.Name = "_mapViewerControl";
+            this._mapViewerControl.TabIndex = 0;
+            this._mapViewerControl.TabStop = false;
 
             //
             // lblS32Info
@@ -1680,8 +1672,6 @@ namespace L1FlyMapViewer
             this.s32LayerControlPanel.ResumeLayout(false);
             this.s32LayerControlPanel.PerformLayout();
             this.s32MapPanel.ResumeLayout(false);
-            this.s32MapPanel.PerformLayout();
-            ((ISupportInitialize)this.s32PictureBox).EndInit();
             this.panel1.ResumeLayout(false);
             ((ISupportInitialize)this.pictureBox4).EndInit();
             ((ISupportInitialize)this.pictureBox3).EndInit();

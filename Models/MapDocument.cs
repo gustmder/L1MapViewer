@@ -78,6 +78,15 @@ namespace L1MapViewer.Models
         public event EventHandler<S32DataChangedEventArgs> S32DataChanged;
 
         /// <summary>
+        /// 設定地圖像素尺寸（用於外部載入的情況）
+        /// </summary>
+        public void SetMapPixelSize(int width, int height)
+        {
+            MapPixelWidth = width;
+            MapPixelHeight = height;
+        }
+
+        /// <summary>
         /// 載入地圖
         /// </summary>
         public bool Load(string mapId)
