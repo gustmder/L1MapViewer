@@ -191,7 +191,8 @@ namespace L1MapViewer.Models
         private bool _showLayer3 = false;
         private bool _showLayer4 = true;
         private bool _showPassability = false;
-        private bool _showRegions = false;
+        private bool _showSafeZones = false;
+        private bool _showCombatZones = false;
         private bool _showGrid = false;
         private bool _showS32Boundary = false;
 
@@ -232,12 +233,21 @@ namespace L1MapViewer.Models
         }
 
         /// <summary>
-        /// 顯示區域標記（一般/安全/戰鬥區域）
+        /// 顯示安全區域（藍色）
         /// </summary>
-        public bool ShowRegions
+        public bool ShowSafeZones
         {
-            get => _showRegions;
-            set { if (_showRegions != value) { _showRegions = value; DisplayOptionsChanged?.Invoke(this, EventArgs.Empty); } }
+            get => _showSafeZones;
+            set { if (_showSafeZones != value) { _showSafeZones = value; DisplayOptionsChanged?.Invoke(this, EventArgs.Empty); } }
+        }
+
+        /// <summary>
+        /// 顯示戰鬥區域（紅色）
+        /// </summary>
+        public bool ShowCombatZones
+        {
+            get => _showCombatZones;
+            set { if (_showCombatZones != value) { _showCombatZones = value; DisplayOptionsChanged?.Invoke(this, EventArgs.Empty); } }
         }
 
         /// <summary>

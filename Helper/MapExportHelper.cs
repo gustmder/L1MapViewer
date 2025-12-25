@@ -127,43 +127,69 @@ namespace L1MapViewer.Helper
         }
 
         /// <summary>
-        /// 對角方向通行性判斷 D1
+        /// 對角方向通行性判斷 D1 (左下)
+        /// 根據客戶端逆向 sub_4F5910：只有當特定兩個相鄰格子都是障礙時才阻擋
+        /// 邏輯：!((A && B) || (A && C) || (D && B) || (D && C))
         /// </summary>
         private static bool IsPassable_D1(int[,] t1, int[,] t3, int x, int y, int xLen, int yLen)
         {
             if (x < 0 || x + 1 >= xLen || y < 0 || y >= yLen || y - 1 < 0) return false;
-            return (t1[x, y] & 1) == 0 && (t1[x + 1, y] & 1) == 0 &&
-                   (t3[x + 1, y] & 1) == 0 && (t3[x + 1, y - 1] & 1) == 0;
+
+            bool a = (t1[x, y] & 1) != 0;
+            bool b = (t1[x + 1, y] & 1) != 0;
+            bool c = (t3[x + 1, y] & 1) != 0;
+            bool d = (t3[x + 1, y - 1] & 1) != 0;
+
+            // 客戶端邏輯：任意兩個特定相鄰格子都是障礙才阻擋
+            return !((a && b) || (a && c) || (d && b) || (d && c));
         }
 
         /// <summary>
-        /// 對角方向通行性判斷 D3
+        /// 對角方向通行性判斷 D3 (左上)
+        /// 根據客戶端逆向 sub_4F5910
         /// </summary>
         private static bool IsPassable_D3(int[,] t1, int[,] t3, int x, int y, int xLen, int yLen)
         {
             if (x < 0 || x + 1 >= xLen || y < 0 || y + 1 >= yLen) return false;
-            return (t1[x, y + 1] & 1) == 0 && (t1[x + 1, y + 1] & 1) == 0 &&
-                   (t3[x, y] & 1) == 0 && (t3[x, y + 1] & 1) == 0;
+
+            bool a = (t1[x, y + 1] & 1) != 0;
+            bool b = (t1[x + 1, y + 1] & 1) != 0;
+            bool c = (t3[x, y] & 1) != 0;
+            bool d = (t3[x, y + 1] & 1) != 0;
+
+            return !((a && b) || (a && c) || (d && b) || (d && c));
         }
 
         /// <summary>
-        /// 對角方向通行性判斷 D5
+        /// 對角方向通行性判斷 D5 (右上)
+        /// 根據客戶端逆向 sub_4F5910
         /// </summary>
         private static bool IsPassable_D5(int[,] t1, int[,] t3, int x, int y, int xLen, int yLen)
         {
             if (x < 1 || x >= xLen || y < 0 || y + 1 >= yLen) return false;
-            return (t1[x, y + 1] & 1) == 0 && (t1[x - 1, y + 1] & 1) == 0 &&
-                   (t3[x - 1, y] & 1) == 0 && (t3[x - 1, y + 1] & 1) == 0;
+
+            bool a = (t1[x, y + 1] & 1) != 0;
+            bool b = (t1[x - 1, y + 1] & 1) != 0;
+            bool c = (t3[x - 1, y] & 1) != 0;
+            bool d = (t3[x - 1, y + 1] & 1) != 0;
+
+            return !((a && b) || (a && c) || (d && b) || (d && c));
         }
 
         /// <summary>
-        /// 對角方向通行性判斷 D7
+        /// 對角方向通行性判斷 D7 (右下)
+        /// 根據客戶端逆向 sub_4F5910
         /// </summary>
         private static bool IsPassable_D7(int[,] t1, int[,] t3, int x, int y, int xLen, int yLen)
         {
             if (x < 1 || x >= xLen || y < 1 || y >= yLen) return false;
-            return (t1[x, y] & 1) == 0 && (t1[x - 1, y] & 1) == 0 &&
-                   (t3[x - 1, y] & 1) == 0 && (t3[x - 1, y - 1] & 1) == 0;
+
+            bool a = (t1[x, y] & 1) != 0;
+            bool b = (t1[x - 1, y] & 1) != 0;
+            bool c = (t3[x - 1, y] & 1) != 0;
+            bool d = (t3[x - 1, y - 1] & 1) != 0;
+
+            return !((a && b) || (a && c) || (d && b) || (d && c));
         }
 
         /// <summary>
@@ -220,15 +246,17 @@ namespace L1MapViewer.Helper
 
         /// <summary>
         /// 取得屬性旗標描述
+        /// 根據 MapTool 邏輯: 低4位 4-7,C-F=安全區, 8-B=戰鬥區
         /// </summary>
         public static string GetAttributeFlags(short value)
         {
             List<string> flags = new List<string>();
 
             if ((value & 0x01) != 0) flags.Add("不可通行");
-            if ((value & 0x02) != 0) flags.Add("水域");
-            if ((value & 0x04) != 0) flags.Add("安全區");
-            if ((value & 0x08) != 0) flags.Add("戰鬥區");
+            int lowNibble = value & 0x0F;
+            if ((lowNibble & 0x04) != 0) flags.Add("安全區");
+            else if ((lowNibble & 0x0C) == 0x08) flags.Add("戰鬥區");
+            if ((value & 0x02) != 0) flags.Add("旗標0x02");
             if ((value & 0x10) != 0) flags.Add("旗標0x10");
             if ((value & 0x20) != 0) flags.Add("旗標0x20");
             if ((value & 0x40) != 0) flags.Add("旗標0x40");

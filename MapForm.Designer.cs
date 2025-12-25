@@ -19,9 +19,7 @@ namespace L1FlyMapViewer
         private ToolStripMenuItem languageToolStripMenuItem;
         private ToolStripMenuItem langZhTWToolStripMenuItem;
         private ToolStripMenuItem langJaJPToolStripMenuItem;
-        private ToolStripMenuItem langKoKRToolStripMenuItem;
         private ToolStripMenuItem langEnUSToolStripMenuItem;
-        private ToolStripMenuItem aboutToolStripMenuItem;
         private StatusStrip statusStrip1;
         public ToolStripStatusLabel toolStripStatusLabel1;
         public ToolStripProgressBar toolStripProgressBar1;
@@ -120,12 +118,14 @@ namespace L1FlyMapViewer
         private CheckBox chkFloatGrid;
         private CheckBox chkFloatS32Boundary;
         private CheckBox chkFloatLayer5;
-        private CheckBox chkFloatRegions;
+        private CheckBox chkFloatSafeZones;
+        private CheckBox chkFloatCombatZones;
         private CheckBox chkShowPassable;
         private CheckBox chkShowLayer5;
         private CheckBox chkShowGrid;
         private CheckBox chkShowS32Boundary;
-        private CheckBox chkShowRegions;
+        private CheckBox chkShowSafeZones;
+        private CheckBox chkShowCombatZones;
         private Button btnCopySettings;
         private Button btnRegionEdit;
         private Button btnCopyMapCoords;
@@ -163,9 +163,7 @@ namespace L1FlyMapViewer
             this.languageToolStripMenuItem = new ToolStripMenuItem();
             this.langZhTWToolStripMenuItem = new ToolStripMenuItem();
             this.langJaJPToolStripMenuItem = new ToolStripMenuItem();
-            this.langKoKRToolStripMenuItem = new ToolStripMenuItem();
             this.langEnUSToolStripMenuItem = new ToolStripMenuItem();
-            this.aboutToolStripMenuItem = new ToolStripMenuItem();
 
             // StatusStrip
             this.statusStrip1 = new StatusStrip();
@@ -257,7 +255,8 @@ namespace L1FlyMapViewer
             this.chkShowPassable = new CheckBox();
             this.chkShowGrid = new CheckBox();
             this.chkShowS32Boundary = new CheckBox();
-            this.chkShowRegions = new CheckBox();
+            this.chkShowSafeZones = new CheckBox();
+            this.chkShowCombatZones = new CheckBox();
             this.btnCopySettings = new Button();
             this.btnCopyMapCoords = new Button();
             this.btnImportFs32 = new Button();
@@ -283,7 +282,8 @@ namespace L1FlyMapViewer
             this.chkFloatGrid = new CheckBox();
             this.chkFloatS32Boundary = new CheckBox();
             this.chkFloatLayer5 = new CheckBox();
-            this.chkFloatRegions = new CheckBox();
+            this.chkFloatSafeZones = new CheckBox();
+            this.chkFloatCombatZones = new CheckBox();
             this.chkShowLayer5 = new CheckBox();
 
             this.menuStrip1.SuspendLayout();
@@ -316,7 +316,6 @@ namespace L1FlyMapViewer
                 this.importFs32ToNewMapToolStripMenuItem,
                 this.exportToolStripMenuItem,
                 this.discordToolStripMenuItem,
-                this.aboutToolStripMenuItem,
                 this.languageToolStripMenuItem
             });
             this.menuStrip1.Location = new Point(0, 0);
@@ -384,14 +383,6 @@ namespace L1FlyMapViewer
             this.discordToolStripMenuItem.Click += new System.EventHandler(this.discordToolStripMenuItem_Click);
 
             //
-            // aboutToolStripMenuItem
-            //
-            this.aboutToolStripMenuItem.Name = "aboutToolStripMenuItem";
-            this.aboutToolStripMenuItem.Size = new Size(50, 20);
-            this.aboutToolStripMenuItem.Text = "關於";
-            this.aboutToolStripMenuItem.Click += new System.EventHandler(this.aboutToolStripMenuItem_Click);
-
-            //
             // languageToolStripMenuItem
             //
             this.languageToolStripMenuItem.Name = "languageToolStripMenuItem";
@@ -400,7 +391,6 @@ namespace L1FlyMapViewer
             this.languageToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] {
                 this.langZhTWToolStripMenuItem,
                 this.langJaJPToolStripMenuItem,
-                this.langKoKRToolStripMenuItem,
                 this.langEnUSToolStripMenuItem
             });
 
@@ -421,15 +411,6 @@ namespace L1FlyMapViewer
             this.langJaJPToolStripMenuItem.Text = "日本語";
             this.langJaJPToolStripMenuItem.Tag = "ja-JP";
             this.langJaJPToolStripMenuItem.Click += new System.EventHandler(this.LanguageMenuItem_Click);
-
-            //
-            // langKoKRToolStripMenuItem
-            //
-            this.langKoKRToolStripMenuItem.Name = "langKoKRToolStripMenuItem";
-            this.langKoKRToolStripMenuItem.Size = new Size(120, 22);
-            this.langKoKRToolStripMenuItem.Text = "한국어";
-            this.langKoKRToolStripMenuItem.Tag = "ko-KR";
-            this.langKoKRToolStripMenuItem.Click += new System.EventHandler(this.LanguageMenuItem_Click);
 
             //
             // langEnUSToolStripMenuItem
@@ -917,16 +898,28 @@ namespace L1FlyMapViewer
             this.chkShowLayer5.CheckedChanged += new System.EventHandler(this.S32Layer_CheckedChanged);
 
             //
-            // chkShowRegions
+            // chkShowSafeZones
             //
-            this.chkShowRegions.AutoSize = true;
-            this.chkShowRegions.Location = new Point(650, 10);
-            this.chkShowRegions.Name = "chkShowRegions";
-            this.chkShowRegions.Size = new Size(70, 17);
-            this.chkShowRegions.TabIndex = 16;
-            this.chkShowRegions.Text = "戰鬥區域";
-            this.chkShowRegions.UseVisualStyleBackColor = true;
-            this.chkShowRegions.CheckedChanged += new System.EventHandler(this.S32Layer_CheckedChanged);
+            this.chkShowSafeZones.AutoSize = true;
+            this.chkShowSafeZones.Location = new Point(650, 10);
+            this.chkShowSafeZones.Name = "chkShowSafeZones";
+            this.chkShowSafeZones.Size = new Size(70, 17);
+            this.chkShowSafeZones.TabIndex = 16;
+            this.chkShowSafeZones.Text = "安全區域";
+            this.chkShowSafeZones.UseVisualStyleBackColor = true;
+            this.chkShowSafeZones.CheckedChanged += new System.EventHandler(this.S32Layer_CheckedChanged);
+
+            //
+            // chkShowCombatZones
+            //
+            this.chkShowCombatZones.AutoSize = true;
+            this.chkShowCombatZones.Location = new Point(730, 10);
+            this.chkShowCombatZones.Name = "chkShowCombatZones";
+            this.chkShowCombatZones.Size = new Size(70, 17);
+            this.chkShowCombatZones.TabIndex = 17;
+            this.chkShowCombatZones.Text = "戰鬥區域";
+            this.chkShowCombatZones.UseVisualStyleBackColor = true;
+            this.chkShowCombatZones.CheckedChanged += new System.EventHandler(this.S32Layer_CheckedChanged);
 
             //
             // btnCopySettings
@@ -1088,7 +1081,7 @@ namespace L1FlyMapViewer
             this.layerFloatPanel.Controls.Add(this.layerPopupPanel);
             this.layerFloatPanel.Location = new Point(10, 10);
             this.layerFloatPanel.Name = "layerFloatPanel";
-            this.layerFloatPanel.Size = new Size(90, 210);
+            this.layerFloatPanel.Size = new Size(90, 235);
             this.layerFloatPanel.TabIndex = 10;
             this.layerFloatPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
 
@@ -1116,11 +1109,12 @@ namespace L1FlyMapViewer
             this.layerPopupPanel.Controls.Add(this.chkFloatPassable);
             this.layerPopupPanel.Controls.Add(this.chkFloatGrid);
             this.layerPopupPanel.Controls.Add(this.chkFloatS32Boundary);
-            this.layerPopupPanel.Controls.Add(this.chkFloatRegions);
+            this.layerPopupPanel.Controls.Add(this.chkFloatSafeZones);
+            this.layerPopupPanel.Controls.Add(this.chkFloatCombatZones);
             this.layerPopupPanel.Location = new Point(0, 24);
             this.layerPopupPanel.Name = "layerPopupPanel";
             this.layerPopupPanel.Padding = new Padding(5);
-            this.layerPopupPanel.Size = new Size(90, 184);
+            this.layerPopupPanel.Size = new Size(90, 211);
             this.layerPopupPanel.TabIndex = 1;
             this.layerPopupPanel.Visible = true;
 
@@ -1221,17 +1215,30 @@ namespace L1FlyMapViewer
             this.chkFloatS32Boundary.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
 
             //
-            // chkFloatRegions
+            // chkFloatSafeZones
             //
-            this.chkFloatRegions.AutoSize = true;
-            this.chkFloatRegions.ForeColor = Color.FromArgb(255, 180, 100);
-            this.chkFloatRegions.Location = new Point(8, 159);
-            this.chkFloatRegions.Name = "chkFloatRegions";
-            this.chkFloatRegions.Size = new Size(80, 19);
-            this.chkFloatRegions.TabIndex = 7;
-            this.chkFloatRegions.Text = "戰鬥區域";
-            this.chkFloatRegions.UseVisualStyleBackColor = true;
-            this.chkFloatRegions.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
+            this.chkFloatSafeZones.AutoSize = true;
+            this.chkFloatSafeZones.ForeColor = Color.FromArgb(100, 180, 255);
+            this.chkFloatSafeZones.Location = new Point(8, 159);
+            this.chkFloatSafeZones.Name = "chkFloatSafeZones";
+            this.chkFloatSafeZones.Size = new Size(80, 19);
+            this.chkFloatSafeZones.TabIndex = 7;
+            this.chkFloatSafeZones.Text = "安全區域";
+            this.chkFloatSafeZones.UseVisualStyleBackColor = true;
+            this.chkFloatSafeZones.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
+
+            //
+            // chkFloatCombatZones
+            //
+            this.chkFloatCombatZones.AutoSize = true;
+            this.chkFloatCombatZones.ForeColor = Color.FromArgb(255, 100, 100);
+            this.chkFloatCombatZones.Location = new Point(8, 181);
+            this.chkFloatCombatZones.Name = "chkFloatCombatZones";
+            this.chkFloatCombatZones.Size = new Size(80, 19);
+            this.chkFloatCombatZones.TabIndex = 8;
+            this.chkFloatCombatZones.Text = "戰鬥區域";
+            this.chkFloatCombatZones.UseVisualStyleBackColor = true;
+            this.chkFloatCombatZones.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
 
             //
             // rightPanel

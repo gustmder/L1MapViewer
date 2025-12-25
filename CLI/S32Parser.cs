@@ -159,7 +159,53 @@ namespace L1MapViewer.CLI
                 }
             }
 
+            // Layer2 覆蓋 Layer1 - 根據逆向代碼實現
+            // Layer2 項目會覆蓋 Layer1 對應位置的 TileId 和 IndexId
+            // ApplyLayer2ToLayer1(s32Data);
+
             return s32Data;
+        }
+
+        /// <summary>
+        /// 將 Layer2 覆蓋到 Layer1
+        /// 根據逆向代碼 sub_4E7D70，Layer2 項目會覆蓋 Layer1 對應位置
+        /// </summary>
+        private static void ApplyLayer2ToLayer1(S32Data s32Data)
+        {
+            foreach (var layer2Item in s32Data.Layer2)
+            {
+                int x = layer2Item.X;
+                int y = layer2Item.Y;
+
+                // 確保座標在有效範圍內 (Layer1 是 64x128)
+                if (x >= 0 && x < 128 && y >= 0 && y < 64)
+                {
+                    // 覆蓋 Layer1 對應位置的 TileId 和 IndexId
+                    s32Data.Layer1[y, x] = new TileCell
+                    {
+                        X = x,
+                        Y = y,
+                        TileId = layer2Item.TileId,
+                        IndexId = layer2Item.IndexId
+                    };
+
+                    // 更新 UsedTiles
+                    if (!s32Data.UsedTiles.ContainsKey(layer2Item.TileId))
+                    {
+                        s32Data.UsedTiles[layer2Item.TileId] = new TileInfo
+                        {
+                            TileId = layer2Item.TileId,
+                            IndexId = layer2Item.IndexId,
+                            UsageCount = 1,
+                            Thumbnail = null
+                        };
+                    }
+                    else
+                    {
+                        s32Data.UsedTiles[layer2Item.TileId].UsageCount++;
+                    }
+                }
+            }
         }
 
         /// <summary>

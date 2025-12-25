@@ -571,7 +571,6 @@ namespace L1FlyMapViewer
             exportL1JToolStripMenuItem.Text = LocalizationManager.L("Menu_Export_L1JFormat");
             exportDIRToolStripMenuItem.Text = LocalizationManager.L("Menu_Export_DIRFormat");
             discordToolStripMenuItem.Text = LocalizationManager.L("Menu_Help_Discord");
-            aboutToolStripMenuItem.Text = LocalizationManager.L("Menu_Help_About");
 
             // 頁籤
             tabMapPreview.Text = LocalizationManager.L("Tab_MapPreview");
@@ -590,7 +589,8 @@ namespace L1FlyMapViewer
             chkShowPassable.Text = LocalizationManager.L("Layer_Passable");
             chkShowGrid.Text = LocalizationManager.L("Layer_Grid");
             chkShowS32Boundary.Text = LocalizationManager.L("Layer_S32Border");
-            chkShowRegions.Text = LocalizationManager.L("Layer_Regions");
+            chkShowSafeZones.Text = LocalizationManager.L("Layer_SafeZones");
+            chkShowCombatZones.Text = LocalizationManager.L("Layer_CombatZones");
 
             // S32 編輯面板按鈕
             btnReloadMap.Text = LocalizationManager.L("Button_ReloadF5");
@@ -641,7 +641,8 @@ namespace L1FlyMapViewer
             chkFloatPassable.Text = LocalizationManager.L("Layer_FloatPassable");
             chkFloatGrid.Text = LocalizationManager.L("Layer_FloatGrid");
             chkFloatS32Boundary.Text = LocalizationManager.L("Layer_FloatS32Border");
-            chkFloatRegions.Text = LocalizationManager.L("Layer_FloatRegions");
+            chkFloatSafeZones.Text = LocalizationManager.L("Layer_FloatSafeZones");
+            chkFloatCombatZones.Text = LocalizationManager.L("Layer_FloatCombatZones");
 
             // Tile 面板
             txtTileSearch.PlaceholderText = LocalizationManager.L("Placeholder_SearchTileId");
@@ -667,6 +668,12 @@ namespace L1FlyMapViewer
             {
                 e.Handled = true;
                 ReloadCurrentMap();
+            }
+            // F6: 分析 Layer3 屬性值統計
+            else if (e.KeyCode == Keys.F6)
+            {
+                e.Handled = true;
+                AnalyzeLayer3Attributes();
             }
             // Ctrl+C: 複製選取區域
             else if (e.Control && e.KeyCode == Keys.C)
@@ -2295,8 +2302,7 @@ namespace L1FlyMapViewer
             int yBegin = minY;
 
             // 建立 tileList_t1 和 tileList_t3 陣列（對應 MapTool 的格式）
-            // tileList_t1[x,y] = Layer3 的 Attribute1
-            // tileList_t3[x,y] = Layer3 的 Attribute2
+            // t1 = Attribute1 (上下方向判斷), t3 = Attribute2 (左右方向判斷)
             int[,] tileList_t1 = new int[xLength, yLength];
             int[,] tileList_t3 = new int[xLength, yLength];
 
@@ -2330,11 +2336,12 @@ namespace L1FlyMapViewer
 
                         if (gx >= 0 && gx < xLength && gy >= 0 && gy < yLength)
                         {
-                            // Attribute1 對應 tileList_t1
-                            // Attribute2 對應 tileList_t3
+                            // Attribute1 用於上下方向 (t1), Attribute2 用於左右方向 (t3)
                             // 需要經過 replaceException 處理（與 MapTool 相同）
-                            tileList_t1[gx, gy] = ReplaceException(attr.Attribute1);
-                            tileList_t3[gx, gy] = ReplaceException(attr.Attribute2);
+                            int attr1Value = ReplaceException(attr.Attribute1);
+                            int attr2Value = ReplaceException(attr.Attribute2);
+                            tileList_t1[gx, gy] = attr1Value;
+                            tileList_t3[gx, gy] = attr2Value;
                         }
                     }
                 }
@@ -2413,8 +2420,9 @@ namespace L1FlyMapViewer
             this.toolStripStatusLabel1.Text = $"已匯出 {_document.MapId}.txt ({xLength}x{yLength})";
         }
 
-        // 對角方向通行性判斷（完全按照 MapTool 的邏輯）
-        // isPassable_D1(x, y) => t1[x,y] & t1[x+1,y] & t3[x+1,y] & t3[x+1,y-1] 都為 0
+        // 對角方向通行性判斷
+        // 注意：根據客戶端逆向分析，t1 和 t3 現在都使用 Attribute1 的值
+        // isPassable_D1(x, y) => 檢查相關格子的 Attribute1
         private bool IsPassable_D1(int[,] t1, int[,] t3, int x, int y, int xLen, int yLen)
         {
             if (x < 0 || x + 1 >= xLen || y < 0 || y >= yLen || y - 1 < 0) return false;
@@ -2422,7 +2430,7 @@ namespace L1FlyMapViewer
                    (t3[x + 1, y] & 1) == 0 && (t3[x + 1, y - 1] & 1) == 0;
         }
 
-        // isPassable_D3(x, y) => t1[x,y+1] & t1[x+1,y+1] & t3[x,y] & t3[x,y+1] 都為 0
+        // isPassable_D3(x, y) => 檢查相關格子的 Attribute1
         private bool IsPassable_D3(int[,] t1, int[,] t3, int x, int y, int xLen, int yLen)
         {
             if (x < 0 || x + 1 >= xLen || y < 0 || y + 1 >= yLen) return false;
@@ -2430,7 +2438,7 @@ namespace L1FlyMapViewer
                    (t3[x, y] & 1) == 0 && (t3[x, y + 1] & 1) == 0;
         }
 
-        // isPassable_D5(x, y) => t1[x,y+1] & t1[x-1,y+1] & t3[x-1,y] & t3[x-1,y+1] 都為 0
+        // isPassable_D5(x, y) => 檢查相關格子的 Attribute1
         private bool IsPassable_D5(int[,] t1, int[,] t3, int x, int y, int xLen, int yLen)
         {
             if (x < 1 || x >= xLen || y < 0 || y + 1 >= yLen) return false;
@@ -2438,7 +2446,7 @@ namespace L1FlyMapViewer
                    (t3[x - 1, y] & 1) == 0 && (t3[x - 1, y + 1] & 1) == 0;
         }
 
-        // isPassable_D7(x, y) => t1[x,y] & t1[x-1,y] & t3[x-1,y] & t3[x-1,y-1] 都為 0
+        // isPassable_D7(x, y) => 檢查相關格子的 Attribute1
         private bool IsPassable_D7(int[,] t1, int[,] t3, int x, int y, int xLen, int yLen)
         {
             if (x < 1 || x >= xLen || y < 1 || y >= yLen) return false;
@@ -4331,9 +4339,11 @@ namespace L1FlyMapViewer
             List<string> flags = new List<string>();
 
             if ((value & 0x0001) != 0) flags.Add("不可通行");
-            if ((value & 0x0002) != 0) flags.Add("安全區");
-            if ((value & 0x0004) != 0) flags.Add("bit2");
-            if ((value & 0x0008) != 0) flags.Add("bit3");
+            // MapTool 邏輯: 低4位 4-7,C-F=安全, 8-B=戰鬥
+            int lowNibble = value & 0x0F;
+            if ((lowNibble & 0x04) != 0) flags.Add("安全區");
+            else if ((lowNibble & 0x0C) == 0x08) flags.Add("戰鬥區");
+            if ((value & 0x0002) != 0) flags.Add("bit1");
             if ((value & 0x0010) != 0) flags.Add("bit4");
             if ((value & 0x0020) != 0) flags.Add("bit5");
             if ((value & 0x0040) != 0) flags.Add("bit6");
@@ -5468,9 +5478,13 @@ namespace L1FlyMapViewer
         private void S32Layer_CheckedChanged(object sender, EventArgs e)
         {
             // 同步 ViewState
-            if (sender == chkShowRegions)
+            if (sender == chkShowSafeZones)
             {
-                _viewState.ShowRegions = chkShowRegions.Checked;
+                _viewState.ShowSafeZones = chkShowSafeZones.Checked;
+            }
+            else if (sender == chkShowCombatZones)
+            {
+                _viewState.ShowCombatZones = chkShowCombatZones.Checked;
             }
 
             // 清除快取（因為快取的 bitmap 是用特定圖層設定渲染的）
@@ -5514,9 +5528,13 @@ namespace L1FlyMapViewer
             {
                 chkShowLayer5.Checked = chkFloatLayer5.Checked;
             }
-            else if (sender == chkFloatRegions)
+            else if (sender == chkFloatSafeZones)
             {
-                chkShowRegions.Checked = chkFloatRegions.Checked;
+                chkShowSafeZones.Checked = chkFloatSafeZones.Checked;
+            }
+            else if (sender == chkFloatCombatZones)
+            {
+                chkShowCombatZones.Checked = chkFloatCombatZones.Checked;
             }
 
             // 更新圖示顯示狀態
@@ -5535,13 +5553,14 @@ namespace L1FlyMapViewer
             if (chkFloatGrid.Checked) enabledCount++;
             if (chkFloatS32Boundary.Checked) enabledCount++;
             if (chkFloatLayer5.Checked) enabledCount++;
-            if (chkFloatRegions.Checked) enabledCount++;
+            if (chkFloatSafeZones.Checked) enabledCount++;
+            if (chkFloatCombatZones.Checked) enabledCount++;
 
             if (enabledCount == 0)
             {
                 lblLayerIcon.ForeColor = Color.Gray;
             }
-            else if (enabledCount == 8)
+            else if (enabledCount == 9)
             {
                 lblLayerIcon.ForeColor = Color.LightGreen;
             }
@@ -5573,7 +5592,8 @@ namespace L1FlyMapViewer
             chkFloatGrid.Checked = chkShowGrid.Checked;
             chkFloatS32Boundary.Checked = chkShowS32Boundary.Checked;
             chkFloatLayer5.Checked = chkShowLayer5.Checked;
-            chkFloatRegions.Checked = chkShowRegions.Checked;
+            chkFloatSafeZones.Checked = chkShowSafeZones.Checked;
+            chkFloatCombatZones.Checked = chkShowCombatZones.Checked;
             UpdateLayerIconText();
         }
 
@@ -5740,10 +5760,21 @@ namespace L1FlyMapViewer
         // 確保區域覆蓋層可見
         private void EnsureRegionsLayerVisible()
         {
-            if (!chkShowRegions.Checked)
+            bool needRender = false;
+            if (!chkShowSafeZones.Checked)
             {
-                chkShowRegions.Checked = true;
-                chkFloatRegions.Checked = true;
+                chkShowSafeZones.Checked = true;
+                chkFloatSafeZones.Checked = true;
+                needRender = true;
+            }
+            if (!chkShowCombatZones.Checked)
+            {
+                chkShowCombatZones.Checked = true;
+                chkFloatCombatZones.Checked = true;
+                needRender = true;
+            }
+            if (needRender)
+            {
                 UpdateLayerIconText();
                 RenderS32Map();
             }
@@ -5793,10 +5824,13 @@ namespace L1FlyMapViewer
 
             var attr = s32Data.Layer3[cellY, layer3X];
 
-            // 檢查安全區域標記 (0x02)
-            bool isSafe = (attr.Attribute1 & 0x02) != 0 || (attr.Attribute2 & 0x02) != 0;
-            // 檢查戰鬥區域標記 (0x04)
-            bool isCombat = (attr.Attribute1 & 0x04) != 0 || (attr.Attribute2 & 0x04) != 0;
+            // 根據 MapTool 邏輯檢查區域類型
+            // 低4位: 0-3=一般, 4-7/C-F=安全(bit2), 8-B=戰鬥(bit3且非bit2)
+            int val1 = attr.Attribute1 & 0x0F;
+            int val2 = attr.Attribute2 & 0x0F;
+
+            bool isSafe = (val1 & 0x04) != 0 || (val2 & 0x04) != 0;
+            bool isCombat = (val1 & 0x0C) == 0x08 || (val2 & 0x0C) == 0x08;
 
             if (isCombat) return RegionType.Combat;
             if (isSafe) return RegionType.Safe;
@@ -5822,21 +5856,21 @@ namespace L1FlyMapViewer
 
             var attr = s32Data.Layer3[cellY, layer3X];
 
-            // 先清除現有的區域標記
-            attr.Attribute1 = (short)(attr.Attribute1 & ~0x06); // 清除 0x02 和 0x04 位元
-            attr.Attribute2 = (short)(attr.Attribute2 & ~0x06); // 清除 0x02 和 0x04 位元
+            // 先清除現有的區域標記（根據 MapTool 邏輯，清除 bit 2 和 bit 3）
+            attr.Attribute1 = (short)(attr.Attribute1 & ~0x0C); // 清除 0x04 和 0x08 位元
+            attr.Attribute2 = (short)(attr.Attribute2 & ~0x0C); // 清除 0x04 和 0x08 位元
 
-            // 根據區域類型設定標記
+            // 根據區域類型設定標記（MapTool 邏輯）
             switch (regionType)
             {
                 case RegionType.Safe:
-                    attr.Attribute1 = (short)(attr.Attribute1 | 0x02); // 設定安全區域標記
-                    attr.Attribute2 = (short)(attr.Attribute2 | 0x02);
+                    attr.Attribute1 = (short)(attr.Attribute1 | 0x04); // 設定 bit 2 = 安全區域
+                    attr.Attribute2 = (short)(attr.Attribute2 | 0x04);
                     this.toolStripStatusLabel1.Text = $"已設定 ({gameX},{gameY}) 為安全區域";
                     break;
                 case RegionType.Combat:
-                    attr.Attribute1 = (short)(attr.Attribute1 | 0x04); // 設定戰鬥區域標記
-                    attr.Attribute2 = (short)(attr.Attribute2 | 0x04);
+                    attr.Attribute1 = (short)(attr.Attribute1 | 0x08); // 設定 bit 3 = 戰鬥區域
+                    attr.Attribute2 = (short)(attr.Attribute2 | 0x08);
                     this.toolStripStatusLabel1.Text = $"已設定 ({gameX},{gameY}) 為戰鬥區域";
                     break;
                 case RegionType.Normal:
@@ -5884,20 +5918,20 @@ namespace L1FlyMapViewer
                 short oldAttr1 = attr.Attribute1;
                 short oldAttr2 = attr.Attribute2;
 
-                // 清除現有的區域標記
-                attr.Attribute1 = (short)(attr.Attribute1 & ~0x06);
-                attr.Attribute2 = (short)(attr.Attribute2 & ~0x06);
+                // 清除現有的區域標記（MapTool 邏輯）
+                attr.Attribute1 = (short)(attr.Attribute1 & ~0x0C);
+                attr.Attribute2 = (short)(attr.Attribute2 & ~0x0C);
 
-                // 設定新的區域標記
+                // 設定新的區域標記（MapTool 邏輯）
                 switch (regionType)
                 {
                     case RegionType.Safe:
-                        attr.Attribute1 = (short)(attr.Attribute1 | 0x02);
-                        attr.Attribute2 = (short)(attr.Attribute2 | 0x02);
-                        break;
-                    case RegionType.Combat:
                         attr.Attribute1 = (short)(attr.Attribute1 | 0x04);
                         attr.Attribute2 = (short)(attr.Attribute2 | 0x04);
+                        break;
+                    case RegionType.Combat:
+                        attr.Attribute1 = (short)(attr.Attribute1 | 0x08);
+                        attr.Attribute2 = (short)(attr.Attribute2 | 0x08);
                         break;
                 }
 
@@ -6403,7 +6437,7 @@ namespace L1FlyMapViewer
                     DrawPassableOverlayViewport(viewportBitmap, currentMap, worldRect);
                 }
 
-                if (_viewState.ShowRegions)
+                if (_viewState.ShowSafeZones || _viewState.ShowCombatZones)
                 {
                     DrawRegionsOverlayViewport(viewportBitmap, currentMap, worldRect);
                 }
@@ -6760,7 +6794,7 @@ namespace L1FlyMapViewer
         }
 
         // 繪製第三層（地圖屬性）- 用邊線顯示屬性
-        // Attribute1 = 左上邊線, Attribute2 = 右上邊線（各自獨立的屬性值）
+        // Attribute1 = 左半邊, Attribute2 = 右半邊
         private void DrawLayer3Attributes(Bitmap bitmap, Struct.L1Map currentMap)
         {
             using (Graphics g = Graphics.FromImage(bitmap))
@@ -6783,7 +6817,7 @@ namespace L1FlyMapViewer
                             var attr = s32Data.Layer3[y, x];
                             if (attr == null) continue;
 
-                            // 只有當屬性非0時才繪製
+                            // 只有當兩個屬性都為0時才跳過
                             if (attr.Attribute1 == 0 && attr.Attribute2 == 0) continue;
 
                             // 第3層的一個格子對應第1層的兩個格子（X方向）
@@ -6798,28 +6832,36 @@ namespace L1FlyMapViewer
                             int X = mx + localBaseX + x1 * 24 + y * 24;
                             int Y = my + localBaseY + y * 12;
 
-                            // 菱形的四個頂點（雙寬格子 48x24）
-                            Point pLeft = new Point(X + 0, Y + 12);    // 左
-                            Point pTop = new Point(X + 24, Y + 0);     // 上
-                            Point pRight = new Point(X + 48, Y + 12);  // 右
+                            // 菱形的四個頂點
+                            Point pTop = new Point(X + 24, Y + 0);
+                            Point pRight = new Point(X + 48, Y + 12);
+                            Point pBottom = new Point(X + 24, Y + 24);
+                            Point pLeft = new Point(X + 0, Y + 12);
+                            Point pCenter = new Point(X + 24, Y + 12);
 
-                            // 繪製左上邊線 (Attribute1) - 根據該邊的屬性值決定顏色
+                            // 左半邊 - 使用 Attribute1
                             if (attr.Attribute1 != 0)
                             {
-                                Color color = GetAttributeColor(attr.Attribute1);
-                                using (Pen pen = new Pen(color, 3))
+                                Color color1 = GetAttributeColor(attr.Attribute1);
+                                using (Pen pen = new Pen(color1, 3))
                                 {
                                     g.DrawLine(pen, pLeft, pTop);
+                                    g.DrawLine(pen, pTop, pCenter);
+                                    g.DrawLine(pen, pCenter, pBottom);
+                                    g.DrawLine(pen, pBottom, pLeft);
                                 }
                             }
 
-                            // 繪製右上邊線 (Attribute2) - 根據該邊的屬性值決定顏色
+                            // 右半邊 - 使用 Attribute2
                             if (attr.Attribute2 != 0)
                             {
-                                Color color = GetAttributeColor(attr.Attribute2);
-                                using (Pen pen = new Pen(color, 3))
+                                Color color2 = GetAttributeColor(attr.Attribute2);
+                                using (Pen pen = new Pen(color2, 3))
                                 {
                                     g.DrawLine(pen, pTop, pRight);
+                                    g.DrawLine(pen, pRight, pBottom);
+                                    g.DrawLine(pen, pBottom, pCenter);
+                                    g.DrawLine(pen, pCenter, pTop);
                                 }
                             }
                         }
@@ -6839,13 +6881,7 @@ namespace L1FlyMapViewer
         //   綠色 = 安全區+戰鬥區 (0x02+0x04)
         //   灰色 = 其他屬性
         // 繪製通行性覆蓋層 - 用邊線顯示可通行/不可通行
-        // Attribute1 = 左上邊線, Attribute2 = 右上邊線
-       // 繪製通行性覆蓋層 - 用邊線顯示可通行/不可通行
-        // Attribute1 = 左上邊線, Attribute2 = 右上邊線
-       // 繪製通行性覆蓋層 - 用邊線顯示可通行/不可通行
-        // Attribute1 = 左上邊線, Attribute2 = 右上邊線
-        // 繪製通行性覆蓋層 - 用邊線顯示可通行/不可通行
-        // Attribute1 = 左上邊線, Attribute2 = 右上邊線
+        // Attribute1 = 左半邊, Attribute2 = 右半邊
         private void DrawPassableOverlay(Bitmap bitmap, Struct.L1Map currentMap)
         {
             using (Graphics g = Graphics.FromImage(bitmap))
@@ -6884,18 +6920,26 @@ namespace L1FlyMapViewer
                                 int X = mx + localBaseX + x1 * 24 + y * 24;
                                 int Y = my + localBaseY + y * 12;
 
-                                // 菱形的四個頂點（雙寬格子 48x24）
-                                Point pLeft = new Point(X + 0, Y + 12);    // 左
-                                Point pTop = new Point(X + 24, Y + 0);     // 上
-                                Point pRight = new Point(X + 48, Y + 12);  // 右
+                                // 菱形的四個頂點
+                                Point pTop = new Point(X + 24, Y + 0);
+                                Point pRight = new Point(X + 48, Y + 12);
+                                Point pBottom = new Point(X + 24, Y + 24);
+                                Point pLeft = new Point(X + 0, Y + 12);
+                                Point pCenter = new Point(X + 24, Y + 12);
 
-                                // 繪製左上邊線 (Attribute1)
-                                Pen penLeft = (attr.Attribute1 & 0x01) != 0 ? penImpassable : penPassable;
-                                g.DrawLine(penLeft, pLeft, pTop);
+                                // 左半邊 - 使用 Attribute1 判斷
+                                Pen pen1 = (attr.Attribute1 & 0x01) != 0 ? penImpassable : penPassable;
+                                g.DrawLine(pen1, pLeft, pTop);
+                                g.DrawLine(pen1, pTop, pCenter);
+                                g.DrawLine(pen1, pCenter, pBottom);
+                                g.DrawLine(pen1, pBottom, pLeft);
 
-                                // 繪製右上邊線 (Attribute2)
-                                Pen penRight = (attr.Attribute2 & 0x01) != 0 ? penImpassable : penPassable;
-                                g.DrawLine(penRight, pTop, pRight);
+                                // 右半邊 - 使用 Attribute2 判斷
+                                Pen pen2 = (attr.Attribute2 & 0x01) != 0 ? penImpassable : penPassable;
+                                g.DrawLine(pen2, pTop, pRight);
+                                g.DrawLine(pen2, pRight, pBottom);
+                                g.DrawLine(pen2, pBottom, pCenter);
+                                g.DrawLine(pen2, pCenter, pTop);
                             }
                         }
                     }
@@ -7199,6 +7243,7 @@ namespace L1FlyMapViewer
         #region Viewport 版本的繪圖方法
 
         // 繪製第三層屬性（Viewport 版本）
+        // 根據客戶端邏輯，整個格子使用 Attribute1 判斷
         private void DrawLayer3AttributesViewport(Bitmap bitmap, Struct.L1Map currentMap, Rectangle worldRect)
         {
             using (Graphics g = Graphics.FromImage(bitmap))
@@ -7217,6 +7262,7 @@ namespace L1FlyMapViewer
                         {
                             var attr = s32Data.Layer3[y, x];
                             if (attr == null) continue;
+                            // 只有當兩個屬性都為0時才跳過
                             if (attr.Attribute1 == 0 && attr.Attribute2 == 0) continue;
 
                             int x1 = x * 2;
@@ -7230,25 +7276,36 @@ namespace L1FlyMapViewer
                             if (X + 48 < 0 || X > worldRect.Width || Y + 24 < 0 || Y > worldRect.Height)
                                 continue;
 
-                            Point pLeft = new Point(X + 0, Y + 12);
+                            // 菱形的四個頂點
                             Point pTop = new Point(X + 24, Y + 0);
                             Point pRight = new Point(X + 48, Y + 12);
+                            Point pBottom = new Point(X + 24, Y + 24);
+                            Point pLeft = new Point(X + 0, Y + 12);
+                            Point pCenter = new Point(X + 24, Y + 12);
 
+                            // 左半邊 - 使用 Attribute1
                             if (attr.Attribute1 != 0)
                             {
-                                Color color = GetAttributeColor(attr.Attribute1);
-                                using (Pen pen = new Pen(color, 3))
+                                Color color1 = GetAttributeColor(attr.Attribute1);
+                                using (Pen pen = new Pen(color1, 3))
                                 {
                                     g.DrawLine(pen, pLeft, pTop);
+                                    g.DrawLine(pen, pTop, pCenter);
+                                    g.DrawLine(pen, pCenter, pBottom);
+                                    g.DrawLine(pen, pBottom, pLeft);
                                 }
                             }
 
+                            // 右半邊 - 使用 Attribute2
                             if (attr.Attribute2 != 0)
                             {
-                                Color color = GetAttributeColor(attr.Attribute2);
-                                using (Pen pen = new Pen(color, 3))
+                                Color color2 = GetAttributeColor(attr.Attribute2);
+                                using (Pen pen = new Pen(color2, 3))
                                 {
                                     g.DrawLine(pen, pTop, pRight);
+                                    g.DrawLine(pen, pRight, pBottom);
+                                    g.DrawLine(pen, pBottom, pCenter);
+                                    g.DrawLine(pen, pCenter, pTop);
                                 }
                             }
                         }
@@ -7258,6 +7315,7 @@ namespace L1FlyMapViewer
         }
 
         // 繪製通行性覆蓋層（Viewport 版本）
+        // Attribute1 = 左半邊, Attribute2 = 右半邊
         private void DrawPassableOverlayViewport(Bitmap bitmap, Struct.L1Map currentMap, Rectangle worldRect)
         {
             using (Graphics g = Graphics.FromImage(bitmap))
@@ -7291,15 +7349,26 @@ namespace L1FlyMapViewer
                                 if (X + 48 < 0 || X > worldRect.Width || Y + 24 < 0 || Y > worldRect.Height)
                                     continue;
 
-                                Point pLeft = new Point(X + 0, Y + 12);
+                                // 菱形的四個頂點
                                 Point pTop = new Point(X + 24, Y + 0);
                                 Point pRight = new Point(X + 48, Y + 12);
+                                Point pBottom = new Point(X + 24, Y + 24);
+                                Point pLeft = new Point(X + 0, Y + 12);
+                                Point pCenter = new Point(X + 24, Y + 12);
 
-                                Pen penLeft = (attr.Attribute1 & 0x01) != 0 ? penImpassable : penPassable;
-                                g.DrawLine(penLeft, pLeft, pTop);
+                                // 左半邊 - 使用 Attribute1 判斷
+                                Pen pen1 = (attr.Attribute1 & 0x01) != 0 ? penImpassable : penPassable;
+                                g.DrawLine(pen1, pLeft, pTop);
+                                g.DrawLine(pen1, pTop, pCenter);
+                                g.DrawLine(pen1, pCenter, pBottom);
+                                g.DrawLine(pen1, pBottom, pLeft);
 
-                                Pen penRight = (attr.Attribute2 & 0x01) != 0 ? penImpassable : penPassable;
-                                g.DrawLine(penRight, pTop, pRight);
+                                // 右半邊 - 使用 Attribute2 判斷
+                                Pen pen2 = (attr.Attribute2 & 0x01) != 0 ? penImpassable : penPassable;
+                                g.DrawLine(pen2, pTop, pRight);
+                                g.DrawLine(pen2, pRight, pBottom);
+                                g.DrawLine(pen2, pBottom, pCenter);
+                                g.DrawLine(pen2, pCenter, pTop);
                             }
                         }
                     }
@@ -7308,15 +7377,18 @@ namespace L1FlyMapViewer
         }
 
         // 繪製區域覆蓋層（Viewport 版本）
+        // Attribute1 = 左半邊, Attribute2 = 右半邊（與通行性繪製一致）
         private void DrawRegionsOverlayViewport(Bitmap bitmap, Struct.L1Map currentMap, Rectangle worldRect)
         {
+            bool showSafe = _viewState.ShowSafeZones;
+            bool showCombat = _viewState.ShowCombatZones;
+
             using (Graphics g = Graphics.FromImage(bitmap))
             {
                 // 定義區域顏色（半透明）
-                // 一般：淺白色，安全：藍色，戰鬥：紫色
-                using (Brush normalBrush = new SolidBrush(Color.FromArgb(40, 255, 255, 255)))   // 淺白色
+                // 安全區：藍色，戰鬥區：紅色
                 using (Brush safeBrush = new SolidBrush(Color.FromArgb(80, 0, 150, 255)))       // 藍色
-                using (Brush combatBrush = new SolidBrush(Color.FromArgb(80, 180, 0, 255)))     // 紫色
+                using (Brush combatBrush = new SolidBrush(Color.FromArgb(80, 255, 50, 50)))     // 紅色
                 {
                     foreach (var s32Data in _document.S32Files.Values)
                     {
@@ -7329,10 +7401,7 @@ namespace L1FlyMapViewer
                             for (int x = 0; x < 64; x++)
                             {
                                 var attr = s32Data.Layer3[y, x];
-
-                                // 檢查區域類型
-                                bool isSafe = attr != null && ((attr.Attribute1 & 0x02) != 0 || (attr.Attribute2 & 0x02) != 0);
-                                bool isCombat = attr != null && ((attr.Attribute1 & 0x04) != 0 || (attr.Attribute2 & 0x04) != 0);
+                                if (attr == null) continue;
 
                                 int x1 = x * 2;
                                 int localBaseX = 0 - 24 * (x1 / 2);
@@ -7345,25 +7414,31 @@ namespace L1FlyMapViewer
                                 if (X + 48 < 0 || X > worldRect.Width || Y + 24 < 0 || Y > worldRect.Height)
                                     continue;
 
-                                // 繪製菱形格子的區域標記
-                                Point[] diamond = new Point[]
-                                {
-                                    new Point(X + 24, Y + 0),      // 上
-                                    new Point(X + 48, Y + 12),     // 右
-                                    new Point(X + 24, Y + 24),     // 下
-                                    new Point(X + 0, Y + 12)       // 左
-                                };
+                                // 菱形的四個頂點
+                                Point pTop = new Point(X + 24, Y + 0);
+                                Point pRight = new Point(X + 48, Y + 12);
+                                Point pBottom = new Point(X + 24, Y + 24);
+                                Point pLeft = new Point(X + 0, Y + 12);
 
-                                // 選擇對應的顏色
-                                Brush regionBrush;
-                                if (isCombat)
+                                // 檢查區域類型（根據 MapTool 邏輯，客戶端只用 Attribute1 判斷整個格子）
+                                // 低4位: 0-3=一般, 4-7/C-F=安全(bit2), 8-B=戰鬥(bit3且非bit2)
+                                int val = attr.Attribute1 & 0x0F;
+                                bool isSafe = (val & 0x04) != 0;  // bit 2 設定 = 安全區
+                                bool isCombat = (val & 0x0C) == 0x08;  // bit 3 設定但 bit 2 未設定 = 戰鬥區
+
+                                // 決定整個格子的顏色
+                                Brush regionBrush = null;
+                                if (isCombat && showCombat)
                                     regionBrush = combatBrush;
-                                else if (isSafe)
+                                else if (isSafe && showSafe)
                                     regionBrush = safeBrush;
-                                else
-                                    regionBrush = normalBrush;
 
-                                g.FillPolygon(regionBrush, diamond);
+                                if (regionBrush != null)
+                                {
+                                    // 繪製整個菱形
+                                    Point[] diamond = new Point[] { pTop, pRight, pBottom, pLeft };
+                                    g.FillPolygon(regionBrush, diamond);
+                                }
                             }
                         }
                     }
@@ -12886,9 +12961,11 @@ namespace L1FlyMapViewer
                     flags1.Add("不可通行");
                 else
                     flags1.Add("可通行");
-                if ((attr.Attribute1 & 0x02) != 0) flags1.Add("安全區");
-                if ((attr.Attribute1 & 0x04) != 0) flags1.Add("戰鬥區");
-                if ((attr.Attribute1 & 0x08) != 0) flags1.Add("標記8");
+                // 根據 MapTool 邏輯判斷區域
+                int val1 = attr.Attribute1 & 0x0F;
+                if ((val1 & 0x04) != 0) flags1.Add("安全區");
+                else if ((val1 & 0x0C) == 0x08) flags1.Add("戰鬥區");
+                if ((attr.Attribute1 & 0x02) != 0) flags1.Add("標記2");
                 if ((attr.Attribute1 & 0x10) != 0) flags1.Add("標記16");
                 info.AppendLine($"  左上邊標記: {string.Join(", ", flags1)}");
 
@@ -12898,9 +12975,10 @@ namespace L1FlyMapViewer
                     flags2.Add("不可通行");
                 else
                     flags2.Add("可通行");
-                if ((attr.Attribute2 & 0x02) != 0) flags2.Add("安全區");
-                if ((attr.Attribute2 & 0x04) != 0) flags2.Add("戰鬥區");
-                if ((attr.Attribute2 & 0x08) != 0) flags2.Add("標記8");
+                int val2 = attr.Attribute2 & 0x0F;
+                if ((val2 & 0x04) != 0) flags2.Add("安全區");
+                else if ((val2 & 0x0C) == 0x08) flags2.Add("戰鬥區");
+                if ((attr.Attribute2 & 0x02) != 0) flags2.Add("標記2");
                 if ((attr.Attribute2 & 0x10) != 0) flags2.Add("標記16");
                 info.AppendLine($"  右上邊標記: {string.Join(", ", flags2)}");
             }
@@ -22242,91 +22320,6 @@ namespace L1FlyMapViewer
                 FileName = "https://discord.gg/vjSKGD95HB",
                 UseShellExecute = true
             });
-        }
-
-        private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-            var versionStr = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0";
-
-            var aboutForm = new Form
-            {
-                Text = LocalizationManager.L("About_Title"),
-                Size = new Size(400, 280),
-                StartPosition = FormStartPosition.CenterParent,
-                FormBorderStyle = FormBorderStyle.FixedDialog,
-                MaximizeBox = false,
-                MinimizeBox = false,
-                BackColor = Color.White
-            };
-
-            var titleLabel = new Label
-            {
-                Text = "L1MapViewer",
-                Font = new Font("Segoe UI", 18, FontStyle.Bold),
-                Location = new Point(20, 20),
-                AutoSize = true
-            };
-
-            var versionLabel = new Label
-            {
-                Text = $"{LocalizationManager.L("About_Version")}: {versionStr}",
-                Font = new Font("Segoe UI", 10),
-                Location = new Point(20, 55),
-                AutoSize = true
-            };
-
-            var descLabel = new Label
-            {
-                Text = LocalizationManager.L("About_Description"),
-                Font = new Font("Segoe UI", 9),
-                Location = new Point(20, 85),
-                Size = new Size(350, 40)
-            };
-
-            var discordLink = new LinkLabel
-            {
-                Text = $"{LocalizationManager.L("About_Discord")}: discord.gg/vjSKGD95HB",
-                Font = new Font("Segoe UI", 9),
-                Location = new Point(20, 135),
-                AutoSize = true
-            };
-            discordLink.Click += (s, args) =>
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "https://discord.gg/vjSKGD95HB",
-                    UseShellExecute = true
-                });
-            };
-
-            var githubLink = new LinkLabel
-            {
-                Text = $"{LocalizationManager.L("About_GitHub")}: github.com/tony1223/L1MapViewer",
-                Font = new Font("Segoe UI", 9),
-                Location = new Point(20, 160),
-                AutoSize = true
-            };
-            githubLink.Click += (s, args) =>
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "https://github.com/tony1223/L1MapViewer",
-                    UseShellExecute = true
-                });
-            };
-
-            var okButton = new Button
-            {
-                Text = LocalizationManager.L("Button_OK"),
-                Location = new Point(150, 200),
-                Size = new Size(100, 30),
-                DialogResult = DialogResult.OK
-            };
-
-            aboutForm.Controls.AddRange(new Control[] { titleLabel, versionLabel, descLabel, discordLink, githubLink, okButton });
-            aboutForm.AcceptButton = okButton;
-            aboutForm.ShowDialog(this);
         }
     }
 }
