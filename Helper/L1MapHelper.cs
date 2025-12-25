@@ -49,10 +49,8 @@ namespace L1MapViewer.Helper {
                 MessageBox.Show("錯誤的天堂路徑");
                 return Share.MapDataList;
             }
-            //是否為天R
-            if (Directory.Exists(szSelectedPath + @"/bin32/")) {
-                isRemastered = true;
-            }
+            //是否為天R - 每次都需要重新判斷
+            isRemastered = Directory.Exists(szSelectedPath + @"/bin32/") || Directory.Exists(szSelectedPath + @"\bin32\");
 
             var stopwatch = Stopwatch.StartNew();
 
@@ -1154,13 +1152,33 @@ namespace L1MapViewer.Helper {
 
             }
 
-            if (id >= tilArray.Count) {
-                if (!OverList.Contains(key)) {
-                    OverList.Add(key);
-                    Console.WriteLine("OverRange=" + key + "id=" + id + ">" + tilArray.Count);
+            // 備援機制：當 tilArray 為 null 或 id 越界時
+            if (tilArray == null || id >= tilArray.Count) {
+                if (til != 0) {
+                    // 載入 0.til 作為預設填補
+                    string fallbackKey = "0.til";
+                    if (tilList.ContainsKey(fallbackKey)) {
+                        tilArray = tilList[fallbackKey];
+                    } else {
+                        byte[] fallbackData = L1PakReader.UnPack("Tile", fallbackKey);
+                        tilArray = L1Til.Parse(fallbackData);
+                        if (tilArray != null)
+                            tilList[fallbackKey] = tilArray;
+                    }
+                    if (tilArray == null || tilArray.Count == 0) return;
+                    // 使用 187 或 188 作為預設 id (0x8CBB/0x8CBC 計算結果)
+                    id = 187 + (x & 1);
+                    if (id >= tilArray.Count)
+                        id = id % tilArray.Count;
+                } else {
+                    // TileId=0 時，對 tilArray.Count 取模
+                    if (tilArray != null && tilArray.Count > 0)
+                        id = id % tilArray.Count;
+                    else
+                        return;
                 }
-                return;
             }
+            if (tilArray == null || id >= tilArray.Count) return;
 
             int baseX = 0;
             int baseY = 63 * 12;
@@ -1176,7 +1194,7 @@ namespace L1MapViewer.Helper {
             byte* ptr = (byte*)Scan0;
             byte type = *(til_ptr++);
 
-            if (type == 1 || type == 9 || type == 17) {
+            if ((type & 0x02) == 0 && (type & 0x01) != 0) {
                 for (int ty = 0; ty < 24; ty++) {
                     int n = 0;
                     //2.5D方塊的下半部
@@ -1207,7 +1225,7 @@ namespace L1MapViewer.Helper {
                         tx++;
                     }
                 }
-            } else if (type == 0 || type == 8 || type == 16) {
+            } else if ((type & 0x02) == 0 && (type & 0x01) == 0) {
                 for (int ty = 0; ty < 24; ty++) {
                     int n = 0;
                     //2.5D方塊的上半部
@@ -1237,42 +1255,8 @@ namespace L1MapViewer.Helper {
                         tx++;
                     }
                 }
-            } else if (type == 34 || type == 35) { //白白的..須要跟背景結合的圖 
-                byte x_offset = *(til_ptr++);
-                byte y_offset = *(til_ptr++);
-                byte xxLen = *(til_ptr++);
-                byte yLen = *(til_ptr++);
-
-                for (int ty = 0; ty < yLen; ty++) {
-                    int tx = x_offset;
-                    byte xSegmentCount = *(til_ptr++); // 有資料水平點數(X count), 水平區段數量
-                    for (int nx = 0; nx < xSegmentCount; nx++) {
-                        tx += *(til_ptr++) / 2;    // 跳過這個水平區段前的水平空白點數.
-                        int xLen = *(til_ptr++);    // 讀取這一水平區段的點數.
-                        for (int p = 0; p < xLen; p++) {
-                            // ushort color = (ushort)(tilData[idx++] & 0xff | (tilData[idx++] << 8) & 0xff00);
-                            ushort color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));
-                            int startX = baseX + x * 24 + y * 24 + tx;
-                            int startY = baseY + y * 12 + ty + y_offset;
-
-                            if (startX < 0 || startX >= maxWidth) {
-                                continue;
-                            }
-                            if (startY < 0 || startY >= maxHeight) {
-                                continue;
-                            }
-                            int v = (startY) * rowpix + (startX * 2);
-
-                            // ushort colorB = (ushort)(ptr[v] & 0xff | (ptr[v + 1] << 8) & 0xff00);
-                            ushort colorB = (ushort)(*(ptr + v) | (*(ptr + v + 1) << 8));
-                            color = (ushort)(colorB + 0xffff - color);
-                            *(ptr + v) = (byte)(color & 0x00FF);
-                            *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
-                            tx++;
-                        }
-                    }
-                }
-            } else {
+            } 
+			else {
                 byte x_offset = *(til_ptr++);
                 byte y_offset = *(til_ptr++);
                 byte xxLen = *(til_ptr++);
@@ -1322,13 +1306,34 @@ namespace L1MapViewer.Helper {
 
             }
 
-            if (id >= tilArray.Count) {
-                if (!OverList.Contains(key)) {
-                    OverList.Add(key);
-                    // Console.WriteLine("OverRange=" + key + "id=" + id + ">" + tilArray.Count);
+            // 備援機制：當 tilArray 為 null 或 id 越界時
+            if (tilArray == null || id >= tilArray.Count) {
+                if (til != 0) {
+                    // 載入 0.til 作為預設填補
+                    string fallbackKey = "0.til";
+                    if (tilList.ContainsKey(fallbackKey)) {
+                        tilArray = tilList[fallbackKey];
+                    } else {
+                        byte[] fallbackData = L1PakReader.UnPack("Tile", fallbackKey);
+                        tilArray = L1Til.Parse(fallbackData);
+                        if (tilArray != null)
+                            tilList[fallbackKey] = tilArray;
+                    }
+                    if (tilArray == null || tilArray.Count == 0) return;
+                    // 使用 187 或 188 作為預設 id (0x8CBB/0x8CBC 計算結果)
+                    id = 187 + (x & 1);
+                    if (id >= tilArray.Count)
+                        id = id % tilArray.Count;
+                } else {
+                    // TileId=0 時，對 tilArray.Count 取模
+                    if (tilArray != null && tilArray.Count > 0)
+                        id = id % tilArray.Count;
+                    else
+                        return;
                 }
-                return;
             }
+            if (tilArray == null || id >= tilArray.Count) return;
+
             int baseX = 0;
             int baseY = 1512;//63 * 24;
             baseX -= 48 * (x / 2);
@@ -1347,7 +1352,7 @@ namespace L1MapViewer.Helper {
 
             byte type = *(til_ptr++);
 
-            if (type == 1 || type == 9 || type == 17) {
+            if ((type & 0x02) == 0 && (type & 0x01) != 0) {
                 for (int ty = 0; ty < 48; ty++) {
                     int n = 0;
                     //2.5D方塊的下半部
@@ -1380,7 +1385,7 @@ namespace L1MapViewer.Helper {
                         tx++;
                     }
                 }
-            } else if (type == 0 || type == 8 || type == 16) {
+            } else if ((type & 0x02) == 0 && (type & 0x01) == 0) {
                 for (int ty = 0; ty < 48; ty++) {
                     int n = 0;
                     //2.5D方塊的上半部
@@ -1411,41 +1416,8 @@ namespace L1MapViewer.Helper {
                         tx++;
                     }
                 }
-            } else if (type == 34 || type == 35) { //白白的..須要跟背景結合的圖 
-                byte x_offset = *(til_ptr++);
-                byte y_offset = *(til_ptr++);
-                byte xxLen = *(til_ptr++);
-                byte yLen = *(til_ptr++);
-
-                for (int ty = 0; ty < yLen; ty++) {
-                    int tx = x_offset;
-                    byte xSegmentCount = *(til_ptr++); // 有資料水平點數(X count), 水平區段數量
-                    for (int nx = 0; nx < xSegmentCount; nx++) {
-                        tx += *(til_ptr++) / 2;    // 跳過這個水平區段前的水平空白點數.
-                        int xLen = *(til_ptr++);    // 讀取這一水平區段的點數.
-                        for (int p = 0; p < xLen; p++) {
-                            // color = (ushort)(tilData[idx++] & 0xff | (tilData[idx++] << 8) & 0xff00);
-                            color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));
-                            startX = baseX + x * 48 + y * 48 + tx;
-                            startY = baseY + y * 24 + ty + y_offset;
-
-                            if (startX < 0 || startX >= maxWidth) {
-                                continue;
-                            }
-                            if (startY < 0 || startY >= maxHeight) {
-                                continue;
-                            }
-                            v = (startY) * rowpix + (startX * 2);
-
-                            ushort colorB = (ushort)(*(ptr + v) | (*(ptr + v + 1) << 8));
-                            color = (ushort)(colorB + 0xffff - color);
-                            *(ptr + v) = (byte)(color & 0x00FF);
-                            *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
-                            tx++;
-                        }
-                    }
-                }
-            } else {
+            } 
+			else {
                 byte x_offset = *(til_ptr++);
                 byte y_offset = *(til_ptr++);
                 byte xxLen = *(til_ptr++);

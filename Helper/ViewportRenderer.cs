@@ -108,7 +108,7 @@ namespace L1MapViewer.Helper
                         for (int x = 0; x < 128; x++)
                         {
                             var cell = s32Data.Layer1[y, x];
-                            if (cell != null && cell.TileId > 0)
+                            if (cell != null && cell.TileId >= 0)
                             {
                                 int halfX = x / 2;
                                 int baseX = -24 * halfX;
@@ -127,7 +127,7 @@ namespace L1MapViewer.Helper
                 {
                     foreach (var item in s32Data.Layer2)
                     {
-                        if (item.TileId > 0)
+                        if (item.TileId >= 0)
                         {
                             int x = item.X;
                             int y = item.Y;
@@ -262,7 +262,7 @@ namespace L1MapViewer.Helper
                         for (int x = 0; x < 128; x++)
                         {
                             var cell = s32Data.Layer1[y, x];
-                            if (cell != null && cell.TileId > 0)
+                            if (cell != null && cell.TileId >= 0)
                             {
                                 int baseX = 0;
                                 int baseY = 63 * 12;
@@ -283,7 +283,7 @@ namespace L1MapViewer.Helper
                 {
                     foreach (var item in s32Data.Layer2)
                     {
-                        if (item.TileId > 0)
+                        if (item.TileId >= 0)
                         {
                             int x = item.X;
                             int y = item.Y;
@@ -340,6 +340,34 @@ namespace L1MapViewer.Helper
                     return L1Til.Parse(data);
                 });
 
+                // 備援機制：當 tilArray 為 null 或 indexId 越界時
+                if (tilArray == null || indexId >= tilArray.Count)
+                {
+                    if (tileId != 0)
+                    {
+                        // 載入 0.til 作為預設填補
+                        tilArray = _tilFileCache.GetOrAdd(0, _ =>
+                        {
+                            string key = "0.til";
+                            byte[] data = L1PakReader.UnPack("Tile", key);
+                            if (data == null) return null;
+                            return L1Til.Parse(data);
+                        });
+                        if (tilArray == null || tilArray.Count == 0) return;
+                        // 使用 187 或 188 作為預設 indexId (0x8CBB/0x8CBC 計算結果)
+                        indexId = 187 + ((pixelX / 24) & 1);
+                        if (indexId >= tilArray.Count)
+                            indexId = indexId % tilArray.Count;
+                    }
+                    else
+                    {
+                        // TileId=0 時，對 tilArray.Count 取模
+                        if (tilArray != null && tilArray.Count > 0)
+                            indexId = indexId % tilArray.Count;
+                        else
+                            return;
+                    }
+                }
                 if (tilArray == null || indexId >= tilArray.Count) return;
                 byte[] tilData = tilArray[indexId];
                 if (tilData == null) return;
@@ -349,7 +377,7 @@ namespace L1MapViewer.Helper
                     byte* til_ptr = til_ptr_fixed;
                     byte type = *(til_ptr++);
 
-                    if (type == 1 || type == 9 || type == 17)
+                    if ((type & 0x02) == 0 && (type & 0x01) != 0)
                     {
                         for (int ty = 0; ty < 24; ty++)
                         {
@@ -370,7 +398,7 @@ namespace L1MapViewer.Helper
                             }
                         }
                     }
-                    else if (type == 0 || type == 8 || type == 16)
+                    else if ((type & 0x02) == 0 && (type & 0x01) == 0)
                     {
                         for (int ty = 0; ty < 24; ty++)
                         {
@@ -388,40 +416,6 @@ namespace L1MapViewer.Helper
                                     *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
                                 }
                                 tx++;
-                            }
-                        }
-                    }
-                    else if (type == 34 || type == 35)
-                    {
-                        // 壓縮格式 - 需要與背景混合
-                        byte x_offset = *(til_ptr++);
-                        byte y_offset = *(til_ptr++);
-                        byte xxLen = *(til_ptr++);
-                        byte yLen = *(til_ptr++);
-
-                        for (int ty = 0; ty < yLen; ty++)
-                        {
-                            int tx = x_offset;
-                            byte xSegmentCount = *(til_ptr++);
-                            for (int nx = 0; nx < xSegmentCount; nx++)
-                            {
-                                tx += *(til_ptr++) / 2;
-                                int xLen = *(til_ptr++);
-                                for (int p = 0; p < xLen; p++)
-                                {
-                                    ushort color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));
-                                    int startX = pixelX + tx;
-                                    int startY = pixelY + ty + y_offset;
-                                    if (startX >= 0 && startX < maxWidth && startY >= 0 && startY < maxHeight)
-                                    {
-                                        int v = startY * rowpix + (startX * 2);
-                                        ushort colorB = (ushort)(*(ptr + v) | (*(ptr + v + 1) << 8));
-                                        color = (ushort)(colorB + 0xffff - color);
-                                        *(ptr + v) = (byte)(color & 0x00FF);
-                                        *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
-                                    }
-                                    tx++;
-                                }
                             }
                         }
                     }

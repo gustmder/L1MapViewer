@@ -621,7 +621,7 @@ namespace L1MapViewer.Converter {
             byte type = blockData[0];
 
             // 判斷是否為簡單菱形格式
-            bool isSimpleDiamond = (type == 0 || type == 1 || type == 8 || type == 9 || type == 16 || type == 17);
+            bool isSimpleDiamond = ( (type & 0x02) == 0);
 
             if (isSimpleDiamond)
             {

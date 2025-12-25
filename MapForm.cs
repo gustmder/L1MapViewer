@@ -177,7 +177,7 @@ namespace L1FlyMapViewer
                         for (int x = 0; x < 128; x++)
                         {
                             var cell = s32.Layer1[y, x];
-                            if (cell != null && cell.TileId > 0)
+                            if (cell != null && cell.TileId >= 0)
                                 tileIds.Add(cell.TileId);
                         }
                     }
@@ -2889,9 +2889,20 @@ namespace L1FlyMapViewer
                         string filePath = kvp.Key;
                         var segInfo = kvp.Value;
 
-                        if (segInfo.isS32 && File.Exists(filePath))
+                        if (File.Exists(filePath))
                         {
-                            var s32Data = S32Parser.ParseFile(filePath);
+                            S32Data s32Data = null;
+                            if (segInfo.isS32)
+                            {
+                                // 解析 .s32 檔案
+                                s32Data = S32Parser.ParseFile(filePath);
+                            }
+                            else
+                            {
+                                // 解析 .seg 檔案
+                                s32Data = SegParser.ParseFile(filePath);
+                            }
+
                             if (s32Data != null)
                             {
                                 s32Data.SegInfo = segInfo;
@@ -2900,7 +2911,7 @@ namespace L1FlyMapViewer
                                 loadedCount++;
                                 if (loadedCount % 10 == 0)
                                 {
-                                    toolStripStatusLabel1.Text = $"正在載入 S32 檔案... ({loadedCount})";
+                                    toolStripStatusLabel1.Text = $"正在載入地圖檔案... ({loadedCount})";
                                     Application.DoEvents();
                                 }
                             }
@@ -2909,7 +2920,7 @@ namespace L1FlyMapViewer
 
                     if (tempDocument.S32Files.Count == 0)
                     {
-                        MessageBox.Show($"地圖 {mapId} 沒有 S32 檔案", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show($"地圖 {mapId} 沒有可用的地圖檔案 (.s32 或 .seg)", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         return;
                     }
 
@@ -4057,25 +4068,23 @@ namespace L1FlyMapViewer
                 string filePath = kvp.Key;
                 Struct.L1MapSeg segInfo = kvp.Value;
 
-                // 只處理 s32 檔案
-                if (segInfo.isS32)
+                // 處理 s32 和 seg 檔案
+                string fileName = Path.GetFileName(filePath);
+                string fileType = segInfo.isS32 ? "" : " [SEG]";
+                string displayName = $"{fileName}{fileType} ({segInfo.nBlockX:X4},{segInfo.nBlockY:X4}) [{segInfo.nLinBeginX},{segInfo.nLinBeginY}~{segInfo.nLinEndX},{segInfo.nLinEndY}]";
+
+                S32FileItem item = new S32FileItem
                 {
-                    string fileName = Path.GetFileName(filePath);
-                    string displayName = $"{fileName} ({segInfo.nBlockX:X4},{segInfo.nBlockY:X4}) [{segInfo.nLinBeginX},{segInfo.nLinBeginY}~{segInfo.nLinEndX},{segInfo.nLinEndY}]";
+                    FilePath = filePath,
+                    DisplayName = displayName,
+                    SegInfo = segInfo,
+                    IsChecked = true
+                };
 
-                    S32FileItem item = new S32FileItem
-                    {
-                        FilePath = filePath,
-                        DisplayName = displayName,
-                        SegInfo = segInfo,
-                        IsChecked = true
-                    };
-
-                    int index = lstS32Files.Items.Add(item);
-                    lstS32Files.SetItemChecked(index, true);  // 預設勾選
-                    _checkedS32Files.Add(filePath);  // 加入快取
-                    s32FileItems.Add(item);
-                }
+                int index = lstS32Files.Items.Add(item);
+                lstS32Files.SetItemChecked(index, true);  // 預設勾選
+                _checkedS32Files.Add(filePath);  // 加入快取
+                s32FileItems.Add(item);
             }
             long uiListMs = phaseStopwatch.ElapsedMilliseconds;
 
@@ -4129,15 +4138,29 @@ namespace L1FlyMapViewer
                 {
                     try
                     {
-                        S32Data s32Data = ParseS32File(fileData.data);
-                        s32Data.FilePath = fileData.item.FilePath;
-                        s32Data.SegInfo = fileData.item.SegInfo;
-                        s32Data.IsModified = false;
-                        parsedResults.Add((fileData.item.FilePath, s32Data));
+                        S32Data s32Data;
+                        if (fileData.item.SegInfo.isS32)
+                        {
+                            // 解析 .s32 檔案
+                            s32Data = ParseS32File(fileData.data);
+                        }
+                        else
+                        {
+                            // 解析 .seg 檔案
+                            s32Data = SegParser.Parse(fileData.data);
+                        }
+
+                        if (s32Data != null)
+                        {
+                            s32Data.FilePath = fileData.item.FilePath;
+                            s32Data.SegInfo = fileData.item.SegInfo;
+                            s32Data.IsModified = false;
+                            parsedResults.Add((fileData.item.FilePath, s32Data));
+                        }
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"解析 S32 檔案失敗: {fileData.item.FilePath}, 錯誤: {ex.Message}");
+                        Console.WriteLine($"解析地圖檔案失敗: {fileData.item.FilePath}, 錯誤: {ex.Message}");
                     }
                 });
                 parseSw.Stop();
@@ -6265,7 +6288,7 @@ namespace L1FlyMapViewer
                             for (int x = 0; x < 128; x++)
                             {
                                 var cell = s32Data.Layer1[y, x];
-                                if (cell != null && cell.TileId > 0)
+                                if (cell != null && cell.TileId >= 0)
                                 {
                                     int halfX = x / 2;
                                     int baseX = -24 * halfX;
@@ -6593,7 +6616,7 @@ namespace L1FlyMapViewer
                         for (int x = 0; x < 128; x++)
                         {
                             var cell = s32Data.Layer1[y, x];
-                            if (cell != null && cell.TileId > 0)
+                            if (cell != null && cell.TileId >= 0)
                             {
                                 // 與 L1MapHelper.drawTilBlock 完全相同的座標計算
                                 int baseX = 0;
@@ -7745,7 +7768,7 @@ namespace L1FlyMapViewer
                     baseX -= 24 * (x / 2);
                     baseY -= 12 * (x / 2);
 
-                    if (type == 1 || type == 9 || type == 17)
+                    if ((type & 0x02) == 0 && (type & 0x01) != 0 )
                     {
                         for (int ty = 0; ty < 24; ty++)
                         {
@@ -7766,7 +7789,7 @@ namespace L1FlyMapViewer
                             }
                         }
                     }
-                    else if (type == 0 || type == 8 || type == 16)
+                    else if ((type & 0x02) == 0 && (type & 0x01) == 0)
                     {
                         for (int ty = 0; ty < 24; ty++)
                         {
@@ -7811,8 +7834,6 @@ namespace L1FlyMapViewer
                                     if (startX >= 0 && startX < maxWidth && startY >= 0 && startY < maxHeight)
                                     {
                                         int v = startY * rowpix + (startX * 2);
-                                        ushort colorB = (ushort)(*(ptr + v) | (*(ptr + v + 1) << 8));
-                                        color = (ushort)(colorB + 0xffff - color);
                                         *(ptr + v) = (byte)(color & 0x00FF);
                                         *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
                                     }
@@ -7875,6 +7896,34 @@ namespace L1FlyMapViewer
                     return L1Til.Parse(data);
                 });
 
+                // 備援機制：當 tilArray 為 null 或 indexId 越界時
+                if (tilArray == null || indexId >= tilArray.Count)
+                {
+                    if (tileId != 0)
+                    {
+                        // 載入 0.til 作為預設填補
+                        tilArray = _tilFileCache.GetOrAdd(0, _ =>
+                        {
+                            string key = "0.til";
+                            byte[] data = L1PakReader.UnPack("Tile", key);
+                            if (data == null) return null;
+                            return L1Til.Parse(data);
+                        });
+                        if (tilArray == null || tilArray.Count == 0) return;
+                        // 使用 187 或 188 作為預設 indexId (0x8CBB/0x8CBC 計算結果)
+                        indexId = 187 + ((pixelX / 24) & 1);
+                        if (indexId >= tilArray.Count)
+                            indexId = indexId % tilArray.Count;
+                    }
+                    else
+                    {
+                        // TileId=0 時，對 tilArray.Count 取模
+                        if (tilArray != null && tilArray.Count > 0)
+                            indexId = indexId % tilArray.Count;
+                        else
+                            return;
+                    }
+                }
                 if (tilArray == null || indexId >= tilArray.Count) return;
                 byte[] tilData = tilArray[indexId];
                 if (tilData == null) return;
@@ -7884,7 +7933,7 @@ namespace L1FlyMapViewer
                     byte* til_ptr = til_ptr_fixed;
                     byte type = *(til_ptr++);
 
-                    if (type == 1 || type == 9 || type == 17)
+                    if ((type & 0x02) == 0 && (type & 0x01) != 0)
                     {
                         for (int ty = 0; ty < 24; ty++)
                         {
@@ -7905,7 +7954,7 @@ namespace L1FlyMapViewer
                             }
                         }
                     }
-                    else if (type == 0 || type == 8 || type == 16)
+                    else if ((type & 0x02) == 0 && (type & 0x01) == 0)
                     {
                         for (int ty = 0; ty < 24; ty++)
                         {
@@ -7950,8 +7999,6 @@ namespace L1FlyMapViewer
                                     if (startX >= 0 && startX < maxWidth && startY >= 0 && startY < maxHeight)
                                     {
                                         int v = startY * rowpix + (startX * 2);
-                                        ushort colorB = (ushort)(*(ptr + v) | (*(ptr + v + 1) << 8));
-                                        color = (ushort)(colorB + 0xffff - color);
                                         *(ptr + v) = (byte)(color & 0x00FF);
                                         *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
                                     }
@@ -8507,7 +8554,7 @@ namespace L1FlyMapViewer
                     int offsetX = 12;
                     int offsetY = 12;
 
-                    if (type == 1 || type == 9 || type == 17)
+                    if ((type & 0x02) == 0 && (type & 0x01) != 0 )
                     {
                         // 下半部 2.5D 方塊
                         for (int ty = 0; ty < 24; ty++)
@@ -8529,7 +8576,7 @@ namespace L1FlyMapViewer
                             }
                         }
                     }
-                    else if (type == 0 || type == 8 || type == 16)
+                    else if ((type & 0x02) == 0 && (type & 0x01) == 0 )
                     {
                         // 上半部 2.5D 方塊
                         for (int ty = 0; ty < 24; ty++)
@@ -8575,12 +8622,6 @@ namespace L1FlyMapViewer
                                     if (px >= 0 && px < 48 && py >= 0 && py < 48)
                                     {
                                         int v = py * rowpix + (px * 2);
-                                        if (type == 34 || type == 35)
-                                        {
-                                            // 需要與背景混合
-                                            ushort colorB = (ushort)(*(ptr + v) | (*(ptr + v + 1) << 8));
-                                            color = (ushort)(colorB + 0xffff - color);
-                                        }
                                         *(ptr + v) = (byte)(color & 0x00FF);
                                         *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
                                     }
@@ -13215,7 +13256,7 @@ namespace L1FlyMapViewer
                     int offsetX = (int)((size - 24 * scale) / 2);
                     int offsetY = (int)((size - 24 * scale) / 2);
 
-                    if (type == 1 || type == 9 || type == 17)
+                    if ((type & 0x02) == 0 && (type & 0x01) != 0)
                     {
                         // 下半部 2.5D 方塊
                         for (int ty = 0; ty < 24; ty++)
@@ -13314,12 +13355,6 @@ namespace L1FlyMapViewer
                                             if (px >= 0 && px < size && py >= 0 && py < size)
                                             {
                                                 int v = py * rowpix + (px * 2);
-                                                if (type == 34 || type == 35)
-                                                {
-                                                    // 需要與背景混合
-                                                    ushort colorB = (ushort)(*(ptr + v) | (*(ptr + v + 1) << 8));
-                                                    color = (ushort)(colorB + 0xffff - color);
-                                                }
                                                 *(ptr + v) = (byte)(color & 0x00FF);
                                                 *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
                                             }
