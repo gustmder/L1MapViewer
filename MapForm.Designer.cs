@@ -643,9 +643,11 @@ namespace L1FlyMapViewer
             this.lstS32Files.Size = new Size(254, 305);
             this.lstS32Files.TabIndex = 3;
             this.lstS32Files.CheckOnClick = false;
+            this.lstS32Files.DrawMode = DrawMode.OwnerDrawFixed;
             this.lstS32Files.SelectedIndexChanged += new System.EventHandler(this.lstS32Files_SelectedIndexChanged);
             this.lstS32Files.ItemCheck += new ItemCheckEventHandler(this.lstS32Files_ItemCheck);
             this.lstS32Files.MouseUp += new MouseEventHandler(this.lstS32Files_MouseUp);
+            this.lstS32Files.DrawItem += new DrawItemEventHandler(this.lstS32Files_DrawItem);
 
             //
             // tabControl1

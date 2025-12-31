@@ -4394,6 +4394,64 @@ namespace L1FlyMapViewer
             LoadAndParseS32File(item.FilePath);
         }
 
+        // S32 檔案清單繪製事件（自訂高亮）
+        private void lstS32Files_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0 || e.Index >= lstS32Files.Items.Count)
+                return;
+
+            var item = lstS32Files.Items[e.Index] as S32FileItem;
+            if (item == null)
+                return;
+
+            // 判斷是否需要高亮（選取區域涉及的 S32）
+            bool isHighlighted = _highlightedS32Paths != null && _highlightedS32Paths.Contains(item.FilePath);
+            bool isSelected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+            bool isChecked = lstS32Files.GetItemChecked(e.Index);
+
+            // 繪製背景
+            Color backColor;
+            if (isSelected)
+                backColor = SystemColors.Highlight;
+            else if (isHighlighted)
+                backColor = Color.FromArgb(255, 255, 200);  // 淡黃色高亮
+            else
+                backColor = SystemColors.Window;
+
+            using (var brush = new SolidBrush(backColor))
+            {
+                e.Graphics.FillRectangle(brush, e.Bounds);
+            }
+
+            // 繪製勾選框
+            int checkboxWidth = 16;
+            Rectangle checkRect = new Rectangle(e.Bounds.X + 2, e.Bounds.Y + (e.Bounds.Height - 12) / 2, 12, 12);
+            ControlPaint.DrawCheckBox(e.Graphics, checkRect,
+                isChecked ? ButtonState.Checked : ButtonState.Normal);
+
+            // 繪製文字
+            Color textColor = isSelected ? SystemColors.HighlightText : SystemColors.WindowText;
+            Font drawFont = e.Font ?? lstS32Files.Font;
+            using (var brush = new SolidBrush(textColor))
+            {
+                Rectangle textRect = new Rectangle(e.Bounds.X + checkboxWidth + 4, e.Bounds.Y,
+                    e.Bounds.Width - checkboxWidth - 4, e.Bounds.Height);
+
+                var format = new StringFormat
+                {
+                    LineAlignment = StringAlignment.Center,
+                    Trimming = StringTrimming.EllipsisCharacter
+                };
+                e.Graphics.DrawString(item.ToString(), drawFont, brush, textRect, format);
+            }
+
+            // 繪製焦點框
+            if ((e.State & DrawItemState.Focus) == DrawItemState.Focus)
+            {
+                ControlPaint.DrawFocusRectangle(e.Graphics, e.Bounds);
+            }
+        }
+
         // S32 檔案清單右鍵跳轉
         private void lstS32Files_MouseUp(object sender, MouseEventArgs e)
         {
@@ -9684,9 +9742,8 @@ namespace L1FlyMapViewer
                 // 延遲更新 MiniMap，避免阻塞拖曳結束事件
                 this.BeginInvoke((MethodInvoker)delegate { UpdateMiniMap(); });
 
-                // 拖曳結束後延遲渲染（避免快速連續拖曳時頻繁重渲染）
-                dragRenderTimer.Stop();
-                dragRenderTimer.Start();
+                // 拖曳結束後重新渲染
+                RenderS32Map();
 
                 upSw.Stop();
                 LogPerf($"[MOUSE-UP-MIDDLE] total={upSw.ElapsedMilliseconds}ms");
@@ -9773,16 +9830,12 @@ namespace L1FlyMapViewer
                     }
                     thumbSw.Stop();
 
-                    // 在透明編輯模式下，需要重新渲染以顯示 Layer5 群組覆蓋層
-                    if (_editState.IsLayer5EditMode)
-                    {
-                        RenderS32Map();
-                    }
-                    else
-                    {
-                        // 保留選取框顯示（只更新覆蓋層）
-                        _mapViewerControl.InvalidateOverlay();
-                    }
+                    // 重新渲染以確保選取區域的 S32 都有顯示
+                    RenderS32Map();
+
+                    // 更新選取區域涉及的 S32 檔案資訊
+                    UpdateSelectionS32Info();
+
                     totalSw.Stop();
                     LogPerf($"[MOUSE-UP-SELECT] bounds={boundsSw.ElapsedMilliseconds}ms, origin={originSw.ElapsedMilliseconds}ms, thumb={thumbSw.ElapsedMilliseconds}ms, total={totalSw.ElapsedMilliseconds}ms, cells={_editState.SelectedCells.Count}");
                     return;
@@ -9869,6 +9922,73 @@ namespace L1FlyMapViewer
 
             menu.Show(_mapViewerControl, location);
         }
+
+        // 更新選取區域涉及的 S32 檔案資訊
+        private void UpdateSelectionS32Info()
+        {
+            if (_editState.SelectedCells.Count == 0)
+            {
+                // 沒有選取時清除高亮
+                ClearS32ListHighlight();
+                return;
+            }
+
+            // 收集選取區域涉及的 S32 檔案
+            var involvedS32s = new HashSet<string>();
+            foreach (var cell in _editState.SelectedCells)
+            {
+                if (cell.S32Data != null && !string.IsNullOrEmpty(cell.S32Data.FilePath))
+                {
+                    involvedS32s.Add(cell.S32Data.FilePath);
+                }
+            }
+
+            if (involvedS32s.Count == 0)
+                return;
+
+            // 更新 lblS32Info 顯示涉及的 S32 檔案
+            var s32Names = involvedS32s.Select(p => Path.GetFileName(p)).OrderBy(n => n).ToList();
+            string s32List = string.Join(", ", s32Names.Take(5));
+            if (s32Names.Count > 5)
+                s32List += $" ... 共 {s32Names.Count} 個";
+
+            lblS32Info.Text = $"選取 {_editState.SelectedCells.Count} 格 | 涉及 S32: {s32List}";
+
+            // 高亮 lstS32Files 中的相關項目
+            HighlightS32ListItems(involvedS32s);
+        }
+
+        // 高亮 S32 檔案清單中的項目
+        private void HighlightS32ListItems(HashSet<string> filePaths)
+        {
+            // 先清除之前的高亮
+            lstS32Files.Invalidate();
+
+            // 找到第一個匹配的項目並捲動到該位置
+            for (int i = 0; i < lstS32Files.Items.Count; i++)
+            {
+                if (lstS32Files.Items[i] is S32FileItem item && filePaths.Contains(item.FilePath))
+                {
+                    // 選中第一個匹配的項目（讓它可見）
+                    lstS32Files.SelectedIndex = i;
+                    break;
+                }
+            }
+
+            // 儲存需要高亮的檔案路徑供繪製使用
+            _highlightedS32Paths = filePaths;
+            lstS32Files.Invalidate();
+        }
+
+        // 清除 S32 檔案清單高亮
+        private void ClearS32ListHighlight()
+        {
+            _highlightedS32Paths = null;
+            lstS32Files.Invalidate();
+        }
+
+        // 需要高亮的 S32 檔案路徑
+        private HashSet<string> _highlightedS32Paths = null;
 
         // 匯出選取區域為 fs32
         private void ExportSelectionAsFs32()
