@@ -18765,8 +18765,21 @@ namespace L1FlyMapViewer
                 return;
             }
 
-            // 收集有 Layer8 資料的 S32
-            List<(string filePath, string fileName, int count, List<Layer8Item> items)> s32WithL8 =
+            // 取得目前勾選的 S32 檔案路徑
+            HashSet<string> checkedS32Paths = new HashSet<string>();
+            foreach (var item in lstS32Files.CheckedItems)
+            {
+                if (item is S32FileItem s32Item)
+                {
+                    checkedS32Paths.Add(s32Item.FilePath);
+                }
+            }
+
+            // 收集有 Layer8 資料的 S32（全部）
+            List<(string filePath, string fileName, int count, List<Layer8Item> items)> s32WithL8All =
+                new List<(string, string, int, List<Layer8Item>)>();
+            // 收集有 Layer8 資料的 S32（選取的）
+            List<(string filePath, string fileName, int count, List<Layer8Item> items)> s32WithL8Selected =
                 new List<(string, string, int, List<Layer8Item>)>();
 
             foreach (var kvp in _document.S32Files)
@@ -18777,39 +18790,75 @@ namespace L1FlyMapViewer
 
                 if (s32Data.Layer8.Count > 0)
                 {
-                    s32WithL8.Add((filePath, fileName, s32Data.Layer8.Count, s32Data.Layer8.ToList()));
+                    var entry = (filePath, fileName, s32Data.Layer8.Count, s32Data.Layer8.ToList());
+                    s32WithL8All.Add(entry);
+                    if (checkedS32Paths.Contains(filePath))
+                    {
+                        s32WithL8Selected.Add(entry);
+                    }
                 }
             }
 
             // 顯示結果
             Form resultForm = new Form();
-            resultForm.Text = $"L8 檢查、編輯與清除 - {s32WithL8.Count} 個 S32 有資料";
-            resultForm.Size = new Size(850, 650);
+            resultForm.Text = $"L8 檢查、編輯與清除";
+            resultForm.Size = new Size(850, 680);
             resultForm.FormBorderStyle = FormBorderStyle.Sizable;
             resultForm.StartPosition = FormStartPosition.CenterParent;
 
-            int totalItems = s32WithL8.Sum(x => x.count);
+            int totalItemsAll = s32WithL8All.Sum(x => x.count);
+            int totalItemsSelected = s32WithL8Selected.Sum(x => x.count);
             int extendedCount = _document.S32Files.Values.Count(s => s.Layer8HasExtendedData);
             Label lblSummary = new Label();
-            lblSummary.Text = $"共 {s32WithL8.Count} 個 S32 有 Layer8 資料，總計 {totalItems} 項。{extendedCount} 個 S32 使用擴展格式。";
+            lblSummary.Text = $"選取: {s32WithL8Selected.Count} 個 S32 / {totalItemsSelected} 項 | 全部: {s32WithL8All.Count} 個 S32 / {totalItemsAll} 項 | {extendedCount} 個擴展格式";
             lblSummary.Location = new Point(10, 10);
             lblSummary.Size = new Size(810, 20);
             resultForm.Controls.Add(lblSummary);
 
-            // 預先宣告 ListView（因為按鈕事件會用到）
-            ListView lvItems = new ListView();
-            lvItems.Location = new Point(10, 115);
-            lvItems.Size = new Size(810, 300);
-            lvItems.Font = new Font("Consolas", 9);
-            lvItems.View = View.Details;
-            lvItems.FullRowSelect = true;
-            lvItems.CheckBoxes = true;
-            lvItems.Columns.Add("S32 檔案", 120);
-            lvItems.Columns.Add("擴展", 50);
-            lvItems.Columns.Add("SprId", 70);
-            lvItems.Columns.Add("X", 60);
-            lvItems.Columns.Add("Y", 60);
-            lvItems.Columns.Add("ExtData", 80);
+            // 建立 TabControl
+            TabControl tabControl = new TabControl();
+            tabControl.Location = new Point(10, 115);
+            tabControl.Size = new Size(810, 330);
+
+            TabPage tabSelected = new TabPage($"選取的 S32 ({s32WithL8Selected.Count})");
+            TabPage tabAll = new TabPage($"全部 ({s32WithL8All.Count})");
+            tabControl.TabPages.Add(tabSelected);
+            tabControl.TabPages.Add(tabAll);
+
+            // 建立兩個 ListView 的輔助方法
+            ListView CreateL8ListView()
+            {
+                ListView lv = new ListView();
+                lv.Dock = DockStyle.Fill;
+                lv.Font = new Font("Consolas", 9);
+                lv.View = View.Details;
+                lv.FullRowSelect = true;
+                lv.CheckBoxes = true;
+                lv.Columns.Add("S32 檔案", 120);
+                lv.Columns.Add("擴展", 50);
+                lv.Columns.Add("SprId", 70);
+                lv.Columns.Add("X", 60);
+                lv.Columns.Add("Y", 60);
+                lv.Columns.Add("ExtData", 80);
+                return lv;
+            }
+
+            ListView lvSelected = CreateL8ListView();
+            ListView lvAll = CreateL8ListView();
+            tabSelected.Controls.Add(lvSelected);
+            tabAll.Controls.Add(lvAll);
+            resultForm.Controls.Add(tabControl);
+
+            // 目前作用中的 ListView（用於編輯操作）
+            ListView lvItems = lvSelected;
+            tabControl.SelectedIndexChanged += (s, args) =>
+            {
+                lvItems = tabControl.SelectedIndex == 0 ? lvSelected : lvAll;
+            };
+
+            // 為了向後相容，保留 s32WithL8 變數指向全部資料
+            var s32WithL8 = s32WithL8All;
+            int totalItems = totalItemsAll;
 
             // 擴展格式設定區
             GroupBox gbExtended = new GroupBox();
@@ -18996,39 +19045,51 @@ namespace L1FlyMapViewer
             }
             resultForm.Controls.Add(gbExtended);
 
-            // 填入 ListView 資料
-            List<(string filePath, Layer8Item item)> itemInfoList = new List<(string, Layer8Item)>();
-
-            if (s32WithL8.Count == 0)
+            // 填入 ListView 資料的輔助方法
+            void FillListView(ListView lv, List<(string filePath, string fileName, int count, List<Layer8Item> items)> dataList)
             {
-                lvItems.Items.Add(new ListViewItem("沒有任何 S32 檔案有 Layer8 資料"));
-                lvItems.Enabled = false;
-            }
-            else
-            {
-                foreach (var (filePath, fileName, count, items) in s32WithL8)
+                if (dataList.Count == 0)
                 {
-                    bool hasExtended = _document.S32Files.TryGetValue(filePath, out S32Data s32) && s32.Layer8HasExtendedData;
-                    foreach (var item in items)
+                    lv.Items.Add(new ListViewItem("沒有任何 S32 檔案有 Layer8 資料"));
+                    lv.Enabled = false;
+                }
+                else
+                {
+                    foreach (var (filePath, fileName, count, items) in dataList)
                     {
-                        ListViewItem lvi = new ListViewItem(fileName);
-                        lvi.SubItems.Add(hasExtended ? "是" : "");
-                        lvi.SubItems.Add(item.SprId.ToString());
-                        lvi.SubItems.Add(item.X.ToString());
-                        lvi.SubItems.Add(item.Y.ToString());
-                        lvi.SubItems.Add(item.ExtendedData.ToString());
-                        lvi.Tag = (filePath, item);
-                        lvItems.Items.Add(lvi);
-                        itemInfoList.Add((filePath, item));
+                        bool hasExtended = _document.S32Files.TryGetValue(filePath, out S32Data s32) && s32.Layer8HasExtendedData;
+                        foreach (var item in items)
+                        {
+                            ListViewItem lvi = new ListViewItem(fileName);
+                            lvi.SubItems.Add(hasExtended ? "是" : "");
+                            lvi.SubItems.Add(item.SprId.ToString());
+                            lvi.SubItems.Add(item.X.ToString());
+                            lvi.SubItems.Add(item.Y.ToString());
+                            lvi.SubItems.Add(item.ExtendedData.ToString());
+                            lvi.Tag = (filePath, item);
+                            lv.Items.Add(lvi);
+                        }
                     }
                 }
             }
-            resultForm.Controls.Add(lvItems);
+
+            // 填入兩個 ListView
+            FillListView(lvSelected, s32WithL8Selected);
+            FillListView(lvAll, s32WithL8All);
+
+            List<(string filePath, Layer8Item item)> itemInfoList = new List<(string, Layer8Item)>();
+            foreach (var (filePath, fileName, count, items) in s32WithL8All)
+            {
+                foreach (var item in items)
+                {
+                    itemInfoList.Add((filePath, item));
+                }
+            }
 
             // 編輯區域
             GroupBox gbEdit = new GroupBox();
             gbEdit.Text = "編輯選取的項目";
-            gbEdit.Location = new Point(10, 425);
+            gbEdit.Location = new Point(10, 455);
             gbEdit.Size = new Size(810, 80);
 
             Label lblSprId = new Label { Text = "SprId:", Location = new Point(10, 28), Size = new Size(45, 20) };
@@ -19161,51 +19222,57 @@ namespace L1FlyMapViewer
             gbEdit.Controls.AddRange(new Control[] { lblSprId, txtSprId, lblX, txtX, lblY, txtY, lblExtData, txtExtData, btnApplyEdit, btnAddNew });
             resultForm.Controls.Add(gbEdit);
 
-            // 選取項目時填入編輯區
-            lvItems.SelectedIndexChanged += (s, args) =>
+            // 選取項目時填入編輯區（為兩個 ListView 都註冊事件）
+            void OnListViewSelectionChanged(object sender, EventArgs args)
             {
-                if (lvItems.SelectedItems.Count == 1)
+                ListView lv = sender as ListView;
+                if (lv != null && lv.SelectedItems.Count == 1 && lv.SelectedItems[0].Tag != null)
                 {
-                    var lvi = lvItems.SelectedItems[0];
+                    var lvi = lv.SelectedItems[0];
                     var (filePath, item) = ((string, Layer8Item))lvi.Tag;
                     txtSprId.Text = item.SprId.ToString();
                     txtX.Text = item.X.ToString();
                     txtY.Text = item.Y.ToString();
                     txtExtData.Text = item.ExtendedData.ToString();
                 }
-            };
+            }
+            lvSelected.SelectedIndexChanged += OnListViewSelectionChanged;
+            lvAll.SelectedIndexChanged += OnListViewSelectionChanged;
 
             Button btnSelectAll = new Button();
             btnSelectAll.Text = "全選";
-            btnSelectAll.Location = new Point(10, 515);
+            btnSelectAll.Location = new Point(10, 545);
             btnSelectAll.Size = new Size(80, 30);
             btnSelectAll.Click += (s, args) =>
             {
-                foreach (ListViewItem lvi in lvItems.Items)
+                ListView currentLv = tabControl.SelectedIndex == 0 ? lvSelected : lvAll;
+                foreach (ListViewItem lvi in currentLv.Items)
                     lvi.Checked = true;
             };
             resultForm.Controls.Add(btnSelectAll);
 
             Button btnDeselectAll = new Button();
             btnDeselectAll.Text = "取消全選";
-            btnDeselectAll.Location = new Point(100, 515);
+            btnDeselectAll.Location = new Point(100, 545);
             btnDeselectAll.Size = new Size(80, 30);
             btnDeselectAll.Click += (s, args) =>
             {
-                foreach (ListViewItem lvi in lvItems.Items)
+                ListView currentLv = tabControl.SelectedIndex == 0 ? lvSelected : lvAll;
+                foreach (ListViewItem lvi in currentLv.Items)
                     lvi.Checked = false;
             };
             resultForm.Controls.Add(btnDeselectAll);
 
             Button btnClearSelected = new Button();
             btnClearSelected.Text = "刪除勾選項目";
-            btnClearSelected.Location = new Point(10, 555);
+            btnClearSelected.Location = new Point(10, 585);
             btnClearSelected.Size = new Size(120, 35);
             btnClearSelected.BackColor = Color.LightCoral;
             btnClearSelected.Enabled = s32WithL8.Count > 0;
             btnClearSelected.Click += (s, args) =>
             {
-                int checkedCount = lvItems.CheckedItems.Count;
+                ListView currentLv = tabControl.SelectedIndex == 0 ? lvSelected : lvAll;
+                int checkedCount = currentLv.CheckedItems.Count;
                 if (checkedCount == 0)
                 {
                     MessageBox.Show("請先勾選要刪除的項目", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -19221,7 +19288,7 @@ namespace L1FlyMapViewer
                 if (confirmResult != DialogResult.Yes) return;
 
                 Dictionary<string, List<Layer8Item>> toRemove = new Dictionary<string, List<Layer8Item>>();
-                foreach (ListViewItem lvi in lvItems.CheckedItems)
+                foreach (ListViewItem lvi in currentLv.CheckedItems)
                 {
                     if (lvi.Tag == null) continue;
                     var (filePath, item) = ((string, Layer8Item))lvi.Tag;
@@ -19254,7 +19321,7 @@ namespace L1FlyMapViewer
 
             Button btnClearAll = new Button();
             btnClearAll.Text = "刪除全部 L8";
-            btnClearAll.Location = new Point(140, 555);
+            btnClearAll.Location = new Point(140, 585);
             btnClearAll.Size = new Size(120, 35);
             btnClearAll.BackColor = Color.Salmon;
             btnClearAll.Enabled = s32WithL8.Count > 0;
@@ -19289,7 +19356,7 @@ namespace L1FlyMapViewer
 
             Button btnClose = new Button();
             btnClose.Text = "關閉";
-            btnClose.Location = new Point(730, 555);
+            btnClose.Location = new Point(730, 585);
             btnClose.Size = new Size(90, 35);
             btnClose.Click += (s, args) => resultForm.Close();
             resultForm.Controls.Add(btnClose);
@@ -19297,7 +19364,7 @@ namespace L1FlyMapViewer
             resultForm.Resize += (s, args) =>
             {
                 gbExtended.Size = new Size(resultForm.ClientSize.Width - 20, 75);
-                lvItems.Size = new Size(resultForm.ClientSize.Width - 20, resultForm.ClientSize.Height - 260);
+                tabControl.Size = new Size(resultForm.ClientSize.Width - 20, resultForm.ClientSize.Height - 260);
                 gbEdit.Location = new Point(10, resultForm.ClientSize.Height - 135);
                 gbEdit.Size = new Size(resultForm.ClientSize.Width - 20, 80);
                 btnSelectAll.Location = new Point(10, resultForm.ClientSize.Height - 45);
