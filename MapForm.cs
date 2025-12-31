@@ -18765,20 +18765,32 @@ namespace L1FlyMapViewer
                 return;
             }
 
-            // 取得目前勾選的 S32 檔案路徑
-            HashSet<string> checkedS32Paths = new HashSet<string>();
-            foreach (var item in lstS32Files.CheckedItems)
+            // 取得地圖選取區域涉及的 S32 檔案路徑
+            HashSet<string> selectedS32Paths = new HashSet<string>();
+            if (_editState.SelectedCells != null && _editState.SelectedCells.Count > 0)
             {
-                if (item is S32FileItem s32Item)
+                foreach (var cell in _editState.SelectedCells)
                 {
-                    checkedS32Paths.Add(s32Item.FilePath);
+                    // 從選取的格子直接取得 S32 檔案路徑
+                    if (cell.S32Data != null)
+                    {
+                        // 找到對應的檔案路徑
+                        foreach (var kvp in _document.S32Files)
+                        {
+                            if (kvp.Value == cell.S32Data)
+                            {
+                                selectedS32Paths.Add(kvp.Key);
+                                break;
+                            }
+                        }
+                    }
                 }
             }
 
             // 收集有 Layer8 資料的 S32（全部）
             List<(string filePath, string fileName, int count, List<Layer8Item> items)> s32WithL8All =
                 new List<(string, string, int, List<Layer8Item>)>();
-            // 收集有 Layer8 資料的 S32（選取的）
+            // 收集有 Layer8 資料的 S32（選取區域涉及的）
             List<(string filePath, string fileName, int count, List<Layer8Item> items)> s32WithL8Selected =
                 new List<(string, string, int, List<Layer8Item>)>();
 
@@ -18792,7 +18804,7 @@ namespace L1FlyMapViewer
                 {
                     var entry = (filePath, fileName, s32Data.Layer8.Count, s32Data.Layer8.ToList());
                     s32WithL8All.Add(entry);
-                    if (checkedS32Paths.Contains(filePath))
+                    if (selectedS32Paths.Contains(filePath))
                     {
                         s32WithL8Selected.Add(entry);
                     }
@@ -18825,6 +18837,9 @@ namespace L1FlyMapViewer
             tabControl.TabPages.Add(tabSelected);
             tabControl.TabPages.Add(tabAll);
 
+            // ListView 排序狀態
+            Dictionary<ListView, (int column, bool ascending)> sortStates = new Dictionary<ListView, (int, bool)>();
+
             // 建立兩個 ListView 的輔助方法
             ListView CreateL8ListView()
             {
@@ -18840,6 +18855,24 @@ namespace L1FlyMapViewer
                 lv.Columns.Add("X", 60);
                 lv.Columns.Add("Y", 60);
                 lv.Columns.Add("ExtData", 80);
+
+                // 初始化排序狀態
+                sortStates[lv] = (-1, true);
+
+                // 點擊標題排序
+                lv.ColumnClick += (sender, e) =>
+                {
+                    ListView listView = sender as ListView;
+                    if (listView == null) return;
+
+                    var (lastColumn, ascending) = sortStates[listView];
+                    bool newAscending = (lastColumn == e.Column) ? !ascending : true;
+                    sortStates[listView] = (e.Column, newAscending);
+
+                    listView.ListViewItemSorter = new ListViewColumnSorter(e.Column, newAscending);
+                    listView.Sort();
+                };
+
                 return lv;
             }
 
@@ -22670,6 +22703,44 @@ namespace L1FlyMapViewer
                 FileName = "https://discord.gg/vjSKGD95HB",
                 UseShellExecute = true
             });
+        }
+    }
+
+    /// <summary>
+    /// ListView 欄位排序器
+    /// </summary>
+    public class ListViewColumnSorter : System.Collections.IComparer
+    {
+        private int _column;
+        private bool _ascending;
+
+        public ListViewColumnSorter(int column, bool ascending)
+        {
+            _column = column;
+            _ascending = ascending;
+        }
+
+        public int Compare(object x, object y)
+        {
+            ListViewItem itemX = x as ListViewItem;
+            ListViewItem itemY = y as ListViewItem;
+            if (itemX == null || itemY == null) return 0;
+
+            string textX = _column < itemX.SubItems.Count ? itemX.SubItems[_column].Text : "";
+            string textY = _column < itemY.SubItems.Count ? itemY.SubItems[_column].Text : "";
+
+            int result;
+            // 嘗試數字比較
+            if (int.TryParse(textX, out int numX) && int.TryParse(textY, out int numY))
+            {
+                result = numX.CompareTo(numY);
+            }
+            else
+            {
+                result = string.Compare(textX, textY, StringComparison.OrdinalIgnoreCase);
+            }
+
+            return _ascending ? result : -result;
         }
     }
 }
