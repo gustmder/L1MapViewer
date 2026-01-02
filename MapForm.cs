@@ -687,7 +687,6 @@ namespace L1FlyMapViewer
             lblMaterials.Text = LocalizationManager.L("Label_RecentMaterials");
             lblGroupThumbnails.Text = LocalizationManager.L("Label_GroupThumbnails");
             btnMoreMaterials.Text = LocalizationManager.L("Button_More");
-            btnShowAllGroups.Text = LocalizationManager.L("Button_ShowAll");
 
             // 滑鼠操作提示
             lblDefaultHint.Text = LocalizationManager.L("Hint_MouseControls");
@@ -14696,10 +14695,16 @@ namespace L1FlyMapViewer
                                 string distanceText = result.distance == 0 ? "●" : $"D{result.distance}";
                                 ListViewItem item = new ListViewItem($"{distanceText} G{result.groupId} ({result.objectCount})");
                                 item.ImageIndex = thumbnailIndex;
+
+                                // 取得第一個 S32（附近群組通常來自同一個 S32）
+                                S32Data firstS32 = result.objects.Count > 0 ? result.objects[0].s32 : null;
                                 item.Tag = new GroupThumbnailInfo
                                 {
                                     GroupId = result.groupId,
-                                    Objects = result.objects,
+                                    S32Data = firstS32,
+                                    S32FileName = firstS32?.FilePath != null ? System.IO.Path.GetFileName(firstS32.FilePath) : "",
+                                    DistanceCode = result.distance,
+                                    Objects = result.objects.Select(o => o.obj).ToList(),
                                     HasLayer5Setting = result.hasLayer5,
                                     Layer5Type = result.layer5Type
                                 };
@@ -16354,7 +16359,7 @@ namespace L1FlyMapViewer
         // 群組縮圖產生取消 token
         private System.Threading.CancellationTokenSource _groupThumbnailCts = null;
 
-        // 更新群組縮圖列表（可指定只顯示選取區域內的群組）- 完全非同步版本
+        // 更新群組縮圖列表 - 支援三種模式：選取區域、區域-全部、全部
         private void UpdateGroupThumbnailsList(List<SelectedCell> selectedCells)
         {
             var setupSw = Stopwatch.StartNew();
@@ -16385,22 +16390,47 @@ namespace L1FlyMapViewer
                 return;
             }
 
-            bool isSelectedMode = selectedCells != null && selectedCells.Count > 0;
+            bool hasSelection = selectedCells != null && selectedCells.Count > 0;
+            var currentMode = _groupDisplayMode;
+
+            // 選取區域模式但無選取，清空列表
+            if (!hasSelection && currentMode != GroupDisplayMode.All)
+            {
+                lblGroupThumbnails.Text = LocalizationManager.L("Label_GroupThumbnails");
+                return;
+            }
 
             // 顯示載入中狀態
-            lblGroupThumbnails.Text = isSelectedMode
-                ? $"{LocalizationManager.L("Label_SelectedAreaGroups")} ({LocalizationManager.L("Status_Collecting")}...)"
-                : $"{LocalizationManager.L("Label_GroupThumbnails")} ({LocalizationManager.L("Status_Collecting")}...)";
+            string modeLabel = currentMode switch
+            {
+                GroupDisplayMode.SelectedArea => LocalizationManager.L("Label_SelectedAreaGroups"),
+                GroupDisplayMode.SelectedAreaAll => LocalizationManager.L("Label_SelectedAreaAllGroups"),
+                _ => LocalizationManager.L("Label_GroupThumbnails")
+            };
+            lblGroupThumbnails.Text = $"{modeLabel} ({LocalizationManager.L("Status_Collecting")}...)";
 
             // 複製需要的資料到背景執行緒
-            var s32FilesSnapshot = _document.S32Files.Values.ToList();
+            var s32FilesSnapshot = _document.S32Files.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
             var selectedCellsSnapshot = selectedCells?.ToList();
+
+            // 計算 S32 距離編碼
+            HashSet<string> selectedS32Paths = null;
+            (int x, int y)? viewportCenter = null;
+
+            if (hasSelection)
+            {
+                selectedS32Paths = selectedCellsSnapshot.Select(c => c.S32Data.FilePath).ToHashSet();
+            }
+            else
+            {
+                viewportCenter = GetViewportCenterGameCoord();
+            }
+
+            var s32DistanceMap = CalculateS32DistanceMap(selectedS32Paths, viewportCenter);
 
             setupSw.Stop();
             long setupMs = setupSw.ElapsedMilliseconds;
-            int s32Count = s32FilesSnapshot.Count;
-            int selectedCount = selectedCellsSnapshot?.Count ?? 0;
-            LogPerf($"[THUMBNAILS-START] setup={setupMs}ms, s32={s32Count}, selected={selectedCount}");
+            LogPerf($"[THUMBNAILS-START] setup={setupMs}ms, s32={s32FilesSnapshot.Count}, selected={selectedCellsSnapshot?.Count ?? 0}, mode={currentMode}");
 
             // 整個過程都在背景執行緒執行
             Task.Run(() =>
@@ -16410,47 +16440,108 @@ namespace L1FlyMapViewer
                 var stopwatch = Stopwatch.StartNew();
                 var phaseSw = Stopwatch.StartNew();
 
-                // 收集群組（根據是否有選取區域決定範圍）
-                var allGroupsDict = new Dictionary<int, List<(S32Data s32, ObjectTile obj)>>();
+                // 收集群組 - 按 (S32Path, GroupId) 分組
+                var groupsByS32 = new Dictionary<(string s32Path, int groupId), (S32Data s32, List<ObjectTile> objects)>();
 
-                if (selectedCellsSnapshot != null && selectedCellsSnapshot.Count > 0)
+                switch (currentMode)
                 {
-                    // 建立選取格子的全域座標集合 (使用 Layer1 座標系統 0-127)
-                    var selectedLayer1Cells = new HashSet<(int x, int y)>();
-                    foreach (var cell in selectedCellsSnapshot)
-                    {
-                        int layer1GlobalX = cell.S32Data.SegInfo.nLinBeginX * 2 + cell.LocalX;
-                        int layer1GlobalY = cell.S32Data.SegInfo.nLinBeginY + cell.LocalY;
-                        selectedLayer1Cells.Add((layer1GlobalX, layer1GlobalY));
-                        selectedLayer1Cells.Add((layer1GlobalX + 1, layer1GlobalY));
-                    }
-
-                    // 遍歷所有 S32，找出全域座標落在選取格子內的 Layer4 物件
-                    foreach (var s32Data in s32FilesSnapshot)
-                    {
-                        int segStartX = s32Data.SegInfo.nLinBeginX;
-                        int segStartY = s32Data.SegInfo.nLinBeginY;
-
-                        foreach (var obj in s32Data.Layer4)
+                    case GroupDisplayMode.SelectedArea:
+                        // 只顯示選取格子內的群組物件
+                        if (selectedCellsSnapshot != null && selectedCellsSnapshot.Count > 0)
                         {
-                            int layer1GlobalX = segStartX * 2 + obj.X;
-                            int layer1GlobalY = segStartY + obj.Y;
-
-                            if (selectedLayer1Cells.Contains((layer1GlobalX, layer1GlobalY)))
+                            var selectedLayer1Cells = new HashSet<(int x, int y)>();
+                            foreach (var cell in selectedCellsSnapshot)
                             {
-                                if (!allGroupsDict.ContainsKey(obj.GroupId))
+                                int layer1GlobalX = cell.S32Data.SegInfo.nLinBeginX * 2 + cell.LocalX;
+                                int layer1GlobalY = cell.S32Data.SegInfo.nLinBeginY + cell.LocalY;
+                                selectedLayer1Cells.Add((layer1GlobalX, layer1GlobalY));
+                                selectedLayer1Cells.Add((layer1GlobalX + 1, layer1GlobalY));
+                            }
+
+                            foreach (var s32Data in s32FilesSnapshot.Values)
+                            {
+                                int segStartX = s32Data.SegInfo.nLinBeginX;
+                                int segStartY = s32Data.SegInfo.nLinBeginY;
+
+                                foreach (var obj in s32Data.Layer4)
                                 {
-                                    allGroupsDict[obj.GroupId] = new List<(S32Data, ObjectTile)>();
+                                    int layer1GlobalX = segStartX * 2 + obj.X;
+                                    int layer1GlobalY = segStartY + obj.Y;
+
+                                    if (selectedLayer1Cells.Contains((layer1GlobalX, layer1GlobalY)))
+                                    {
+                                        var key = (s32Data.FilePath, obj.GroupId);
+                                        if (!groupsByS32.ContainsKey(key))
+                                        {
+                                            groupsByS32[key] = (s32Data, new List<ObjectTile>());
+                                        }
+                                        groupsByS32[key].objects.Add(obj);
+                                    }
                                 }
-                                allGroupsDict[obj.GroupId].Add((s32Data, obj));
                             }
                         }
-                    }
-                }
-                else
-                {
-                    // 使用預先建立的群組字典（O(1) 取得，避免掃描 4.6M 物件）
-                    allGroupsDict = _layer4SpatialIndex.GetAllGroups();
+                        break;
+
+                    case GroupDisplayMode.SelectedAreaAll:
+                        // 先找選取區域內的群組，再取得這些群組在 S32 的完整物件
+                        if (selectedCellsSnapshot != null && selectedCellsSnapshot.Count > 0)
+                        {
+                            var selectedLayer1Cells = new HashSet<(int x, int y)>();
+                            foreach (var cell in selectedCellsSnapshot)
+                            {
+                                int layer1GlobalX = cell.S32Data.SegInfo.nLinBeginX * 2 + cell.LocalX;
+                                int layer1GlobalY = cell.S32Data.SegInfo.nLinBeginY + cell.LocalY;
+                                selectedLayer1Cells.Add((layer1GlobalX, layer1GlobalY));
+                                selectedLayer1Cells.Add((layer1GlobalX + 1, layer1GlobalY));
+                            }
+
+                            // 找出選取區域內有哪些 (S32Path, GroupId)
+                            var matchedKeys = new HashSet<(string, int)>();
+                            foreach (var s32Data in s32FilesSnapshot.Values)
+                            {
+                                int segStartX = s32Data.SegInfo.nLinBeginX;
+                                int segStartY = s32Data.SegInfo.nLinBeginY;
+
+                                foreach (var obj in s32Data.Layer4)
+                                {
+                                    int layer1GlobalX = segStartX * 2 + obj.X;
+                                    int layer1GlobalY = segStartY + obj.Y;
+
+                                    if (selectedLayer1Cells.Contains((layer1GlobalX, layer1GlobalY)))
+                                    {
+                                        matchedKeys.Add((s32Data.FilePath, obj.GroupId));
+                                    }
+                                }
+                            }
+
+                            // 取得這些群組在對應 S32 的完整物件
+                            foreach (var s32Data in s32FilesSnapshot.Values)
+                            {
+                                var groupsInS32 = s32Data.Layer4.GroupBy(obj => obj.GroupId);
+                                foreach (var group in groupsInS32)
+                                {
+                                    var key = (s32Data.FilePath, group.Key);
+                                    if (matchedKeys.Contains(key))
+                                    {
+                                        groupsByS32[key] = (s32Data, group.ToList());
+                                    }
+                                }
+                            }
+                        }
+                        break;
+
+                    case GroupDisplayMode.All:
+                        // 顯示所有 S32 的所有群組
+                        foreach (var s32Data in s32FilesSnapshot.Values)
+                        {
+                            var groupsInS32 = s32Data.Layer4.GroupBy(obj => obj.GroupId);
+                            foreach (var group in groupsInS32)
+                            {
+                                var key = (s32Data.FilePath, group.Key);
+                                groupsByS32[key] = (s32Data, group.ToList());
+                            }
+                        }
+                        break;
                 }
 
                 if (cancellationToken.IsCancellationRequested) return;
@@ -16459,52 +16550,30 @@ namespace L1FlyMapViewer
                 long collectGroupsMs = phaseSw.ElapsedMilliseconds;
                 phaseSw.Restart();
 
-                if (allGroupsDict.Count == 0)
+                if (groupsByS32.Count == 0)
                 {
                     try
                     {
                         this.BeginInvoke((MethodInvoker)delegate
                         {
-                            string label = isSelectedMode
-                                ? string.Format(LocalizationManager.L("Label_SelectedAreaGroupsCount"), 0)
-                                : string.Format(LocalizationManager.L("Label_GroupThumbnailsCount"), 0);
-                            lblGroupThumbnails.Text = label;
+                            lblGroupThumbnails.Text = $"{modeLabel} (0)";
                         });
                     }
                     catch { }
                     return;
                 }
 
-                int totalGroups = allGroupsDict.Count;
+                int totalGroups = groupsByS32.Count;
 
                 // 收集所有 Layer5 的 GroupId -> Type 對應
                 var groupLayer5Info = new Dictionary<int, byte>();
-                if (selectedCellsSnapshot != null && selectedCellsSnapshot.Count > 0)
+                foreach (var s32Data in s32FilesSnapshot.Values)
                 {
-                    foreach (var cell in selectedCellsSnapshot)
+                    foreach (var item in s32Data.Layer5)
                     {
-                        foreach (var item in cell.S32Data.Layer5)
+                        if (!groupLayer5Info.ContainsKey(item.ObjectIndex))
                         {
-                            if (item.X == cell.LocalX && item.Y == cell.LocalY)
-                            {
-                                if (!groupLayer5Info.ContainsKey(item.ObjectIndex))
-                                {
-                                    groupLayer5Info[item.ObjectIndex] = item.Type;
-                                }
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    foreach (var s32Data in s32FilesSnapshot)
-                    {
-                        foreach (var item in s32Data.Layer5)
-                        {
-                            if (!groupLayer5Info.ContainsKey(item.ObjectIndex))
-                            {
-                                groupLayer5Info[item.ObjectIndex] = item.Type;
-                            }
+                            groupLayer5Info[item.ObjectIndex] = item.Type;
                         }
                     }
                 }
@@ -16520,23 +16589,29 @@ namespace L1FlyMapViewer
                 {
                     this.BeginInvoke((MethodInvoker)delegate
                     {
-                        lblGroupThumbnails.Text = isSelectedMode
-                            ? $"{LocalizationManager.L("Label_SelectedAreaGroups")} ({LocalizationManager.L("Status_Loading")} 0/{totalGroups})"
-                            : string.Format(LocalizationManager.L("Label_GroupThumbnailsLoading"), 0, totalGroups);
+                        lblGroupThumbnails.Text = $"{modeLabel} ({LocalizationManager.L("Status_Loading")} 0/{totalGroups})";
                     });
                 }
                 catch { }
 
-                // 準備群組資料
-                var groupList = allGroupsDict.OrderBy(k => k.Key).ToList();
+                // 準備群組資料 - 按距離編碼和 GroupId 排序
+                var groupList = groupsByS32
+                    .Select(kvp => new {
+                        Key = kvp.Key,
+                        Value = kvp.Value,
+                        DistanceCode = s32DistanceMap.TryGetValue(kvp.Key.s32Path, out int d) ? d : 99
+                    })
+                    .OrderBy(x => x.DistanceCode)
+                    .ThenBy(x => x.Key.groupId)
+                    .ToList();
 
                 // 使用 Parallel.ForEach 並行產生縮圖
-                var thumbnailResults = new System.Collections.Concurrent.ConcurrentDictionary<int, (int groupId, int objectCount, Bitmap thumbnail, List<(S32Data s32, ObjectTile obj)> objects, bool hasLayer5, byte layer5Type)>();
+                var thumbnailResults = new System.Collections.Concurrent.ConcurrentDictionary<(string, int), (string s32Path, int groupId, int distCode, int objectCount, Bitmap thumbnail, S32Data s32, List<ObjectTile> objects, bool hasLayer5, byte layer5Type)>();
 
                 int processedCount = 0;
                 int lastReportedCount = 0;
 
-                Parallel.ForEach(groupList, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, (kvp, state) =>
+                Parallel.ForEach(groupList, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, (item, state) =>
                 {
                     if (cancellationToken.IsCancellationRequested)
                     {
@@ -16544,21 +16619,23 @@ namespace L1FlyMapViewer
                         return;
                     }
 
-                    int groupId = kvp.Key;
-                    var objects = kvp.Value;
+                    var key = item.Key;
+                    var s32Data = item.Value.s32;
+                    var objects = item.Value.objects;
+                    int distCode = item.DistanceCode;
 
                     // 檢查該群組是否有 Layer5 設定
-                    bool hasLayer5 = groupLayer5Info.TryGetValue(groupId, out byte layer5Type);
+                    bool hasLayer5 = groupLayer5Info.TryGetValue(key.groupId, out byte layer5Type);
 
-                    // 生成群組縮圖（傳遞 Layer5 設定以繪製邊框）
-                    Bitmap thumbnail = GenerateGroupThumbnail(objects, 80, hasLayer5, layer5Type);
+                    // 生成群組縮圖
+                    Bitmap thumbnail = GenerateGroupThumbnailForS32(s32Data, objects, 80, hasLayer5, layer5Type);
 
                     if (thumbnail != null && !cancellationToken.IsCancellationRequested)
                     {
-                        thumbnailResults[groupId] = (groupId, objects.Count, thumbnail, objects, hasLayer5, layer5Type);
+                        thumbnailResults[key] = (key.s32Path, key.groupId, distCode, objects.Count, thumbnail, s32Data, objects, hasLayer5, layer5Type);
                     }
 
-                    // 更新進度（每處理 10 個或處理完成時更新 UI）
+                    // 更新進度
                     int current = System.Threading.Interlocked.Increment(ref processedCount);
                     if (current - lastReportedCount >= 10 || current == totalGroups)
                     {
@@ -16569,9 +16646,7 @@ namespace L1FlyMapViewer
                             {
                                 if (!cancellationToken.IsCancellationRequested)
                                 {
-                                    lblGroupThumbnails.Text = isSelectedMode
-                                        ? $"{LocalizationManager.L("Label_SelectedAreaGroups")} ({LocalizationManager.L("Status_Loading")} {current}/{totalGroups})"
-                                        : string.Format(LocalizationManager.L("Label_GroupThumbnailsLoading"), current, totalGroups);
+                                    lblGroupThumbnails.Text = $"{modeLabel} ({LocalizationManager.L("Status_Loading")} {current}/{totalGroups})";
                                 }
                             });
                         }
@@ -16590,7 +16665,6 @@ namespace L1FlyMapViewer
                 // 如果被取消就不更新 UI
                 if (cancellationToken.IsCancellationRequested)
                 {
-                    // 清理已產生的 Bitmap
                     foreach (var result in thumbnailResults.Values)
                     {
                         result.thumbnail?.Dispose();
@@ -16619,7 +16693,7 @@ namespace L1FlyMapViewer
                         imageList.ImageSize = new Size(80, 80);
                         imageList.ColorDepth = ColorDepth.Depth32Bit;
 
-                        lvGroupThumbnails.BeginUpdate();  // 暫停重繪
+                        lvGroupThumbnails.BeginUpdate();
                         try
                         {
                             lvGroupThumbnails.Items.Clear();
@@ -16628,19 +16702,26 @@ namespace L1FlyMapViewer
                                 lvGroupThumbnails.LargeImageList.Dispose();
                             }
 
-                            // 批量準備項目
+                            // 批量準備項目 - 按距離編碼和 GroupId 排序
                             var items = new List<ListViewItem>();
                             int thumbnailIndex = 0;
-                            foreach (var groupId in thumbnailResults.Keys.OrderBy(k => k))
+                            var sortedResults = thumbnailResults.Values
+                                .OrderBy(r => r.distCode)
+                                .ThenBy(r => r.groupId);
+
+                            foreach (var result in sortedResults)
                             {
-                                var result = thumbnailResults[groupId];
                                 imageList.Images.Add(result.thumbnail);
 
-                                ListViewItem item = new ListViewItem($"G{result.groupId} ({result.objectCount})");
+                                // 顯示格式: "距離:G群組ID (物件數)"
+                                ListViewItem item = new ListViewItem($"{result.distCode}:G{result.groupId} ({result.objectCount})");
                                 item.ImageIndex = thumbnailIndex;
                                 item.Tag = new GroupThumbnailInfo
                                 {
                                     GroupId = result.groupId,
+                                    S32Data = result.s32,
+                                    S32FileName = System.IO.Path.GetFileName(result.s32Path),
+                                    DistanceCode = result.distCode,
                                     Objects = result.objects,
                                     HasLayer5Setting = result.hasLayer5,
                                     Layer5Type = result.layer5Type
@@ -16650,7 +16731,7 @@ namespace L1FlyMapViewer
                                 thumbnailIndex++;
                             }
 
-                            // 快取項目和 ImageList（用於過濾）
+                            // 快取項目和 ImageList
                             _cachedGroupItems = items;
                             _cachedGroupImageList = imageList;
 
@@ -16660,17 +16741,14 @@ namespace L1FlyMapViewer
                         }
                         finally
                         {
-                            lvGroupThumbnails.EndUpdate();  // 恢復重繪
+                            lvGroupThumbnails.EndUpdate();
                         }
 
                         uiSw.Stop();
 
-                        string labelText = isSelectedMode
-                            ? $"{LocalizationManager.L("Label_SelectedAreaGroups")} ({totalGroups}) [{elapsedMs}ms]"
-                            : string.Format(LocalizationManager.L("Label_GroupThumbnailsTime"), totalGroups, elapsedMs);
-                        lblGroupThumbnails.Text = labelText;
+                        lblGroupThumbnails.Text = $"{modeLabel} ({totalGroups}) [{elapsedMs}ms]";
 
-                        // 更新狀態列，將「background」替換為實際時間
+                        // 更新狀態列
                         if (this.toolStripStatusLabel1.Text.Contains("Thumbnails: background"))
                         {
                             this.toolStripStatusLabel1.Text = this.toolStripStatusLabel1.Text.Replace(
@@ -16685,11 +16763,24 @@ namespace L1FlyMapViewer
             });
         }
 
-        // 群組縮圖資訊
+        // 群組顯示模式
+        private enum GroupDisplayMode
+        {
+            SelectedArea,       // 選取區域
+            SelectedAreaAll,    // 選取區域-全部
+            All                 // 全部
+        }
+
+        private GroupDisplayMode _groupDisplayMode = GroupDisplayMode.SelectedArea;
+
+        // 群組縮圖資訊（按 S32 + GroupId 分組）
         private class GroupThumbnailInfo
         {
             public int GroupId { get; set; }
-            public List<(S32Data s32, ObjectTile obj)> Objects { get; set; }
+            public S32Data S32Data { get; set; }  // 所屬 S32
+            public string S32FileName { get; set; }  // S32 檔名
+            public int DistanceCode { get; set; }  // S32 距離編碼
+            public List<ObjectTile> Objects { get; set; }  // 該 S32 內的物件
             public bool HasLayer5Setting { get; set; }  // 是否有 Layer5 設定
             public byte Layer5Type { get; set; }        // Layer5 Type (0=半透明, 1=其他)
         }
@@ -16740,11 +16831,149 @@ namespace L1FlyMapViewer
             }
         }
 
-        // 「全部」按鈕點擊事件 - 顯示全部群組
-        private void btnShowAllGroups_Click(object sender, EventArgs e)
+        // 群組顯示模式切換事件
+        private void cmbGroupMode_SelectedIndexChanged(object sender, EventArgs e)
         {
+            _groupDisplayMode = (GroupDisplayMode)cmbGroupMode.SelectedIndex;
             txtGroupSearch.Text = "";  // 清空搜尋框
-            UpdateGroupThumbnailsList(null);  // 傳入 null 顯示全部
+
+            // 根據當前選取狀態刷新
+            if (_editState.SelectedCells != null && _editState.SelectedCells.Count > 0)
+            {
+                UpdateGroupThumbnailsList(_editState.SelectedCells);
+            }
+            else if (_groupDisplayMode == GroupDisplayMode.All)
+            {
+                UpdateGroupThumbnailsList(null);
+            }
+            else
+            {
+                // 選取區域模式但無選取，清空列表
+                lvGroupThumbnails.Items.Clear();
+                _cachedGroupItems.Clear();
+                lblGroupThumbnails.Text = LocalizationManager.L("Label_GroupThumbnails");
+            }
+        }
+
+        // 按 S32 + GroupId 收集群組
+        private Dictionary<(string s32Path, int groupId), (S32Data s32, List<ObjectTile> objects)> GetGroupsByS32()
+        {
+            var result = new Dictionary<(string, int), (S32Data, List<ObjectTile>)>();
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                var groupsInS32 = s32Data.Layer4.GroupBy(obj => obj.GroupId);
+                foreach (var group in groupsInS32)
+                {
+                    var key = (s32Data.FilePath, group.Key);
+                    result[key] = (s32Data, group.ToList());
+                }
+            }
+            return result;
+        }
+
+        // 計算每個 S32 相對於參考點的距離編碼
+        private Dictionary<string, int> CalculateS32DistanceMap(
+            HashSet<string> currentS32Paths,   // 選取模式: 選取區域所在 S32; 全部模式: null
+            (int x, int y)? viewportCenter)    // 全部模式: viewport 中心點 (遊戲座標)
+        {
+            var distanceMap = new Dictionary<string, int>();
+
+            // 決定參考中心點
+            List<(int x, int y)> referenceCenters;
+
+            if (currentS32Paths != null && currentS32Paths.Count > 0)
+            {
+                // 選取模式：以選取區域所在 S32 的中心為基準
+                referenceCenters = currentS32Paths
+                    .Where(p => _document.S32Files.ContainsKey(p))
+                    .Select(p => _document.S32Files[p])
+                    .Select(s => (
+                        x: s.SegInfo.nLinBeginX + 32,
+                        y: s.SegInfo.nLinBeginY + 32
+                    ))
+                    .ToList();
+
+                // 當前 S32 = 距離 0
+                foreach (var path in currentS32Paths)
+                {
+                    distanceMap[path] = 0;
+                }
+            }
+            else if (viewportCenter.HasValue)
+            {
+                // 全部模式：以 viewport 中心為基準
+                referenceCenters = new List<(int, int)> { viewportCenter.Value };
+            }
+            else
+            {
+                // 無參考點，所有 S32 距離為 0
+                foreach (var path in _document.S32Files.Keys)
+                {
+                    distanceMap[path] = 0;
+                }
+                return distanceMap;
+            }
+
+            if (referenceCenters.Count == 0)
+            {
+                // 沒有有效的參考點，所有 S32 距離為 0
+                foreach (var path in _document.S32Files.Keys)
+                {
+                    distanceMap[path] = 0;
+                }
+                return distanceMap;
+            }
+
+            // 計算所有 S32 到參考點的距離
+            var allS32s = _document.S32Files
+                .Where(kvp => !distanceMap.ContainsKey(kvp.Key))  // 排除已設為 0 的
+                .Select(kvp => {
+                    var s = kvp.Value;
+                    int centerX = s.SegInfo.nLinBeginX + 32;
+                    int centerY = s.SegInfo.nLinBeginY + 32;
+                    // 計算到最近參考點的距離 (Chebyshev distance)
+                    int minDist = referenceCenters.Min(c =>
+                        Math.Max(Math.Abs(c.x - centerX), Math.Abs(c.y - centerY)));
+                    return (path: kvp.Key, distance: minDist);
+                })
+                .OrderBy(x => x.distance)
+                .ToList();
+
+            // 分配距離編號（相同距離的 S32 使用相同編號）
+            int lastDist = -1;
+            int distCode = currentS32Paths != null ? 0 : -1;  // 全部模式從 0 開始
+            foreach (var (path, distance) in allS32s)
+            {
+                if (distance != lastDist)
+                {
+                    distCode++;
+                    lastDist = distance;
+                }
+                distanceMap[path] = distCode;
+            }
+
+            return distanceMap;
+        }
+
+        // 取得 viewport 中心的遊戲座標
+        private (int x, int y) GetViewportCenterGameCoord()
+        {
+            // 從 ViewState 取得 viewport 中心的世界座標
+            var viewRect = _viewState.GetViewportWorldRect();
+            int worldCenterX = viewRect.X + viewRect.Width / 2;
+            int worldCenterY = viewRect.Y + viewRect.Height / 2;
+
+            // 轉換為遊戲座標
+            var result = CoordinateHelper.ScreenToGameCoords(worldCenterX, worldCenterY, _document.S32Files);
+            return (result.gameX, result.gameY);
+        }
+
+        // 生成單一 S32 群組縮圖
+        private Bitmap GenerateGroupThumbnailForS32(S32Data s32Data, List<ObjectTile> objects, int thumbnailSize, bool hasLayer5Setting = false, byte layer5Type = 0)
+        {
+            // 轉換為原有格式以重用現有邏輯
+            var tupleList = objects.Select(obj => (s32Data, obj)).ToList();
+            return GenerateGroupThumbnail(tupleList, thumbnailSize, hasLayer5Setting, layer5Type);
         }
 
         // 縮圖邊框畫筆（重用避免重複建立）
@@ -16957,11 +17186,17 @@ namespace L1FlyMapViewer
         {
             _editState.CellClipboard.Clear();
 
-            // 收集所有要複製的物件
+            // 收集所有要複製的物件（使用 S32Data 和 Objects 組合）
             var allObjects = new List<(S32Data s32, ObjectTile obj)>();
             foreach (var info in infos)
             {
-                allObjects.AddRange(info.Objects);
+                if (info.S32Data != null)
+                {
+                    foreach (var obj in info.Objects)
+                    {
+                        allObjects.Add((info.S32Data, obj));
+                    }
+                }
             }
 
             if (allObjects.Count == 0)
@@ -17028,7 +17263,7 @@ namespace L1FlyMapViewer
         {
             // 生成高解析度預覽圖（800x800）
             int baseSize = 800;
-            Bitmap previewImage = GenerateGroupThumbnail(info.Objects, baseSize);
+            Bitmap previewImage = GenerateGroupThumbnailForS32(info.S32Data, info.Objects, baseSize);
 
             if (previewImage == null)
                 return;
@@ -17044,7 +17279,7 @@ namespace L1FlyMapViewer
             // 建立預覽對話框
             Form previewForm = new Form
             {
-                Text = $"群組 {info.GroupId} - {info.Objects.Count} 個物件 (滾輪縮放, 拖曳平移)",
+                Text = $"群組 {info.DistanceCode}:G{info.GroupId} - {info.Objects.Count} 個物件 (滾輪縮放, 拖曳平移)",
                 Size = new Size(520, 600),
                 StartPosition = FormStartPosition.CenterParent,
                 FormBorderStyle = FormBorderStyle.Sizable,
@@ -17232,12 +17467,11 @@ namespace L1FlyMapViewer
         // 跳轉到群組位置
         private void JumpToGroupLocation(GroupThumbnailInfo info)
         {
-            if (info.Objects.Count == 0)
+            if (info.Objects.Count == 0 || info.S32Data == null)
                 return;
 
-            var firstObj = info.Objects[0];
-            var s32Data = firstObj.s32;
-            var obj = firstObj.obj;
+            var obj = info.Objects[0];
+            var s32Data = info.S32Data;
 
             // 計算螢幕座標
             int[] loc = s32Data.SegInfo.GetLoc(1.0);
@@ -17274,7 +17508,7 @@ namespace L1FlyMapViewer
             _mapViewerControl.Refresh();
             UpdateMiniMap();
 
-            this.toolStripStatusLabel1.Text = $"跳轉到群組 {info.GroupId}，位置 ({obj.X}, {obj.Y})，共 {info.Objects.Count} 個物件";
+            this.toolStripStatusLabel1.Text = $"跳轉到群組 {info.DistanceCode}:G{info.GroupId}，位置 ({obj.X}, {obj.Y})，共 {info.Objects.Count} 個物件";
         }
 
         // 群組縮圖雙擊事件 - 顯示放大預覽
@@ -17436,11 +17670,17 @@ namespace L1FlyMapViewer
         // 從地圖刪除多個群組
         private void DeleteMultipleGroupsFromMap(List<GroupThumbnailInfo> infos)
         {
-            // 收集所有要刪除的物件
+            // 收集所有要刪除的物件（使用 S32Data 和 Objects 組合）
             var allObjects = new List<(S32Data s32, ObjectTile obj)>();
             foreach (var info in infos)
             {
-                allObjects.AddRange(info.Objects);
+                if (info.S32Data != null)
+                {
+                    foreach (var obj in info.Objects)
+                    {
+                        allObjects.Add((info.S32Data, obj));
+                    }
+                }
             }
 
             if (allObjects.Count == 0)
@@ -17449,12 +17689,12 @@ namespace L1FlyMapViewer
                 return;
             }
 
-            string groupIds = string.Join(", ", infos.Select(i => i.GroupId));
+            string groupIds = string.Join(", ", infos.Select(i => $"{i.DistanceCode}:G{i.GroupId}"));
 
             // 確認刪除
             DialogResult result = MessageBox.Show(
                 $"確定要刪除 {infos.Count} 個群組嗎？\n" +
-                $"群組 ID: {groupIds}\n" +
+                $"群組: {groupIds}\n" +
                 $"這將移除選取區域內的 {allObjects.Count} 個 Layer4 物件。",
                 "確認刪除多個群組",
                 MessageBoxButtons.YesNo,
@@ -17528,17 +17768,18 @@ namespace L1FlyMapViewer
             int groupId = info.GroupId;
 
             // 使用 info.Objects（已經是選取區域的交集）
-            if (info.Objects == null || info.Objects.Count == 0)
+            if (info.Objects == null || info.Objects.Count == 0 || info.S32Data == null)
             {
                 MessageBox.Show($"群組 {groupId} 在選取區域內沒有物件。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
+            var s32Data = info.S32Data;
             int totalCount = info.Objects.Count;
 
             // 確認刪除
             DialogResult result = MessageBox.Show(
-                $"確定要刪除群組 {groupId} 嗎？\n" +
+                $"確定要刪除群組 {info.DistanceCode}:G{groupId} 嗎？\n" +
                 $"這將移除選取區域內的 {totalCount} 個 Layer4 物件。",
                 "確認刪除群組",
                 MessageBoxButtons.YesNo,
@@ -17550,12 +17791,12 @@ namespace L1FlyMapViewer
             // 建立 Undo 記錄
             var undoAction = new UndoAction
             {
-                Description = $"刪除群組 {groupId} ({totalCount} 個物件)"
+                Description = $"刪除群組 {info.DistanceCode}:G{groupId} ({totalCount} 個物件)"
             };
 
             // 只刪除 info.Objects 中的物件（選取區域內的物件）
             int deletedCount = 0;
-            foreach (var (s32Data, obj) in info.Objects)
+            foreach (var obj in info.Objects)
             {
                 // 記錄到 Undo
                 undoAction.RemovedObjects.Add(new UndoObjectInfo
@@ -17615,11 +17856,17 @@ namespace L1FlyMapViewer
             if (infos == null || infos.Count == 0)
                 return;
 
-            // 收集所有物件
+            // 收集所有物件（使用 S32Data 和 Objects 組合）
             var allObjects = new List<(S32Data s32, ObjectTile obj)>();
             foreach (var info in infos)
             {
-                allObjects.AddRange(info.Objects);
+                if (info.S32Data != null)
+                {
+                    foreach (var obj in info.Objects)
+                    {
+                        allObjects.Add((info.S32Data, obj));
+                    }
+                }
             }
 
             if (allObjects.Count == 0)
@@ -17787,7 +18034,13 @@ namespace L1FlyMapViewer
                 var allObjects = new List<(S32Data s32, ObjectTile obj)>();
                 foreach (var info in infos)
                 {
-                    allObjects.AddRange(info.Objects);
+                    if (info.S32Data != null)
+                    {
+                        foreach (var obj in info.Objects)
+                        {
+                            allObjects.Add((info.S32Data, obj));
+                        }
+                    }
                 }
 
                 if (allObjects.Count == 0)
@@ -17941,9 +18194,9 @@ namespace L1FlyMapViewer
             var affectedS32Files = new HashSet<S32Data>();
             foreach (var info in infos)
             {
-                foreach (var (s32, obj) in info.Objects)
+                if (info.S32Data != null)
                 {
-                    affectedS32Files.Add(s32);
+                    affectedS32Files.Add(info.S32Data);
                 }
             }
 
@@ -18055,10 +18308,12 @@ namespace L1FlyMapViewer
                 int nextId = newGroupId;
                 foreach (var info in infos)
                 {
+                    if (info.S32Data == null) continue;
+                    var s32 = info.S32Data;
                     int oldId = info.GroupId;
                     int assignedId = nextId++;
 
-                    foreach (var (s32, obj) in info.Objects)
+                    foreach (var obj in info.Objects)
                     {
                         // 記錄 Undo 資訊
                         undoAction.RemovedObjects.Add(new UndoObjectInfo
@@ -18091,9 +18346,9 @@ namespace L1FlyMapViewer
                     }
 
                     // 同時更新 Layer5 中的 ObjectIndex
-                    foreach (var s32 in affectedS32Files)
+                    foreach (var affectedS32 in affectedS32Files)
                     {
-                        foreach (var l5Item in s32.Layer5)
+                        foreach (var l5Item in affectedS32.Layer5)
                         {
                             if (l5Item.ObjectIndex == oldId)
                             {
@@ -18123,9 +18378,11 @@ namespace L1FlyMapViewer
                 // 單選或多選合併為同一 ID
                 foreach (var info in infos)
                 {
+                    if (info.S32Data == null) continue;
+                    var s32 = info.S32Data;
                     int oldId = info.GroupId;
 
-                    foreach (var (s32, obj) in info.Objects)
+                    foreach (var obj in info.Objects)
                     {
                         // 記錄 Undo 資訊
                         undoAction.RemovedObjects.Add(new UndoObjectInfo
@@ -18158,9 +18415,9 @@ namespace L1FlyMapViewer
                     }
 
                     // 同時更新 Layer5 中的 ObjectIndex
-                    foreach (var s32 in affectedS32Files)
+                    foreach (var affectedS32 in affectedS32Files)
                     {
-                        foreach (var l5Item in s32.Layer5)
+                        foreach (var l5Item in affectedS32.Layer5)
                         {
                             if (l5Item.ObjectIndex == oldId)
                             {
@@ -18191,12 +18448,14 @@ namespace L1FlyMapViewer
         // 顯示 Layer4 群組明細對話框
         private void ShowLayer4Details(GroupThumbnailInfo info)
         {
-            if (info == null || info.Objects.Count == 0)
+            if (info == null || info.Objects.Count == 0 || info.S32Data == null)
                 return;
+
+            var s32 = info.S32Data;
 
             using (var form = new Form())
             {
-                form.Text = $"群組 {info.GroupId} - L4 明細 ({info.Objects.Count} 個物件)";
+                form.Text = $"群組 {info.DistanceCode}:G{info.GroupId} - L4 明細 ({info.Objects.Count} 個物件)";
                 form.Size = new Size(700, 500);
                 form.StartPosition = FormStartPosition.CenterParent;
                 form.MinimizeBox = false;
@@ -18220,11 +18479,11 @@ namespace L1FlyMapViewer
                 listView.Columns.Add("TileId", 70);
                 listView.Columns.Add("遊戲座標", 120);
 
-                // 填充資料
-                foreach (var (s32, obj) in info.Objects)
-                {
-                    string fileName = System.IO.Path.GetFileName(s32.FilePath ?? "Unknown");
+                string fileName = System.IO.Path.GetFileName(s32.FilePath ?? "Unknown");
 
+                // 填充資料
+                foreach (var obj in info.Objects)
+                {
                     // 計算遊戲座標
                     string gameCoord = "";
                     if (!string.IsNullOrEmpty(s32.FilePath))

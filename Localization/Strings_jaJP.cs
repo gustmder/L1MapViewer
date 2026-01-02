@@ -96,6 +96,7 @@ namespace L1MapViewer.Localization
             { "Label_NearbyGroupsTime", "近くのグループ ({0}) [{1}ms]" },
             { "Label_SelectedAreaGroups", "選択エリアグループ" },
             { "Label_SelectedAreaGroupsCount", "選択エリアグループ ({0})" },
+            { "Label_SelectedAreaAllGroups", "エリア-全て" },
             { "Placeholder_SearchTileId", "タイルID検索..." },
             { "Label_SearchResult", "検索結果" },
 

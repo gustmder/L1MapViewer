@@ -61,7 +61,7 @@ namespace L1FlyMapViewer
         private Button btnMoreMaterials;
         private Label lblGroupThumbnails;
         private TextBox txtGroupSearch;
-        private Button btnShowAllGroups;
+        private ComboBox cmbGroupMode;
         private ListView lvGroupThumbnails;
 
         // 工具列面板（右側功能區）
@@ -211,7 +211,7 @@ namespace L1FlyMapViewer
             this.btnMoreMaterials = new Button();
             this.lblGroupThumbnails = new Label();
             this.txtGroupSearch = new TextBox();
-            this.btnShowAllGroups = new Button();
+            this.cmbGroupMode = new ComboBox();
             this.lvGroupThumbnails = new ListView();
 
             // 工具列面板
@@ -1266,7 +1266,7 @@ namespace L1FlyMapViewer
             this.rightPanel.Controls.Add(this.btnMoreMaterials);
             this.rightPanel.Controls.Add(this.lblGroupThumbnails);
             this.rightPanel.Controls.Add(this.txtGroupSearch);
-            this.rightPanel.Controls.Add(this.btnShowAllGroups);
+            this.rightPanel.Controls.Add(this.cmbGroupMode);
             this.rightPanel.Controls.Add(this.lvGroupThumbnails);
             this.rightPanel.Dock = DockStyle.Right;
             this.rightPanel.Location = new Point(1010, 24);
@@ -1357,25 +1357,26 @@ namespace L1FlyMapViewer
             this.lblGroupThumbnails.TextAlign = ContentAlignment.MiddleLeft;
 
             //
-            // txtGroupSearch
+            // cmbGroupMode
             //
-            this.txtGroupSearch.Location = new Point(5, 358);
-            this.txtGroupSearch.Name = "txtGroupSearch";
-            this.txtGroupSearch.Size = new Size(145, 23);
-            this.txtGroupSearch.TabIndex = 8;
-            this.txtGroupSearch.PlaceholderText = "搜尋 GroupId...";
-            this.txtGroupSearch.TextChanged += new System.EventHandler(this.txtGroupSearch_TextChanged);
+            this.cmbGroupMode.Location = new Point(5, 358);
+            this.cmbGroupMode.Name = "cmbGroupMode";
+            this.cmbGroupMode.Size = new Size(100, 23);
+            this.cmbGroupMode.TabIndex = 8;
+            this.cmbGroupMode.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.cmbGroupMode.Items.AddRange(new object[] { "選取區域", "區域-全部", "全部" });
+            this.cmbGroupMode.SelectedIndex = 0;
+            this.cmbGroupMode.SelectedIndexChanged += new System.EventHandler(this.cmbGroupMode_SelectedIndexChanged);
 
             //
-            // btnShowAllGroups
+            // txtGroupSearch
             //
-            this.btnShowAllGroups.Location = new Point(155, 358);
-            this.btnShowAllGroups.Name = "btnShowAllGroups";
-            this.btnShowAllGroups.Size = new Size(55, 23);
-            this.btnShowAllGroups.TabIndex = 6;
-            this.btnShowAllGroups.Text = "全部";
-            this.btnShowAllGroups.UseVisualStyleBackColor = true;
-            this.btnShowAllGroups.Click += new System.EventHandler(this.btnShowAllGroups_Click);
+            this.txtGroupSearch.Location = new Point(110, 358);
+            this.txtGroupSearch.Name = "txtGroupSearch";
+            this.txtGroupSearch.Size = new Size(100, 23);
+            this.txtGroupSearch.TabIndex = 9;
+            this.txtGroupSearch.PlaceholderText = "搜尋...";
+            this.txtGroupSearch.TextChanged += new System.EventHandler(this.txtGroupSearch_TextChanged);
 
             //
             // lvGroupThumbnails
