@@ -124,6 +124,8 @@ namespace L1MapViewer.CLI
                         return CmdValidateTiles(cmdArgs);
                     case "validate-l5":
                         return CmdValidateL5(cmdArgs);
+                    case "l5-stats":
+                        return CmdLayer5Stats(cmdArgs);
                     case "export-fs32":
                         return CmdExportFs32(cmdArgs);
                     case "import-fs32":
@@ -2768,6 +2770,87 @@ L1MapViewer CLI - S32 檔案解析工具
             }
 
             return invalidItems.Count > 0 ? 1 : 0;
+        }
+
+        /// <summary>
+        /// l5-stats 命令 - 統計 L5 Type 分布
+        /// </summary>
+        private static int CmdLayer5Stats(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: -cli l5-stats <地圖資料夾>");
+                Console.WriteLine("  統計地圖資料夾下所有 S32 檔案中 Layer5 的 Type 分布");
+                return 1;
+            }
+
+            string path = args[0];
+            if (!Directory.Exists(path))
+            {
+                Console.WriteLine($"資料夾不存在: {path}");
+                return 1;
+            }
+
+            // 收集所有子目錄中的 S32 檔案
+            var allS32Files = new List<string>();
+            foreach (var mapDir in Directory.GetDirectories(path))
+            {
+                allS32Files.AddRange(Directory.GetFiles(mapDir, "*.s32"));
+            }
+
+            if (allS32Files.Count == 0)
+            {
+                Console.WriteLine("找不到任何 S32 檔案");
+                return 1;
+            }
+
+            Console.WriteLine($"找到 {allS32Files.Count} 個 S32 檔案，正在統計...");
+
+            // Type -> Count 的統計
+            var typeStats = new Dictionary<byte, int>();
+            int totalL5Items = 0;
+            int filesWithL5 = 0;
+
+            foreach (var filePath in allS32Files)
+            {
+                try
+                {
+                    var s32 = S32Parser.ParseFile(filePath);
+                    if (s32.Layer5.Count > 0)
+                    {
+                        filesWithL5++;
+                        foreach (var item in s32.Layer5)
+                        {
+                            totalL5Items++;
+                            if (typeStats.ContainsKey(item.Type))
+                                typeStats[item.Type]++;
+                            else
+                                typeStats[item.Type] = 1;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"警告: 無法解析 {filePath}: {ex.Message}");
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("=== L5 Type 統計 ===");
+            Console.WriteLine($"總 S32 檔案: {allS32Files.Count}");
+            Console.WriteLine($"有 L5 的檔案: {filesWithL5}");
+            Console.WriteLine($"總 L5 項目數: {totalL5Items}");
+            Console.WriteLine();
+            Console.WriteLine("Type 分布:");
+            Console.WriteLine("  Type | 數量     | 百分比");
+            Console.WriteLine("-------|----------|--------");
+            foreach (var kv in typeStats.OrderBy(x => x.Key))
+            {
+                double percent = totalL5Items > 0 ? (double)kv.Value / totalL5Items * 100 : 0;
+                Console.WriteLine($"  {kv.Key,4} | {kv.Value,8} | {percent,6:F2}%");
+            }
+
+            return 0;
         }
 
         /// <summary>

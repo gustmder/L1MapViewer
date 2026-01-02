@@ -12695,6 +12695,39 @@ namespace L1FlyMapViewer
                 }
             }
 
+            // 新增 L5 按鈕（無論有無資料都顯示）
+            Button btnAddL5 = new Button();
+            btnAddL5.Text = "新增 L5";
+            btnAddL5.Dock = DockStyle.Top;
+            btnAddL5.Height = 28;
+            btnAddL5.Click += (sender, e) =>
+            {
+                using (var dialog = new L5EditDialog(0, 0, true))
+                {
+                    if (dialog.ShowDialog() == DialogResult.OK)
+                    {
+                        // 建立新的 Layer5Item
+                        var newItem = new Layer5Item
+                        {
+                            X = (byte)normalizedX,
+                            Y = (byte)y,
+                            ObjectIndex = (ushort)dialog.ObjectIndex,
+                            Type = dialog.L5Type
+                        };
+                        currentS32Data.Layer5.Add(newItem);
+                        currentS32Data.IsModified = true;
+                        RenderS32Map();
+
+                        // 關閉當前對話框並重新開啟以刷新
+                        if (panel.Parent?.Parent is Form parentForm)
+                        {
+                            parentForm.Close();
+                            ShowCellLayersDialog(x, y);
+                        }
+                    }
+                }
+            };
+
             if (cellLayer5Items.Count > 0)
             {
                 Label countLabel = new Label();
@@ -12736,7 +12769,7 @@ namespace L1FlyMapViewer
                 // 自動調整欄位寬度以適應內容
                 listView.AutoResizeColumns(ColumnHeaderAutoResizeStyle.HeaderSize);
 
-                // 右鍵選單 - 刪除 L5
+                // 右鍵選單 - 編輯/刪除 L5
                 listView.MouseClick += (sender, e) =>
                 {
                     if (e.Button == MouseButtons.Right && listView.SelectedItems.Count > 0)
@@ -12745,6 +12778,63 @@ namespace L1FlyMapViewer
                         var (tagS32Data, tagIndex) = ((S32Data, int))selectedItem.Tag;
 
                         var contextMenu = new ContextMenuStrip();
+
+                        // 編輯 L5 項目
+                        var editItem = new ToolStripMenuItem("編輯此 L5 項目");
+                        editItem.Click += (s, ev) =>
+                        {
+                            if (tagIndex >= 0 && tagIndex < tagS32Data.Layer5.Count)
+                            {
+                                var item5 = tagS32Data.Layer5[tagIndex];
+                                using (var dialog = new L5EditDialog(
+                                    item5.ObjectIndex, item5.Type, item5.X, item5.Y,
+                                    false, tagS32Data, _document.S32Files.Values))
+                                {
+                                    if (dialog.ShowDialog() == DialogResult.OK)
+                                    {
+                                        if (dialog.S32Changed && dialog.SelectedS32 != null)
+                                        {
+                                            // 移動到其他 S32
+                                            tagS32Data.Layer5.RemoveAt(tagIndex);
+                                            tagS32Data.IsModified = true;
+
+                                            var newItem = new Layer5Item
+                                            {
+                                                X = dialog.NewX,
+                                                Y = dialog.NewY,
+                                                ObjectIndex = (ushort)dialog.ObjectIndex,
+                                                Type = dialog.L5Type
+                                            };
+                                            dialog.SelectedS32.Layer5.Add(newItem);
+                                            dialog.SelectedS32.IsModified = true;
+
+                                            // 從 ListView 移除
+                                            listView.Items.Remove(selectedItem);
+                                            countLabel.Text = $"此格數量: {listView.Items.Count}";
+                                        }
+                                        else
+                                        {
+                                            // 只修改屬性（包含座標）
+                                            item5.X = dialog.NewX;
+                                            item5.Y = dialog.NewY;
+                                            item5.ObjectIndex = (ushort)dialog.ObjectIndex;
+                                            item5.Type = dialog.L5Type;
+                                            tagS32Data.Layer5[tagIndex] = item5;
+                                            tagS32Data.IsModified = true;
+                                            // 更新 ListView
+                                            selectedItem.SubItems[3].Text = item5.X.ToString();
+                                            selectedItem.SubItems[4].Text = item5.Y.ToString();
+                                            selectedItem.SubItems[5].Text = item5.ObjectIndex.ToString();
+                                            selectedItem.SubItems[6].Text = item5.Type.ToString();
+                                        }
+                                        RenderS32Map();
+                                    }
+                                }
+                            }
+                        };
+                        contextMenu.Items.Add(editItem);
+
+                        // 刪除 L5 項目
                         var deleteItem = new ToolStripMenuItem("刪除此 L5 項目");
                         deleteItem.Click += (s, ev) =>
                         {
@@ -12763,9 +12853,69 @@ namespace L1FlyMapViewer
                     }
                 };
 
+                // 雙擊編輯
+                listView.DoubleClick += (sender, e) =>
+                {
+                    if (listView.SelectedItems.Count > 0)
+                    {
+                        var selectedItem = listView.SelectedItems[0];
+                        var (tagS32Data, tagIndex) = ((S32Data, int))selectedItem.Tag;
+
+                        if (tagIndex >= 0 && tagIndex < tagS32Data.Layer5.Count)
+                        {
+                            var item5 = tagS32Data.Layer5[tagIndex];
+                            using (var dialog = new L5EditDialog(
+                                item5.ObjectIndex, item5.Type, item5.X, item5.Y,
+                                false, tagS32Data, _document.S32Files.Values))
+                            {
+                                if (dialog.ShowDialog() == DialogResult.OK)
+                                {
+                                    if (dialog.S32Changed && dialog.SelectedS32 != null)
+                                    {
+                                        // 移動到其他 S32
+                                        tagS32Data.Layer5.RemoveAt(tagIndex);
+                                        tagS32Data.IsModified = true;
+
+                                        var newItem = new Layer5Item
+                                        {
+                                            X = dialog.NewX,
+                                            Y = dialog.NewY,
+                                            ObjectIndex = (ushort)dialog.ObjectIndex,
+                                            Type = dialog.L5Type
+                                        };
+                                        dialog.SelectedS32.Layer5.Add(newItem);
+                                        dialog.SelectedS32.IsModified = true;
+
+                                        // 從 ListView 移除
+                                        listView.Items.Remove(selectedItem);
+                                        countLabel.Text = $"此格數量: {listView.Items.Count}";
+                                    }
+                                    else
+                                    {
+                                        // 只修改屬性（包含座標）
+                                        item5.X = dialog.NewX;
+                                        item5.Y = dialog.NewY;
+                                        item5.ObjectIndex = (ushort)dialog.ObjectIndex;
+                                        item5.Type = dialog.L5Type;
+                                        tagS32Data.Layer5[tagIndex] = item5;
+                                        tagS32Data.IsModified = true;
+                                        // 更新 ListView
+                                        selectedItem.SubItems[3].Text = item5.X.ToString();
+                                        selectedItem.SubItems[4].Text = item5.Y.ToString();
+                                        selectedItem.SubItems[5].Text = item5.ObjectIndex.ToString();
+                                        selectedItem.SubItems[6].Text = item5.Type.ToString();
+                                    }
+                                    RenderS32Map();
+                                }
+                            }
+                        }
+                    }
+                };
+
                 // 先加入 Fill 的控件，再加入 Top 的控件（Dock 順序）
                 panel.Controls.Add(listView);
                 panel.Controls.Add(countLabel);
+                panel.Controls.Add(btnAddL5);
             }
             else
             {
@@ -12774,6 +12924,7 @@ namespace L1FlyMapViewer
                 info.Dock = DockStyle.Fill;
                 info.TextAlign = ContentAlignment.MiddleCenter;
                 panel.Controls.Add(info);
+                panel.Controls.Add(btnAddL5);
             }
 
             return panel;
@@ -14744,6 +14895,9 @@ namespace L1FlyMapViewer
         // 保存 S32 按鈕點擊事件 - 保存所有被修改的 S32 檔案
         private void btnSaveS32_Click(object sender, EventArgs e)
         {
+            // 檢查是否按住 Shift 鍵（跳過 GroupId 重編）
+            bool skipReindex = (Control.ModifierKeys & Keys.Shift) == Keys.Shift;
+
             // 找出所有被修改的 S32 檔案
             var modifiedFiles = _document.S32Files.Where(kvp => kvp.Value.IsModified).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
@@ -14765,7 +14919,7 @@ namespace L1FlyMapViewer
             {
                 try
                 {
-                    SaveS32File(kvp.Key);
+                    SaveS32File(kvp.Key, skipReindex);
                     kvp.Value.IsModified = false;
                     successCount++;
                 }
@@ -14777,13 +14931,14 @@ namespace L1FlyMapViewer
             }
 
             // 只在狀態列顯示結果
+            string reindexNote = skipReindex ? " (未重編GroupId)" : "";
             if (failCount == 0)
             {
-                this.toolStripStatusLabel1.Text = $"成功保存 {successCount} 個 S32 檔案";
+                this.toolStripStatusLabel1.Text = $"成功保存 {successCount} 個 S32 檔案{reindexNote}";
             }
             else
             {
-                this.toolStripStatusLabel1.Text = $"保存完成：成功 {successCount} 個，失敗 {failCount} 個";
+                this.toolStripStatusLabel1.Text = $"保存完成：成功 {successCount} 個，失敗 {failCount} 個{reindexNote}";
                 // 只有失敗時才顯示錯誤訊息
                 MessageBox.Show(
                     $"保存完成：\n成功: {successCount} 個\n失敗: {failCount} 個\n\n失敗詳情：\n{errors}",
@@ -14794,7 +14949,7 @@ namespace L1FlyMapViewer
         }
 
         // 保存 S32 檔案（安全模式：只更新修改過的部分）
-        private void SaveS32File(string filePath)
+        private void SaveS32File(string filePath, bool skipReindex = false)
         {
             // 從字典中取得對應的 S32Data
             if (!_document.S32Files.ContainsKey(filePath))
@@ -14864,54 +15019,68 @@ namespace L1FlyMapViewer
                     }
                 }
 
-                // 第五步：寫入第四層（物件）- 重新編排 GroupId 從 0 開始
-                // 收集所有 Layer5 引用的 GroupId
-                var layer5ReferencedGroups = new HashSet<int>(s32Data.Layer5.Select(l5 => (int)l5.ObjectIndex));
+                // 第五步：寫入第四層（物件）
+                IEnumerable<IGrouping<int, ObjectTile>> groupedObjects;
 
-                // 將所有群組分組
-                var allGroups = s32Data.Layer4
-                    .GroupBy(o => o.GroupId)
-                    .ToList();
-
-                // 排序：有 Layer5 引用的在前，其餘按原 GroupId 排序
-                var sortedGroups = allGroups
-                    .OrderByDescending(g => layer5ReferencedGroups.Contains(g.Key) ? 1 : 0)
-                    .ThenBy(g => g.Key)
-                    .ToList();
-
-                // 建立舊 GroupId -> 新 GroupId 的映射
-                var groupIdMapping = new Dictionary<int, int>();
-                for (int idx = 0; idx < sortedGroups.Count; idx++)
+                if (skipReindex)
                 {
-                    groupIdMapping[sortedGroups[idx].Key] = idx;
+                    // 跳過重編：直接使用現有的 GroupId
+                    groupedObjects = s32Data.Layer4
+                        .GroupBy(o => o.GroupId)
+                        .OrderBy(g => g.Key)
+                        .ToList();
                 }
-
-                // 更新記憶體中的 Layer4 GroupId
-                foreach (var obj in s32Data.Layer4)
+                else
                 {
-                    if (groupIdMapping.TryGetValue(obj.GroupId, out int newId))
+                    // 重新編排 GroupId 從 0 開始
+                    // 收集所有 Layer5 引用的 GroupId
+                    var layer5ReferencedGroups = new HashSet<int>(s32Data.Layer5.Select(l5 => (int)l5.ObjectIndex));
+
+                    // 將所有群組分組
+                    var allGroups = s32Data.Layer4
+                        .GroupBy(o => o.GroupId)
+                        .ToList();
+
+                    // 排序：有 Layer5 引用的在前，其餘按原 GroupId 排序
+                    var sortedGroups = allGroups
+                        .OrderByDescending(g => layer5ReferencedGroups.Contains(g.Key) ? 1 : 0)
+                        .ThenBy(g => g.Key)
+                        .ToList();
+
+                    // 建立舊 GroupId -> 新 GroupId 的映射
+                    var groupIdMapping = new Dictionary<int, int>();
+                    for (int idx = 0; idx < sortedGroups.Count; idx++)
                     {
-                        obj.GroupId = newId;
+                        groupIdMapping[sortedGroups[idx].Key] = idx;
                     }
-                }
 
-                // 更新記憶體中的 Layer5 ObjectIndex
-                foreach (var l5Item in s32Data.Layer5)
-                {
-                    int oldIndex = l5Item.ObjectIndex;
-                    if (groupIdMapping.TryGetValue(oldIndex, out int newIndex))
+                    // 更新記憶體中的 Layer4 GroupId
+                    foreach (var obj in s32Data.Layer4)
                     {
-                        l5Item.ObjectIndex = (ushort)newIndex;
+                        if (groupIdMapping.TryGetValue(obj.GroupId, out int newId))
+                        {
+                            obj.GroupId = newId;
+                        }
                     }
+
+                    // 更新記憶體中的 Layer5 ObjectIndex
+                    foreach (var l5Item in s32Data.Layer5)
+                    {
+                        int oldIndex = l5Item.ObjectIndex;
+                        if (groupIdMapping.TryGetValue(oldIndex, out int newIndex))
+                        {
+                            l5Item.ObjectIndex = (ushort)newIndex;
+                        }
+                    }
+
+                    // 重新分組（使用新的 GroupId）
+                    groupedObjects = s32Data.Layer4
+                        .GroupBy(o => o.GroupId)
+                        .OrderBy(g => g.Key)
+                        .ToList();
                 }
 
-                // 重新分組（使用新的 GroupId）
-                var groupedObjects = s32Data.Layer4
-                    .GroupBy(o => o.GroupId)
-                    .OrderBy(g => g.Key)
-                    .ToList();
-
-                bw.Write(groupedObjects.Count); // 組數
+                bw.Write(groupedObjects.Count()); // 組數
 
                 foreach (var group in groupedObjects)
                 {
