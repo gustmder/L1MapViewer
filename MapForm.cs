@@ -18951,6 +18951,7 @@ namespace L1FlyMapViewer
         }
 
         // 設定群組的 Layer5 設定（透明或消失）
+        // 智慧選擇 S32：優先寫入群組所屬的 S32，座標無效時才寫入選取格子的 S32
         private void SetGroupLayer5Setting(List<GroupThumbnailInfo> infos, byte type)
         {
             if (_editState.SelectedCells.Count == 0)
@@ -18961,24 +18962,47 @@ namespace L1FlyMapViewer
 
             int addedCount = 0;
             int updatedCount = 0;
-            var groupIds = infos.Select(i => i.GroupId).ToHashSet();
 
             foreach (var cell in _editState.SelectedCells)
             {
-                var s32Data = cell.S32Data;
-                // Layer5 的 X 是 0-127 (Layer1 座標)，Y 是 0-63
-                // 一個遊戲格子對應兩個 Layer1 X 座標（LocalX 和 LocalX+1）
-                int layer5X1 = cell.LocalX;
-                int layer5X2 = cell.LocalX + 1;
-                int layer5Y = cell.LocalY;
+                // 計算選取格子的全域遊戲座標
+                int globalGameX = cell.S32Data.SegInfo.nLinBeginX + cell.LocalX / 2;
+                int globalGameY = cell.S32Data.SegInfo.nLinBeginY + cell.LocalY;
 
-                foreach (var groupId in groupIds)
+                foreach (var info in infos)
                 {
-                    // 檢查兩個 X 座標是否已存在 Layer5 設定
-                    for (int layer5X = layer5X1; layer5X <= layer5X2 && layer5X < 128; layer5X++)
+                    int groupId = info.GroupId;
+                    S32Data groupS32 = info.S32Data;  // 群組所屬的 S32
+
+                    // 計算在群組 S32 中的本地座標
+                    int targetLocalX = (globalGameX - groupS32.SegInfo.nLinBeginX) * 2;
+                    int targetLocalY = globalGameY - groupS32.SegInfo.nLinBeginY;
+
+                    // 決定寫入哪個 S32
+                    S32Data writeToS32;
+                    int writeX, writeY;
+
+                    if (targetLocalX >= 0 && targetLocalX <= 255 &&
+                        targetLocalY >= 0 && targetLocalY <= 255)
                     {
-                        var existingItem = s32Data.Layer5.FirstOrDefault(l =>
-                            l.X == layer5X && l.Y == layer5Y && l.ObjectIndex == groupId);
+                        // 座標有效，寫入群組所屬的 S32
+                        writeToS32 = groupS32;
+                        writeX = targetLocalX;
+                        writeY = targetLocalY;
+                    }
+                    else
+                    {
+                        // 座標無效，寫入選取格子的 S32
+                        writeToS32 = cell.S32Data;
+                        writeX = cell.LocalX;
+                        writeY = cell.LocalY;
+                    }
+
+                    // 檢查兩個 X 座標（偶數和奇數，同一個遊戲格子）
+                    for (int layer5X = writeX; layer5X <= writeX + 1 && layer5X < 256; layer5X++)
+                    {
+                        var existingItem = writeToS32.Layer5.FirstOrDefault(l =>
+                            l.X == layer5X && l.Y == writeY && l.ObjectIndex == groupId);
 
                         if (existingItem != null)
                         {
@@ -18987,21 +19011,21 @@ namespace L1FlyMapViewer
                             {
                                 existingItem.Type = type;
                                 updatedCount++;
-                                s32Data.IsModified = true;
+                                writeToS32.IsModified = true;
                             }
                         }
                         else
                         {
                             // 新增 Layer5 項目
-                            s32Data.Layer5.Add(new Layer5Item
+                            writeToS32.Layer5.Add(new Layer5Item
                             {
                                 X = (byte)layer5X,
-                                Y = (byte)layer5Y,
+                                Y = (byte)writeY,
                                 ObjectIndex = (ushort)groupId,
                                 Type = type
                             });
                             addedCount++;
-                            s32Data.IsModified = true;
+                            writeToS32.IsModified = true;
                         }
                     }
                 }
