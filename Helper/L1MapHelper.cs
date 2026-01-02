@@ -100,6 +100,7 @@ namespace L1MapViewer.Helper {
                 //開始讀取資料夾
                 DebugLog.Log("[L1MapHelper.Read] Entering foreach loop...");
                 foreach (DirectoryInfo di in directories) {
+                    try {
                     dirIndex++;
                     // 前 5 個和每 50 個都輸出 log
                     if (dirIndex <= 5 || dirIndex % 50 == 0) {
@@ -107,11 +108,15 @@ namespace L1MapViewer.Helper {
                     }
                     //地圖檔的資料夾名稱應該都是數字
                     if (Share.MapDataList.ContainsKey(di.Name)) {
+                        DebugLog.Log($"[L1MapHelper.Read] Dir {di.Name} already in cache, skipping");
                         continue;
                     }
+                    DebugLog.Log($"[L1MapHelper.Read] Creating L1Map for {di.Name}...");
                     L1Map pMap = new L1Map(di.Name, di.FullName);
+                    DebugLog.Log($"[L1MapHelper.Read] L1Map created, getting description...");
 
                     pMap.szName = getDescribe(di.Name);
+                    DebugLog.Log($"[L1MapHelper.Read] Description: {pMap.szName}, getting files...");
 
                     //取得地圖資料夾內檔案資料
                     // 先收集所有有效的 seg 和 s32 檔案，按檔名分組
@@ -207,8 +212,19 @@ namespace L1MapViewer.Helper {
                         pMapSeg.nMapBlockCountX = pMap.nBlockCountX;
                     }
 
+                    if (dirIndex <= 5 || dirIndex % 50 == 0) {
+                        DebugLog.Log($"[L1MapHelper.Read] Dir {di.Name} done, files={pMap.FullFileNameList.Count}, calling DoEvents...");
+                    }
                     //系統就會暫時把頁面還給你
                     Application.DoEvents();
+                    if (dirIndex <= 5 || dirIndex % 50 == 0) {
+                        DebugLog.Log($"[L1MapHelper.Read] DoEvents returned for dir {di.Name}");
+                    }
+                    }
+                    catch (Exception ex) {
+                        DebugLog.Log($"[L1MapHelper.Read] ERROR in dir {di.Name}: {ex.GetType().Name}: {ex.Message}");
+                        DebugLog.Log($"[L1MapHelper.Read] StackTrace: {ex.StackTrace}");
+                    }
                 }
             }
 
