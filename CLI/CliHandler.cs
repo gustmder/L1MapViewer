@@ -140,6 +140,8 @@ namespace L1MapViewer.CLI
                         return Commands.ExportCommands.ExportFullMap(cmdArgs);
                     case "batch-export":
                         return Commands.ExportCommands.BatchExport(cmdArgs);
+                    case "test-load":
+                        return CmdTestLoad(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -213,6 +215,62 @@ L1MapViewer CLI - S32 檔案解析工具
   L1MapViewer.exe -cli l4 map.s32 --groups
   L1MapViewer.exe -cli export map.s32 output.json
 ");
+        }
+
+        /// <summary>
+        /// test-load 命令 - 測試載入地圖（用於 debug）
+        /// </summary>
+        private static int CmdTestLoad(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: -cli test-load <client_path>");
+                Console.WriteLine();
+                Console.WriteLine("測試讀取地圖資料（用於診斷載入問題）");
+                Console.WriteLine($"Debug Log 會寫入: {DebugLog.LogPath}");
+                return 1;
+            }
+
+            string clientPath = args[0];
+            Console.WriteLine($"測試載入: {clientPath}");
+            Console.WriteLine($"Debug Log: {DebugLog.LogPath}");
+
+            DebugLog.Clear();
+            DebugLog.Log("[test-load] Starting test load...");
+
+            Share.LineagePath = clientPath;
+            Console.WriteLine($"Share.LineagePath = {Share.LineagePath}");
+            DebugLog.Log($"[test-load] Share.LineagePath = {Share.LineagePath}");
+
+            try
+            {
+                Console.WriteLine("正在讀取地圖列表...");
+                var result = L1MapHelper.Read(clientPath);
+                Console.WriteLine($"完成! 找到 {result.Count} 個地圖");
+                DebugLog.Log($"[test-load] Complete! Found {result.Count} maps");
+
+                // 列出前 10 個地圖
+                int i = 0;
+                foreach (var kvp in result)
+                {
+                    Console.WriteLine($"  {kvp.Key}: {kvp.Value.szName}");
+                    if (++i >= 10) break;
+                }
+                if (result.Count > 10)
+                {
+                    Console.WriteLine($"  ... 還有 {result.Count - 10} 個地圖");
+                }
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"錯誤: {ex.Message}");
+                Console.WriteLine(ex.StackTrace);
+                DebugLog.Log($"[test-load] ERROR: {ex.Message}");
+                DebugLog.Log($"[test-load] StackTrace: {ex.StackTrace}");
+                return 1;
+            }
         }
 
         /// <summary>

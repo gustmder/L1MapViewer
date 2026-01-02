@@ -39,35 +39,55 @@ namespace L1MapViewer.Helper {
 
         //讀取地圖檔資料
         public static Dictionary<string, L1Map> Read(string szSelectedPath) {
+            DebugLog.Log($"[L1MapHelper.Read] Start: path={szSelectedPath}");
+            DebugLog.Log($"[L1MapHelper.Read] Share.LineagePath={Share.LineagePath}");
+
             if (string.IsNullOrEmpty(szSelectedPath)) {
+                DebugLog.Log("[L1MapHelper.Read] Empty path, returning cached list");
                 return Share.MapDataList;
             }
             //確認路徑
             string szMapPath = string.Format(@"{0}\map\", szSelectedPath);
+            DebugLog.Log($"[L1MapHelper.Read] Checking map path: {szMapPath}");
 
             if (!Directory.Exists(szMapPath)) {
+                DebugLog.Log($"[L1MapHelper.Read] ERROR: Map path does not exist!");
                 MessageBox.Show("錯誤的天堂路徑");
                 return Share.MapDataList;
             }
             //是否為天R - 每次都需要重新判斷
             isRemastered = Directory.Exists(szSelectedPath + @"/bin32/") || Directory.Exists(szSelectedPath + @"\bin32\");
+            DebugLog.Log($"[L1MapHelper.Read] isRemastered={isRemastered}");
 
             var stopwatch = Stopwatch.StartNew();
 
             //map
+            DebugLog.Log("[L1MapHelper.Read] Loading Zone3descTbl...");
             LoadZone3descTbl();
             LastLoadZone3descMs = stopwatch.ElapsedMilliseconds;
+            DebugLog.Log($"[L1MapHelper.Read] Zone3descTbl done: {LastLoadZone3descMs}ms, count={Share.Zone3descList.Count}");
 
             stopwatch.Restart();
+            DebugLog.Log("[L1MapHelper.Read] Loading ZoneXml...");
             LoadZoneXml();
             LastLoadZoneXmlMs = stopwatch.ElapsedMilliseconds;
+            DebugLog.Log($"[L1MapHelper.Read] ZoneXml done: {LastLoadZoneXmlMs}ms, count={Share.ZoneList.Count}");
 
             stopwatch.Restart();
             int totalFileCount = 0;
 
             if (Share.MapDataList.Count == 0) {
+                DebugLog.Log($"[L1MapHelper.Read] Scanning directories in: {szMapPath}");
+                var directories = new DirectoryInfo(szMapPath).GetDirectories();
+                DebugLog.Log($"[L1MapHelper.Read] Found {directories.Length} directories to scan");
+
+                int dirIndex = 0;
                 //開始讀取資料夾
-                foreach (DirectoryInfo di in new DirectoryInfo(szMapPath).GetDirectories()) {
+                foreach (DirectoryInfo di in directories) {
+                    dirIndex++;
+                    if (dirIndex % 50 == 0) {
+                        DebugLog.Log($"[L1MapHelper.Read] Scanning dir {dirIndex}/{directories.Length}: {di.Name}");
+                    }
                     //地圖檔的資料夾名稱應該都是數字
                     if (Share.MapDataList.ContainsKey(di.Name)) {
                         continue;
@@ -179,6 +199,7 @@ namespace L1MapViewer.Helper {
             LastMapCount = Share.MapDataList.Count;
             LastTotalFileCount = totalFileCount;
 
+            DebugLog.Log($"[L1MapHelper.Read] Complete! Maps={LastMapCount}, Files={LastTotalFileCount}, ScanTime={LastScanDirectoriesMs}ms");
             return Share.MapDataList;
         }
 
@@ -291,17 +312,23 @@ namespace L1MapViewer.Helper {
 
         //zone3desc-c.tbl -->地圖區塊代號的中文翻譯
         public static void LoadZone3descTbl() {
+            DebugLog.Log("[LoadZone3descTbl] Start");
             if (Share.Zone3descList.Count > 0) {
+                DebugLog.Log("[LoadZone3descTbl] Already loaded, skip");
                 return;
             }
+            DebugLog.Log("[LoadZone3descTbl] Trying Text/zone3desc-c.tbl...");
             byte[] data = L1PakReader.UnPack("Text", "zone3desc-c.tbl");
 
             if (data == null) {
+                DebugLog.Log("[LoadZone3descTbl] Not found, trying Text/zone3desc.tbl...");
                 data = L1PakReader.UnPack("Text", "zone3desc.tbl");
             }
             if (data == null) {
+                DebugLog.Log("[LoadZone3descTbl] No zone3desc file found");
                 return;
             }
+            DebugLog.Log($"[LoadZone3descTbl] Got data: {data.Length} bytes");
             using (StreamReader sr = new StreamReader(new MemoryStream(data), Encoding.GetEncoding("big5"))) {
                 string line = null;
                 sr.ReadLine(); //line 0
@@ -309,27 +336,35 @@ namespace L1MapViewer.Helper {
                     Share.Zone3descList.Add(line);
                 }
             }
+            DebugLog.Log($"[LoadZone3descTbl] Done, loaded {Share.Zone3descList.Count} lines");
         }
 
         //zone3-c.xml -->地圖區塊的設定
         public static void LoadZoneXml() {
+            DebugLog.Log("[LoadZoneXml] Start");
 
             if (Share.ZoneList.Count > 0) {
+                DebugLog.Log("[LoadZoneXml] Already loaded, skip");
                 return;
             }
 
+            DebugLog.Log("[LoadZoneXml] Trying Tile/zone3-c.xml...");
             byte[] data = L1PakReader.UnPack("Tile", "zone3-c.xml");
 
             if (data == null) {
+                DebugLog.Log("[LoadZoneXml] Not found, trying Tile/zone3.xml...");
                 data = L1PakReader.UnPack("Tile", "zone3.xml");
             }
             if (data == null) {
+                DebugLog.Log("[LoadZoneXml] Not found, trying Data/zone3-c.xml...");
                 data = L1PakReader.UnPack("Data", "zone3-c.xml");
             }
             if (data == null) {
+                DebugLog.Log("[LoadZoneXml] No XML found, falling back to LoadZoneTbl...");
                 LoadZoneTbl();  //zone3-c.xml 或 zone3.xml 沒有就改找zone3.tbl
                 return;
             }
+            DebugLog.Log($"[LoadZoneXml] Got data: {data.Length} bytes");
 
 
             // zone3.xml的內容

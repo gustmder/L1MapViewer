@@ -32,17 +32,25 @@ namespace L1MapViewer.Reader {
         private static Dictionary<string, L1Idx> Load(string szIdxType) {
             Dictionary<string, L1Idx> result = new Dictionary<string, L1Idx>();
 
+            DebugLog.Log($"[L1IdxReader.Load] Loading idx type: {szIdxType}");
+
             //緩存內已經有了 直接回傳
             if (Share.IdxDataList.ContainsKey(szIdxType)) {
+                DebugLog.Log($"[L1IdxReader.Load] Already cached: {szIdxType}, count={Share.IdxDataList[szIdxType].Count}");
                 return Share.IdxDataList[szIdxType];
             }
             //idx/pak檔的路徑
             string szIdxFullName = string.Format(@"{0}\{1}.idx", Share.LineagePath, szIdxType);
             string szPakFullName = szIdxFullName.Replace(".idx", ".pak");
 
+            DebugLog.Log($"[L1IdxReader.Load] Idx path: {szIdxFullName}");
+            DebugLog.Log($"[L1IdxReader.Load] Pak path: {szPakFullName}");
+
             //兩個路徑都需要存在
             if (File.Exists(szIdxFullName) && File.Exists(szPakFullName)) {
+                DebugLog.Log($"[L1IdxReader.Load] Files exist, reading idx...");
                 byte[] data = File.ReadAllBytes(szIdxFullName);
+                DebugLog.Log($"[L1IdxReader.Load] Idx file size: {data.Length} bytes");
 
                 //取前4個byte
                 byte[] head = new byte[4];
@@ -121,9 +129,13 @@ namespace L1MapViewer.Reader {
                             }
                         }
                     } catch (EndOfStreamException) {
+                        DebugLog.Log($"[L1IdxReader.Load] ERROR: EndOfStreamException in {szIdxType}");
                         MessageBox.Show("idx檔案長度錯誤");
                     }
                 }
+                DebugLog.Log($"[L1IdxReader.Load] Parsed {result.Count} entries from {szIdxType}");
+            } else {
+                DebugLog.Log($"[L1IdxReader.Load] Files not found: idx={File.Exists(szIdxFullName)}, pak={File.Exists(szPakFullName)}");
             }
             return Share.IdxDataList[szIdxType] = result;
         }
