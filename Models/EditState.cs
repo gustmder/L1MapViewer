@@ -283,6 +283,23 @@ namespace L1MapViewer.Models
 
         #endregion
 
+        #region 群組高亮顯示
+
+        /// <summary>
+        /// 群組高亮的格子列表（全域 Layer1 座標）
+        /// </summary>
+        public List<(int globalX, int globalY)> GroupHighlightCells { get; set; } = new List<(int, int)>();
+
+        /// <summary>
+        /// 清除群組高亮
+        /// </summary>
+        public void ClearGroupHighlight()
+        {
+            GroupHighlightCells.Clear();
+        }
+
+        #endregion
+
         #region 方法
 
         /// <summary>
@@ -319,6 +336,7 @@ namespace L1MapViewer.Models
             ClearSelection();
             ClearClipboard();
             ClearUndoHistory();
+            ClearGroupHighlight();
             PassableMode = PassableEditMode.None;
             PassabilityPolygonPoints.Clear();
             IsDrawingPassabilityPolygon = false;
