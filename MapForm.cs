@@ -2191,6 +2191,23 @@ namespace L1FlyMapViewer
             int minGameY = Math.Min(startGameY, endGameY);
             int maxGameY = Math.Max(startGameY, endGameY);
 
+            // 限制選取範圍最大 150x150
+            const int MaxSelectionSize = 150;
+            if (maxGameX - minGameX >= MaxSelectionSize)
+            {
+                if (endGameX > startGameX)
+                    maxGameX = minGameX + MaxSelectionSize - 1;
+                else
+                    minGameX = maxGameX - MaxSelectionSize + 1;
+            }
+            if (maxGameY - minGameY >= MaxSelectionSize)
+            {
+                if (endGameY > startGameY)
+                    maxGameY = minGameY + MaxSelectionSize - 1;
+                else
+                    minGameY = maxGameY - MaxSelectionSize + 1;
+            }
+
             // 計算螢幕範圍對應的世界座標矩形，用於空間索引查詢
             int minScreenX = Math.Min(startPoint.X, endPoint.X);
             int minScreenY = Math.Min(startPoint.Y, endPoint.Y);
@@ -10229,14 +10246,84 @@ namespace L1FlyMapViewer
                 return;
 
             // 左鍵：開始區域選擇（Layer8 點擊已在前面處理）
-            if (e.Button == MouseButtons.Left && Control.ModifierKeys == Keys.None && _pendingMaterial == null)
+            // 支援 Shift 擴大選取
+            bool isShiftHeld = (Control.ModifierKeys & Keys.Shift) == Keys.Shift;
+            bool isNoOtherModifier = (Control.ModifierKeys & ~Keys.Shift) == Keys.None;
+
+            if (e.Button == MouseButtons.Left && isNoOtherModifier && _pendingMaterial == null)
             {
-                isSelectingRegion = true;
-                _interaction.IsLayer4CopyMode = true;  // 進入複製模式
-                _interaction.RegionStartPoint = e.Location;
-                regionEndPoint = e.Location;
-                selectedRegion = new Rectangle();
-                this.toolStripStatusLabel1.Text = "選取區域... (放開後按 Ctrl+C 複製)";
+                // 取得當前點擊位置的遊戲座標
+                var (clickGameX, clickGameY, _, _, _) = ScreenToGameCoords(e.X, e.Y);
+
+                if (isShiftHeld && _interaction.HasSelectionAnchor && clickGameX >= 0)
+                {
+                    // Shift 擴大選取：從錨點到當前點擊位置
+                    int anchorX = _interaction.SelectionAnchorGameCoord.X;
+                    int anchorY = _interaction.SelectionAnchorGameCoord.Y;
+
+                    // 計算選取範圍（限制最大 150x150）
+                    const int MaxSelectionSize = 150;
+                    int minGameX = Math.Min(anchorX, clickGameX);
+                    int maxGameX = Math.Max(anchorX, clickGameX);
+                    int minGameY = Math.Min(anchorY, clickGameY);
+                    int maxGameY = Math.Max(anchorY, clickGameY);
+
+                    // 限制選取範圍
+                    if (maxGameX - minGameX >= MaxSelectionSize)
+                    {
+                        if (clickGameX > anchorX)
+                            maxGameX = minGameX + MaxSelectionSize - 1;
+                        else
+                            minGameX = maxGameX - MaxSelectionSize + 1;
+                    }
+                    if (maxGameY - minGameY >= MaxSelectionSize)
+                    {
+                        if (clickGameY > anchorY)
+                            maxGameY = minGameY + MaxSelectionSize - 1;
+                        else
+                            minGameY = maxGameY - MaxSelectionSize + 1;
+                    }
+
+                    // 取得候選 S32 列表
+                    var candidateS32s = _document.S32Files.Values.ToList();
+
+                    // 直接使用遊戲座標選取格子
+                    _editState.SelectedCells = CoordinateHelper.GetCellsInGameCoordRange(
+                        minGameX, maxGameX, minGameY, maxGameY,
+                        candidateS32s, currentS32Data);
+
+                    if (_editState.SelectedCells.Count > 0)
+                    {
+                        selectedRegion = GetAlignedBoundsFromCells(_editState.SelectedCells);
+                    }
+
+                    isSelectingRegion = false;  // 不進入拖曳選取模式
+                    _interaction.IsLayer4CopyMode = true;
+
+                    // 更新狀態
+                    int selWidth = maxGameX - minGameX + 1;
+                    int selHeight = maxGameY - minGameY + 1;
+                    this.toolStripStatusLabel1.Text = $"已選取 {_editState.SelectedCells.Count} 格 ({selWidth}x{selHeight})，按 Ctrl+C 複製";
+
+                    _mapViewerControl.InvalidateOverlay();
+                }
+                else
+                {
+                    // 一般選取：開始拖曳選取
+                    isSelectingRegion = true;
+                    _interaction.IsLayer4CopyMode = true;  // 進入複製模式
+                    _interaction.RegionStartPoint = e.Location;
+                    regionEndPoint = e.Location;
+                    selectedRegion = new Rectangle();
+
+                    // 儲存錨點（遊戲座標）
+                    if (clickGameX >= 0)
+                    {
+                        _interaction.SelectionAnchorGameCoord = new Point(clickGameX, clickGameY);
+                    }
+
+                    this.toolStripStatusLabel1.Text = "選取區域... (放開後按 Ctrl+C 複製，Shift+點擊擴大選取)";
+                }
             }
         }
 
@@ -10520,6 +10607,13 @@ namespace L1FlyMapViewer
             var copyItem = new ToolStripMenuItem("複製 (Ctrl+C)");
             copyItem.Click += (s, e) => CopySelectedCells();
             menu.Items.Add(copyItem);
+
+            // 用剪貼簿的地板填滿選取區
+            bool hasLayer1InClipboard = _editState.CellClipboard.Any(c => c.Layer1Cell1 != null || c.Layer1Cell2 != null);
+            var fillWithFloorItem = new ToolStripMenuItem("用複製中的地板填滿選取區");
+            fillWithFloorItem.Enabled = hasLayer1InClipboard && _editState.SelectedCells.Count > 0;
+            fillWithFloorItem.Click += (s, e) => FillSelectionWithClipboardFloor();
+            menu.Items.Add(fillWithFloorItem);
 
             var clearItem = new ToolStripMenuItem("清除選取區域資料...");
             clearItem.Click += (s, e) => ClearSelectedCellsWithDialog();
@@ -11400,6 +11494,155 @@ namespace L1FlyMapViewer
             float normalizedY = Math.Abs(dy) / halfHeight;
 
             return (normalizedX + normalizedY) <= 1.0f;
+        }
+
+        // 用剪貼簿的地板填滿選取區（平鋪重複）
+        private void FillSelectionWithClipboardFloor()
+        {
+            // 取得有 Layer1 資料的剪貼簿項目
+            var clipboardL1Cells = _editState.CellClipboard
+                .Where(c => c.Layer1Cell1 != null || c.Layer1Cell2 != null)
+                .ToList();
+
+            if (clipboardL1Cells.Count == 0)
+            {
+                MessageBox.Show("剪貼簿中沒有地板資料。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (_editState.SelectedCells.Count == 0)
+            {
+                this.toolStripStatusLabel1.Text = "請先選取要填滿的區域";
+                return;
+            }
+
+            // 計算剪貼簿圖案的範圍
+            int clipMinX = clipboardL1Cells.Min(c => c.RelativeX);
+            int clipMinY = clipboardL1Cells.Min(c => c.RelativeY);
+            int clipMaxX = clipboardL1Cells.Max(c => c.RelativeX);
+            int clipMaxY = clipboardL1Cells.Max(c => c.RelativeY);
+            int clipWidth = clipMaxX - clipMinX + 2;  // +2 因為一個格子有兩個 Layer1 格
+            int clipHeight = clipMaxY - clipMinY + 1;
+
+            if (clipWidth <= 0 || clipHeight <= 0)
+            {
+                MessageBox.Show("剪貼簿圖案無效。", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // 建立快速查找字典 (相對座標 -> Layer1Cell)
+            var clipboardDict = new Dictionary<(int x, int y), (TileCell cell1, TileCell cell2)>();
+            foreach (var cell in clipboardL1Cells)
+            {
+                clipboardDict[(cell.RelativeX, cell.RelativeY)] = (cell.Layer1Cell1, cell.Layer1Cell2);
+            }
+
+            // 計算選取區域的全域座標範圍
+            int selMinGlobalX = int.MaxValue, selMinGlobalY = int.MaxValue;
+            foreach (var cell in _editState.SelectedCells)
+            {
+                int globalX = cell.S32Data.SegInfo.nLinBeginX * 2 + cell.LocalX;
+                int globalY = cell.S32Data.SegInfo.nLinBeginY + cell.LocalY;
+                if (globalX < selMinGlobalX) selMinGlobalX = globalX;
+                if (globalY < selMinGlobalY) selMinGlobalY = globalY;
+            }
+
+            // 確保起點是偶數以保持奇偶性
+            if (selMinGlobalX % 2 != 0) selMinGlobalX -= 1;
+
+            // 建立 Undo 記錄
+            var undoAction = new UndoAction
+            {
+                Description = $"填滿地板 {_editState.SelectedCells.Count} 格"
+            };
+
+            int filledCount = 0;
+
+            // 填滿每個選取的格子
+            foreach (var cell in _editState.SelectedCells)
+            {
+                int globalX = cell.S32Data.SegInfo.nLinBeginX * 2 + cell.LocalX;
+                int globalY = cell.S32Data.SegInfo.nLinBeginY + cell.LocalY;
+
+                // 計算相對於選取區域起點的位置
+                int relX = globalX - selMinGlobalX;
+                int relY = globalY - selMinGlobalY;
+
+                // 計算對應的剪貼簿位置（平鋪取餘數）
+                int clipRelX = clipMinX + ((relX - clipMinX) % clipWidth + clipWidth) % clipWidth;
+                int clipRelY = clipMinY + ((relY - clipMinY) % clipHeight + clipHeight) % clipHeight;
+
+                // 查找對應的剪貼簿資料
+                if (clipboardDict.TryGetValue((clipRelX, clipRelY), out var clipCell))
+                {
+                    S32Data targetS32 = cell.S32Data;
+                    int localX = cell.LocalX;
+                    int localY = cell.LocalY;
+
+                    // 填入 Layer1Cell1
+                    if (clipCell.cell1 != null && localX >= 0 && localX < 128)
+                    {
+                        var oldCell = targetS32.Layer1[localY, localX];
+                        undoAction.ModifiedLayer1.Add(new UndoLayer1Info
+                        {
+                            S32FilePath = targetS32.FilePath,
+                            LocalX = localX,
+                            LocalY = localY,
+                            OldTileId = oldCell?.TileId ?? 0,
+                            OldIndexId = oldCell?.IndexId ?? 0,
+                            NewTileId = clipCell.cell1.TileId,
+                            NewIndexId = clipCell.cell1.IndexId
+                        });
+
+                        targetS32.Layer1[localY, localX] = new TileCell
+                        {
+                            X = localX,
+                            Y = localY,
+                            TileId = clipCell.cell1.TileId,
+                            IndexId = clipCell.cell1.IndexId
+                        };
+                        targetS32.IsModified = true;
+                        filledCount++;
+                    }
+
+                    // 填入 Layer1Cell2
+                    if (clipCell.cell2 != null && localX + 1 >= 0 && localX + 1 < 128)
+                    {
+                        var oldCell = targetS32.Layer1[localY, localX + 1];
+                        undoAction.ModifiedLayer1.Add(new UndoLayer1Info
+                        {
+                            S32FilePath = targetS32.FilePath,
+                            LocalX = localX + 1,
+                            LocalY = localY,
+                            OldTileId = oldCell?.TileId ?? 0,
+                            OldIndexId = oldCell?.IndexId ?? 0,
+                            NewTileId = clipCell.cell2.TileId,
+                            NewIndexId = clipCell.cell2.IndexId
+                        });
+
+                        targetS32.Layer1[localY, localX + 1] = new TileCell
+                        {
+                            X = localX + 1,
+                            Y = localY,
+                            TileId = clipCell.cell2.TileId,
+                            IndexId = clipCell.cell2.IndexId
+                        };
+                        targetS32.IsModified = true;
+                    }
+                }
+            }
+
+            // 推入 Undo 堆疊
+            if (undoAction.ModifiedLayer1.Count > 0)
+            {
+                PushUndoAction(undoAction);
+            }
+
+            // 重新渲染
+            ClearS32BlockCache();
+            RenderS32Map();
+
+            this.toolStripStatusLabel1.Text = $"已填滿 {filledCount} 個地板格子";
         }
 
         // 批量刪除區域內選中層的資料（根據複製設定 checkbox）

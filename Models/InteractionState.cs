@@ -54,6 +54,16 @@ namespace L1MapViewer.Models
         public Point RegionStartPoint { get; set; }
 
         /// <summary>
+        /// 選取錨點（遊戲座標），用於 Shift 擴大選取
+        /// </summary>
+        public Point SelectionAnchorGameCoord { get; set; } = new Point(-1, -1);
+
+        /// <summary>
+        /// 是否有有效的選取錨點
+        /// </summary>
+        public bool HasSelectionAnchor => SelectionAnchorGameCoord.X >= 0 && SelectionAnchorGameCoord.Y >= 0;
+
+        /// <summary>
         /// 是否在 Layer4 複製選取模式
         /// </summary>
         public bool IsLayer4CopyMode { get; set; }
@@ -122,6 +132,7 @@ namespace L1MapViewer.Models
             IsMiniMapFocused = false;
             RegionStartPoint = Point.Empty;
             IsLayer4CopyMode = false;
+            SelectionAnchorGameCoord = new Point(-1, -1);
         }
     }
 }
