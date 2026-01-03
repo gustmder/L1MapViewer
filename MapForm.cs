@@ -4088,6 +4088,83 @@ namespace L1FlyMapViewer
             }
         }
 
+        // 匯出單一 S32 區塊為 fs32
+        private void ExportSingleS32AsFs32(S32Data s32Data)
+        {
+            if (s32Data == null) return;
+
+            using (var dialog = new L1MapViewer.Forms.ExportOptionsDialog(isFs3p: false, hasSelection: true))
+            {
+                if (dialog.ShowDialog() != DialogResult.OK)
+                    return;
+
+                // 檢查異常
+                var singleDict = new Dictionary<string, S32Data> { { s32Data.FilePath, s32Data } };
+                if (!CheckLayer5IssuesAndConfirm(singleDict, "匯出", checkTileLimit: false, checkLayer8Extended: !dialog.StripLayer8Ext))
+                    return;
+
+                using (var saveDialog = new SaveFileDialog())
+                {
+                    saveDialog.Filter = "FS32 地圖包|*.fs32";
+                    string blockName = $"{s32Data.SegInfo.nBlockX:x4}{s32Data.SegInfo.nBlockY:x4}";
+                    saveDialog.FileName = $"{_document.MapId}_{blockName}.fs32";
+
+                    if (saveDialog.ShowDialog() != DialogResult.OK)
+                        return;
+
+                    try
+                    {
+                        toolStripStatusLabel1.Text = "正在匯出區塊...";
+                        Application.DoEvents();
+
+                        var fs32 = Fs32Writer.CreateFromS32(s32Data, _document.MapId, dialog.LayerFlags, dialog.IncludeTiles, dialog.StripLayer8Ext);
+
+                        // 檢查並處理 R版 tiles
+                        if (dialog.IncludeTiles && fs32.Tiles.Count > 0)
+                        {
+                            int remasterCount = fs32.Tiles.Values.Count(t => L1MapViewer.Converter.L1Til.IsRemaster(t.TilData));
+                            if (remasterCount > 0)
+                            {
+                                var result = MessageBox.Show(
+                                    $"地圖包中有 {remasterCount} 個 R版 (48x48) 圖塊。\n\n" +
+                                    "是否要轉換為天1格式 (24x24)？\n\n" +
+                                    "• 是 - 轉換為天1格式 (檔案較小，相容舊版)\n" +
+                                    "• 否 - 保留 R版格式",
+                                    "R版圖塊偵測",
+                                    MessageBoxButtons.YesNo,
+                                    MessageBoxIcon.Question,
+                                    MessageBoxDefaultButton.Button1);
+
+                                if (result == DialogResult.Yes)
+                                {
+                                    foreach (var tileId in fs32.Tiles.Keys.ToList())
+                                    {
+                                        var tile = fs32.Tiles[tileId];
+                                        if (L1MapViewer.Converter.L1Til.IsRemaster(tile.TilData))
+                                        {
+                                            tile.TilData = L1MapViewer.Converter.L1Til.DownscaleTil(tile.TilData);
+                                            tile.Md5Hash = TileHashManager.CalculateMd5(tile.TilData);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Fs32Writer.Write(fs32, saveDialog.FileName);
+
+                        string resultMsg = $"已匯出至 {saveDialog.FileName}\n({fs32.Blocks.Count} 區塊, {fs32.Tiles.Count} 圖塊)";
+                        toolStripStatusLabel1.Text = resultMsg.Replace("\n", " ");
+                        ShowAutoCloseMessage(resultMsg, "匯出完成");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[Export] Error: {ex}");
+                        MessageBox.Show($"匯出失敗: {ex.Message}\n\n{ex.StackTrace}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+
         // 匯入 fs32 地圖包到當前地圖
         private void ImportFs32ToCurrentMap()
         {
@@ -8139,6 +8216,26 @@ namespace L1FlyMapViewer
                             };
                         }
                     }
+
+                    // 加入 Layer2 的 Tiles
+                    foreach (var item in s32Data.Layer2)
+                    {
+                        if (item.TileId <= 0) continue;
+                        if (aggregatedTiles.ContainsKey(item.TileId))
+                        {
+                            aggregatedTiles[item.TileId].UsageCount++;
+                        }
+                        else
+                        {
+                            aggregatedTiles[item.TileId] = new TileInfo
+                            {
+                                TileId = item.TileId,
+                                IndexId = item.IndexId,
+                                UsageCount = 1,
+                                Thumbnail = null
+                            };
+                        }
+                    }
                 }
 
                 // 預先載入所有縮圖（在背景執行緒）
@@ -8257,6 +8354,26 @@ namespace L1FlyMapViewer
                                     TileId = tileInfo.TileId,
                                     IndexId = tileInfo.IndexId,
                                     UsageCount = tileInfo.UsageCount,
+                                    Thumbnail = null
+                                };
+                            }
+                        }
+
+                        // 加入 Layer2 的 Tiles
+                        foreach (var item in s32Data.Layer2)
+                        {
+                            if (item.TileId <= 0) continue;
+                            if (cachedAggregatedTiles.ContainsKey(item.TileId))
+                            {
+                                cachedAggregatedTiles[item.TileId].UsageCount++;
+                            }
+                            else
+                            {
+                                cachedAggregatedTiles[item.TileId] = new TileInfo
+                                {
+                                    TileId = item.TileId,
+                                    IndexId = item.IndexId,
+                                    UsageCount = 1,
                                     Thumbnail = null
                                 };
                             }
@@ -9132,25 +9249,18 @@ namespace L1FlyMapViewer
                     return;
                 }
 
-                // Ctrl + 左鍵：刪除該格子的所有第四層物件
-                if (e.Button == MouseButtons.Left && ModifierKeys == Keys.Control)
+
+                // 重新渲染以顯示高亮
+                RenderS32Map();
+
+                // 透明編輯模式下：顯示附近群組縮圖
+                if (_editState.IsLayer5EditMode)
                 {
-                    DeleteAllLayer4ObjectsAtCell(x, y);
+                    UpdateNearbyGroupThumbnails(s32Data, x, y, 10);
                 }
                 else
                 {
-                    // 重新渲染以顯示高亮
-                    RenderS32Map();
-
-                    // 透明編輯模式下：顯示附近群組縮圖
-                    if (_editState.IsLayer5EditMode)
-                    {
-                        UpdateNearbyGroupThumbnails(s32Data, x, y, 10);
-                    }
-                    else
-                    {
-                        // 非透明編輯模式，不需要更新群組清單
-                    }
+                    // 非透明編輯模式，不需要更新群組清單
                 }
                 sw.Stop();
                 LogPerf($"[MOUSE-CLICK] found cell, total={sw.ElapsedMilliseconds}ms");
@@ -11426,7 +11536,7 @@ namespace L1FlyMapViewer
             int leftX = normX, rightX = normX + 1;
             bool hasL1 = (leftX < 128 && cellY < 64 && currentS32Data.Layer1[cellY, leftX]?.TileId > 0) ||
                          (rightX < 128 && cellY < 64 && currentS32Data.Layer1[cellY, rightX]?.TileId > 0);
-            bool hasL2 = currentS32Data.Layer2.Any(i => (i.X / 2) * 2 == normX && i.Y == cellY);
+            bool hasL2 = HasLayer2AtCell(normX, cellY);
             bool hasL3 = cellY < 64 && layer3X < 64 && currentS32Data.Layer3[cellY, layer3X] != null;
             bool hasL4 = currentS32Data.Layer4.Any(o => (o.X / 2) * 2 == normX && o.Y == cellY);
             bool hasL5 = HasLayer5AtCell(normX, cellY);
@@ -11490,6 +11600,29 @@ namespace L1FlyMapViewer
 
             layerForm.Controls.Add(tabControl);
             layerForm.ShowDialog();
+        }
+
+        // 檢查指定格子是否有 Layer2 資料（搜尋所有 S32）
+        private bool HasLayer2AtCell(int normX, int y)
+        {
+            int globalLayer1X = currentS32Data.SegInfo.nLinBeginX * 2 + normX;
+            int globalLayer1Y = currentS32Data.SegInfo.nLinBeginY + y;
+
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                if (s32Data.Layer2.Count == 0) continue;
+                int s32StartX = s32Data.SegInfo.nLinBeginX * 2;
+                int s32StartY = s32Data.SegInfo.nLinBeginY;
+
+                foreach (var item2 in s32Data.Layer2)
+                {
+                    int itemGlobalX = s32StartX + item2.X;
+                    int itemGlobalY = s32StartY + item2.Y;
+                    if ((itemGlobalX == globalLayer1X || itemGlobalX == globalLayer1X + 1) && itemGlobalY == globalLayer1Y)
+                        return true;
+                }
+            }
+            return false;
         }
 
         // 檢查指定格子是否有 Layer5 資料（搜尋所有 S32）
@@ -11644,26 +11777,193 @@ namespace L1FlyMapViewer
             return panel;
         }
 
-        // 創建第二層面板
+        // 創建第二層面板 - 搜尋所有 S32，按左三角/右三角及不同 S32 分開顯示
         private Panel CreateLayer2Panel(int x, int y)
         {
             Panel panel = new Panel();
-            panel.BorderStyle = BorderStyle.FixedSingle;
             panel.Dock = DockStyle.Fill;
 
-            Label title = new Label();
-            title.Text = "第2層 (資料)";
-            title.Font = new Font("Arial", 10, FontStyle.Bold);
-            title.Dock = DockStyle.Top;
-            title.Height = 25;
-            title.TextAlign = ContentAlignment.MiddleCenter;
-            panel.Controls.Add(title);
+            // 計算當前格子的全域 Layer1 座標
+            int normalizedX = (x / 2) * 2;  // 正規化為偶數（同一格的左半）
+            int globalLayer1X = currentS32Data.SegInfo.nLinBeginX * 2 + normalizedX;
+            int globalLayer1Y = currentS32Data.SegInfo.nLinBeginY + y;
 
-            Label info = new Label();
-            info.Text = $"共 {currentS32Data.Layer2.Count} 項資料\n(此層無對應格子資料)";
-            info.Dock = DockStyle.Fill;
-            info.TextAlign = ContentAlignment.MiddleCenter;
-            panel.Controls.Add(info);
+            // 搜尋所有 S32 的 Layer2（因為相鄰 S32 的裝飾可能超出邊界）
+            // 分類：左三角 (x偶數) 和 右三角 (x奇數)
+            var leftItems = new List<(string s32Name, S32Data s32Data, Layer2Item item)>();
+            var rightItems = new List<(string s32Name, S32Data s32Data, Layer2Item item)>();
+
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                if (s32Data.Layer2.Count == 0) continue;
+
+                int s32StartX = s32Data.SegInfo.nLinBeginX * 2;
+                int s32StartY = s32Data.SegInfo.nLinBeginY;
+                string s32Name = System.IO.Path.GetFileName(s32Data.FilePath);
+
+                foreach (var item in s32Data.Layer2)
+                {
+                    int itemGlobalX = s32StartX + item.X;
+                    int itemGlobalY = s32StartY + item.Y;
+
+                    // 檢查是否在目標格子範圍內（左半 x 或 右半 x+1）
+                    if (itemGlobalY == globalLayer1Y)
+                    {
+                        if (itemGlobalX == globalLayer1X)
+                        {
+                            leftItems.Add((s32Name, s32Data, item));
+                        }
+                        else if (itemGlobalX == globalLayer1X + 1)
+                        {
+                            rightItems.Add((s32Name, s32Data, item));
+                        }
+                    }
+                }
+            }
+
+            int totalCount = leftItems.Count + rightItems.Count;
+            if (totalCount > 0)
+            {
+                // SplitContainer: 左邊 ListView，右邊預覽
+                SplitContainer splitContainer = new SplitContainer();
+                splitContainer.Dock = DockStyle.Fill;
+                splitContainer.Orientation = Orientation.Vertical;
+                splitContainer.SplitterDistance = 280;
+
+                // 左邊：ListView
+                ListView listView = new ListView();
+                listView.Dock = DockStyle.Fill;
+                listView.View = View.Details;
+                listView.FullRowSelect = true;
+                listView.GridLines = true;
+                listView.HideSelection = false;
+
+                listView.Columns.Add("區域", 50);
+                listView.Columns.Add("S32", 85);
+                listView.Columns.Add("X", 40);
+                listView.Columns.Add("Y", 40);
+                listView.Columns.Add("Tile", 50);
+                listView.Columns.Add("Idx", 40);
+
+                // 左三角項目
+                foreach (var (s32Name, s32Data, item) in leftItems)
+                {
+                    var lvItem = new ListViewItem("◀左");
+                    lvItem.BackColor = Color.LightBlue;
+                    lvItem.SubItems.Add(s32Name);
+                    lvItem.SubItems.Add(item.X.ToString());
+                    lvItem.SubItems.Add(item.Y.ToString());
+                    lvItem.SubItems.Add(item.TileId.ToString());
+                    lvItem.SubItems.Add(item.IndexId.ToString());
+                    lvItem.Tag = (s32Data, item);
+                    listView.Items.Add(lvItem);
+                }
+
+                // 右三角項目
+                foreach (var (s32Name, s32Data, item) in rightItems)
+                {
+                    var lvItem = new ListViewItem("▶右");
+                    lvItem.BackColor = Color.LightGreen;
+                    lvItem.SubItems.Add(s32Name);
+                    lvItem.SubItems.Add(item.X.ToString());
+                    lvItem.SubItems.Add(item.Y.ToString());
+                    lvItem.SubItems.Add(item.TileId.ToString());
+                    lvItem.SubItems.Add(item.IndexId.ToString());
+                    lvItem.Tag = (s32Data, item);
+                    listView.Items.Add(lvItem);
+                }
+
+                splitContainer.Panel1.Controls.Add(listView);
+
+                // 右邊：預覽面板
+                Panel previewPanel = new Panel();
+                previewPanel.Dock = DockStyle.Fill;
+                previewPanel.BackColor = Color.Black;
+
+                PictureBox previewPb = new PictureBox();
+                previewPb.Dock = DockStyle.Fill;
+                previewPb.SizeMode = PictureBoxSizeMode.Zoom;
+                previewPb.BackColor = Color.Black;
+                previewPanel.Controls.Add(previewPb);
+
+                Label previewInfo = new Label();
+                previewInfo.Dock = DockStyle.Bottom;
+                previewInfo.Height = 40;
+                previewInfo.ForeColor = Color.White;
+                previewInfo.BackColor = Color.FromArgb(40, 40, 40);
+                previewInfo.TextAlign = ContentAlignment.MiddleCenter;
+                previewInfo.Text = "選取項目以預覽";
+                previewPanel.Controls.Add(previewInfo);
+
+                Button btnDelete = new Button();
+                btnDelete.Text = "刪除";
+                btnDelete.Dock = DockStyle.Top;
+                btnDelete.Height = 25;
+                btnDelete.BackColor = Color.IndianRed;
+                btnDelete.ForeColor = Color.White;
+                btnDelete.Enabled = false;
+                previewPanel.Controls.Add(btnDelete);
+
+                splitContainer.Panel2.Controls.Add(previewPanel);
+
+                // 選取事件
+                listView.SelectedIndexChanged += (s, e) =>
+                {
+                    if (listView.SelectedItems.Count > 0)
+                    {
+                        var selected = listView.SelectedItems[0];
+                        var (s32Data, item) = ((S32Data, Layer2Item))selected.Tag;
+
+                        previewPb.Image = LoadTileEnlarged(item.TileId, item.IndexId, 100);
+                        previewInfo.Text = $"Tile: {item.TileId} | Idx: {item.IndexId}\n" +
+                                           $"位置: ({item.X}, {item.Y})";
+                        btnDelete.Enabled = true;
+                        btnDelete.Tag = (s32Data, item);
+                    }
+                    else
+                    {
+                        previewPb.Image = null;
+                        previewInfo.Text = "選取項目以預覽";
+                        btnDelete.Enabled = false;
+                    }
+                };
+
+                // 刪除事件
+                btnDelete.Click += (s, e) =>
+                {
+                    if (btnDelete.Tag != null)
+                    {
+                        var (s32Data, item) = ((S32Data, Layer2Item))btnDelete.Tag;
+
+                        if (MessageBox.Show($"確定要刪除這個 Layer2 項目？\nTile: {item.TileId}, Idx: {item.IndexId}",
+                            "確認刪除", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                        {
+                            s32Data.Layer2.Remove(item);
+                            s32Data.IsModified = true;
+                            ClearS32BlockCache();
+                            RenderS32Map();
+
+                            // 從 ListView 移除
+                            listView.Items.Remove(listView.SelectedItems[0]);
+                            previewPb.Image = null;
+                            previewInfo.Text = "已刪除";
+                            btnDelete.Enabled = false;
+
+                            this.toolStripStatusLabel1.Text = $"已刪除 Layer2 項目 (Tile:{item.TileId})";
+                        }
+                    }
+                };
+
+                panel.Controls.Add(splitContainer);
+            }
+            else
+            {
+                Label noData = new Label();
+                noData.Text = $"此格子無 Layer2 資料\n\n(全域座標: {globalLayer1X}, {globalLayer1Y})";
+                noData.Dock = DockStyle.Fill;
+                noData.TextAlign = ContentAlignment.MiddleCenter;
+                panel.Controls.Add(noData);
+            }
 
             return panel;
         }
@@ -20553,7 +20853,7 @@ namespace L1FlyMapViewer
             ListView lvItems = lvSelected;
             tabControl.SelectedIndexChanged += (s, args) =>
             {
-                lvItems = tabControl.SelectedIndex == 0 ? lvSelected : lvAll;
+                lvItems = tabControl.SelectedIndex == 0 ? lvAll : lvSelected;
             };
 
             // 為了向後相容，保留 s32WithL8 變數指向全部資料
@@ -21192,7 +21492,7 @@ namespace L1FlyMapViewer
             btnSelectAll.Size = new Size(80, 30);
             btnSelectAll.Click += (s, args) =>
             {
-                ListView currentLv = tabControl.SelectedIndex == 0 ? lvSelected : lvAll;
+                ListView currentLv = tabControl.SelectedIndex == 0 ? lvAll : lvSelected;
                 foreach (ListViewItem lvi in currentLv.Items)
                     lvi.Checked = true;
             };
@@ -21204,7 +21504,7 @@ namespace L1FlyMapViewer
             btnDeselectAll.Size = new Size(80, 30);
             btnDeselectAll.Click += (s, args) =>
             {
-                ListView currentLv = tabControl.SelectedIndex == 0 ? lvSelected : lvAll;
+                ListView currentLv = tabControl.SelectedIndex == 0 ? lvAll : lvSelected;
                 foreach (ListViewItem lvi in currentLv.Items)
                     lvi.Checked = false;
             };
