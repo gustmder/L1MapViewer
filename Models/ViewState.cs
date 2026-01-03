@@ -475,8 +475,9 @@ namespace L1MapViewer.Models
         /// </summary>
         public Point ScreenToWorld(int screenX, int screenY)
         {
-            int worldX = (int)(screenX / ZoomLevel) + (int)(ScrollX / ZoomLevel);
-            int worldY = (int)(screenY / ZoomLevel) + (int)(ScrollY / ZoomLevel);
+            // ScrollX/ScrollY 已經是世界座標，不需要除以 ZoomLevel
+            int worldX = (int)(screenX / ZoomLevel) + ScrollX;
+            int worldY = (int)(screenY / ZoomLevel) + ScrollY;
             return new Point(worldX, worldY);
         }
 
@@ -493,8 +494,9 @@ namespace L1MapViewer.Models
         /// </summary>
         public Point WorldToScreen(int worldX, int worldY)
         {
-            int screenX = (int)(worldX * ZoomLevel) - ScrollX;
-            int screenY = (int)(worldY * ZoomLevel) - ScrollY;
+            // 先計算世界座標差，再乘以 ZoomLevel
+            int screenX = (int)((worldX - ScrollX) * ZoomLevel);
+            int screenY = (int)((worldY - ScrollY) * ZoomLevel);
             return new Point(screenX, screenY);
         }
 
