@@ -746,8 +746,6 @@ namespace L1MapViewer.Controls
                     int viewportWidth = _mapPictureBox.Width;
                     int gap = viewportWidth - bitmapRightEdge;
 
-                    Console.WriteLine($"[Paint] bmp={_viewportBitmap.Width}x{_viewportBitmap.Height}, draw=({drawX},{drawY},{drawW},{drawH}), scroll=({_viewState.ScrollX},{_viewState.ScrollY}), bmpRight={bitmapRightEdge}, vpWidth={viewportWidth}, gap={gap}");
-
                     e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
                     e.Graphics.DrawImage(_viewportBitmap, drawX, drawY, drawW, drawH);
 
@@ -764,8 +762,6 @@ namespace L1MapViewer.Controls
                 }
                 else
                 {
-                    Console.WriteLine($"[MapViewerControl.Paint] SKIP: bitmap={(_viewportBitmap != null)}, RenderWidth={_viewState.RenderWidth}");
-
                     // DEBUG: 顯示狀態資訊
                     string debugInfo = $"bitmap={(_viewportBitmap != null)}, RenderW={_viewState.RenderWidth}, VS.hash={_viewState.GetHashCode()}";
                     using (var font = new Font("Consolas", 10))

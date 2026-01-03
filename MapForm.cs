@@ -10613,71 +10613,27 @@ namespace L1FlyMapViewer
         // S32 PictureBox 繪製事件 - 繪製 Viewport 和選擇框或多邊形
         private void s32PictureBox_Paint(object sender, PaintEventArgs e)
         {
-            if (_interaction.IsMainMapDragging)
-            {
-                LogPerf($"[PAINT-ENTER] dragging, moves={_dragMoveCount}");
-            }
-
-            var paintSw = Stopwatch.StartNew();
-            long lockWaitMs = 0;
-            long drawImageMs = 0;
-            int bmpW = 0, bmpH = 0;
-            int drawW = 0, drawH = 0;
-
             // 繪製 Viewport Bitmap（加鎖保護避免多執行緒衝突）
-            var lockSw = Stopwatch.StartNew();
             lock (_renderCache.ViewportBitmapLock)
             {
-                lockSw.Stop();
-                lockWaitMs = lockSw.ElapsedMilliseconds;
-                if (lockWaitMs > 10)
-                {
-                    LogPerf($"[PAINT-LOCK] waited {lockWaitMs}ms for lock");
-                }
-            
                 if (_renderCache.ViewportBitmap != null && _viewState.RenderWidth > 0)
                 {
-                    bmpW = _renderCache.ViewportBitmap.Width;
-                    bmpH = _renderCache.ViewportBitmap.Height;
-            
                     // 計算 Viewport Bitmap 在 PictureBox 上的繪製位置
-                    // _viewState.RenderOriginX/Y 是已渲染區域的世界座標原點
-                    // _viewState.ScrollX/Y 是當前視圖的世界座標位置
-                    // 繪製位置 = (RenderOrigin - Scroll) * ZoomLevel
                     int drawX = (int)((_viewState.RenderOriginX - _viewState.ScrollX) * _viewState.ZoomLevel);
                     int drawY = (int)((_viewState.RenderOriginY - _viewState.ScrollY) * _viewState.ZoomLevel);
-            
+
                     // Viewport Bitmap 是未縮放的，需要縮放繪製
-                    drawW = (int)(_viewState.RenderWidth * _viewState.ZoomLevel);
-                    drawH = (int)(_viewState.RenderHeight * _viewState.ZoomLevel);
-            
-                    var drawSw = Stopwatch.StartNew();
+                    int drawW = (int)(_viewState.RenderWidth * _viewState.ZoomLevel);
+                    int drawH = (int)(_viewState.RenderHeight * _viewState.ZoomLevel);
+
                     e.Graphics.DrawImage(_renderCache.ViewportBitmap, drawX, drawY, drawW, drawH);
-                    drawSw.Stop();
-                    drawImageMs = drawSw.ElapsedMilliseconds;
-            
+
                     // 拖曳時計數 Paint 次數
                     if (_interaction.IsMainMapDragging)
                     {
                         _dragPaintCount++;
                     }
                 }
-                else
-                {
-                    LogPerf($"[PAINT] no bitmap, _renderCache.ViewportBitmap={(_renderCache.ViewportBitmap != null ? "exists" : "null")}, RenderWidth={_viewState.RenderWidth}");
-                }
-            }
-
-            paintSw.Stop();
-            // 拖曳時記錄慢的 Paint（> 30ms）或每 20 次記一次
-            if (_interaction.IsMainMapDragging && (paintSw.ElapsedMilliseconds > 30 || _dragPaintCount % 20 == 1))
-            {
-                LogPerf($"[PAINT-DRAG] total={paintSw.ElapsedMilliseconds}ms, lockWait={lockWaitMs}ms, drawImage={drawImageMs}ms, bmp={bmpW}x{bmpH}, draw={drawW}x{drawH}");
-            }
-            // 非拖曳時只在超過 10ms 時記錄
-            else if (!_interaction.IsMainMapDragging && paintSw.ElapsedMilliseconds > 10)
-            {
-                LogPerf($"[PAINT] total={paintSw.ElapsedMilliseconds}ms, lockWait={lockWaitMs}ms, drawImage={drawImageMs}ms, bmp={bmpW}x{bmpH}, draw={drawW}x{drawH}");
             }
 
             // 通行性編輯模式：繪製多邊形（舊功能，保留但使用固定顏色）
@@ -10726,10 +10682,7 @@ namespace L1FlyMapViewer
             if (_editState.SelectedCells.Count > 0)
             {
                 Color color = isSelectingRegion ? Color.Green : Color.Orange;
-                var drawCellsSw = Stopwatch.StartNew();
                 DrawSelectedCells(e.Graphics, _editState.SelectedCells, color);
-                drawCellsSw.Stop();
-                LogPerf($"[PAINT] DrawSelectedCells={drawCellsSw.ElapsedMilliseconds}ms, cellCount={_editState.SelectedCells.Count}");
 
                 // 顯示選取的格子數量
                 if (isSelectingRegion)
@@ -10748,9 +10701,6 @@ namespace L1FlyMapViewer
                     }
                 }
             }
-
-            paintSw.Stop();
-            LogPerf($"[PAINT] total={paintSw.ElapsedMilliseconds}ms");
         }
 
         // 繪製選中的格子（每個格子繪製獨立的菱形）
