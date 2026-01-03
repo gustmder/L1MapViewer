@@ -33,12 +33,12 @@ namespace L1MapViewer.Models
         /// <summary>
         /// 最小縮放比例
         /// </summary>
-        public double ZoomMin { get; set; } = 0.1;
+        public double ZoomMin { get; set; } = 0.4;
 
         /// <summary>
         /// 最大縮放比例
         /// </summary>
-        public double ZoomMax { get; set; } = 5.0;
+        public double ZoomMax { get; set; } = 1.5;
 
         /// <summary>
         /// 縮放步進

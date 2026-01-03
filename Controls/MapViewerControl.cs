@@ -37,6 +37,12 @@ namespace L1MapViewer.Controls
         private System.Windows.Forms.Timer _zoomDebounceTimer;
         private System.Windows.Forms.Timer _dragRenderTimer;
 
+        // 縮放控制面板（Google Maps 風格）
+        private Panel _zoomControlPanel;
+        private Button _btnZoomIn;
+        private Button _btnZoomOut;
+        private Button _btnZoomReset;
+
         // 地圖資料
         private MapDocument _document;
         private RenderOptions _renderOptions = RenderOptions.Default;
@@ -111,6 +117,22 @@ namespace L1MapViewer.Controls
             set => _viewState.RenderBufferMargin = value;
         }
 
+        /// <summary>
+        /// 是否顯示縮放控制按鈕
+        /// </summary>
+        [Browsable(true)]
+        [Category("Appearance")]
+        [DefaultValue(true)]
+        public bool ShowZoomControls
+        {
+            get => _zoomControlPanel?.Visible ?? false;
+            set
+            {
+                if (_zoomControlPanel != null)
+                    _zoomControlPanel.Visible = value;
+            }
+        }
+
         #endregion
 
         #region 事件
@@ -129,6 +151,11 @@ namespace L1MapViewer.Controls
         /// 縮放變更事件
         /// </summary>
         public event EventHandler<ZoomChangedEventArgs> ZoomChanged;
+
+        /// <summary>
+        /// 捲動變更事件
+        /// </summary>
+        public event EventHandler ScrollChanged;
 
         /// <summary>
         /// 地圖滑鼠按下事件（轉發給 MapForm 處理編輯）
@@ -169,6 +196,7 @@ namespace L1MapViewer.Controls
 
             InitializeComponents();
             InitializeTimers();
+            SetupZoomControls();
         }
 
         /// <summary>
@@ -194,8 +222,26 @@ namespace L1MapViewer.Controls
             if (viewState != null)
             {
                 Console.WriteLine($"[MapViewerControl.SetViewState] replacing ViewState, old hashcode={_viewState?.GetHashCode()}, new hashcode={viewState.GetHashCode()}");
+
+                // 取消訂閱舊的事件
+                if (_viewState != null)
+                {
+                    _viewState.ZoomChanged -= ViewState_ZoomChanged;
+                }
+
                 _viewState = viewState;
+
+                // 訂閱新的事件以同步按鈕文字
+                _viewState.ZoomChanged += ViewState_ZoomChanged;
+
+                // 立即更新按鈕文字
+                UpdateZoomButtonText();
             }
+        }
+
+        private void ViewState_ZoomChanged(object sender, EventArgs e)
+        {
+            UpdateZoomButtonText();
         }
 
         /// <summary>
@@ -361,6 +407,107 @@ namespace L1MapViewer.Controls
             _dragRenderTimer.Tick += DragRenderTimer_Tick;
         }
 
+        private void SetupZoomControls()
+        {
+            // 建立容器面板
+            _zoomControlPanel = new Panel
+            {
+                Size = new Size(48, 118),
+                BackColor = Color.Transparent,
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+            };
+
+            // + 按鈕
+            _btnZoomIn = CreateZoomButton("+", 0);
+            _btnZoomIn.Click += (s, e) =>
+            {
+                var oldZoom = _viewState.ZoomLevel;
+                _viewState.ZoomIn();
+                if (Math.Abs(_viewState.ZoomLevel - oldZoom) > 0.001)
+                {
+                    UpdateZoomButtonText();
+                    ZoomChanged?.Invoke(this, new ZoomChangedEventArgs(_viewState.ZoomLevel, oldZoom));
+                    RequestRender();
+                }
+            };
+
+            // - 按鈕
+            _btnZoomOut = CreateZoomButton("\u2212", 40); // Unicode minus sign
+            _btnZoomOut.Click += (s, e) =>
+            {
+                var oldZoom = _viewState.ZoomLevel;
+                _viewState.ZoomOut();
+                if (Math.Abs(_viewState.ZoomLevel - oldZoom) > 0.001)
+                {
+                    UpdateZoomButtonText();
+                    ZoomChanged?.Invoke(this, new ZoomChangedEventArgs(_viewState.ZoomLevel, oldZoom));
+                    RequestRender();
+                }
+            };
+
+            // 縮放比例按鈕（點擊重置為 1:1）
+            _btnZoomReset = CreateZoomButton("1:1", 80);
+            _btnZoomReset.Click += (s, e) =>
+            {
+                var oldZoom = _viewState.ZoomLevel;
+                _viewState.ResetZoom();
+                if (Math.Abs(_viewState.ZoomLevel - oldZoom) > 0.001)
+                {
+                    UpdateZoomButtonText();
+                    ZoomChanged?.Invoke(this, new ZoomChangedEventArgs(_viewState.ZoomLevel, oldZoom));
+                    RequestRender();
+                }
+            };
+
+            _zoomControlPanel.Controls.Add(_btnZoomIn);
+            _zoomControlPanel.Controls.Add(_btnZoomOut);
+            _zoomControlPanel.Controls.Add(_btnZoomReset);
+
+            _mapPanel.Controls.Add(_zoomControlPanel);
+            _zoomControlPanel.BringToFront();
+
+            // 設定位置並監聽 Resize
+            UpdateZoomControlPosition();
+            _mapPanel.Resize += (s, e) => UpdateZoomControlPosition();
+        }
+
+        private void UpdateZoomButtonText()
+        {
+            if (_btnZoomReset != null)
+            {
+                int pct = (int)Math.Round(_viewState.ZoomLevel * 100);
+                _btnZoomReset.Text = pct == 100 ? "1:1" : $"{pct}%";
+            }
+        }
+
+        private Button CreateZoomButton(string text, int top)
+        {
+            var btn = new Button
+            {
+                Text = text,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                Size = new Size(48, 38),
+                Location = new Point(0, top),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.White,
+                ForeColor = Color.FromArgb(102, 102, 102),
+                Cursor = Cursors.Hand,
+            };
+            btn.FlatAppearance.BorderColor = Color.FromArgb(218, 218, 218);
+            btn.FlatAppearance.BorderSize = 1;
+            btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(245, 245, 245);
+            btn.FlatAppearance.MouseDownBackColor = Color.FromArgb(235, 235, 235);
+            return btn;
+        }
+
+        private void UpdateZoomControlPosition()
+        {
+            if (_zoomControlPanel != null && _mapPanel != null)
+            {
+                _zoomControlPanel.Location = new Point(10, _mapPanel.Height - _zoomControlPanel.Height - 10);
+            }
+        }
+
         #endregion
 
         #region 滑鼠事件處理
@@ -458,37 +605,22 @@ namespace L1MapViewer.Controls
 
         private void MapPanel_MouseWheel(object sender, MouseEventArgs e)
         {
-            if (Control.ModifierKeys == Keys.Control)
-            {
-                // Ctrl + 滾輪 = 縮放（直接設定 _viewState.ZoomLevel）
-                double delta = e.Delta > 0 ? 0.2 : -0.2;
-                double newZoom = Math.Max(_viewState.ZoomMin,
-                    Math.Min(_viewState.ZoomMax, _viewState.ZoomLevel + delta));
-
-                if (Math.Abs(newZoom - _viewState.ZoomLevel) > 0.001)
-                {
-                    var oldZoom = _viewState.ZoomLevel;
-                    _viewState.ZoomLevel = newZoom;
-                    _zoomDebounceTimer.Stop();
-                    _zoomDebounceTimer.Start();
-                    ZoomChanged?.Invoke(this, new ZoomChangedEventArgs(newZoom, oldZoom));
-                }
-            }
-            else if (Control.ModifierKeys == Keys.Shift)
+            // 縮放改用按鈕控制，滾輪只處理捲動
+            if (Control.ModifierKeys == Keys.Shift)
             {
                 // Shift + 滾輪 = 水平捲動
                 int scrollAmount = (int)(100 / _viewState.ZoomLevel);
                 _viewState.ScrollBy(e.Delta > 0 ? -scrollAmount : scrollAmount, 0);
-                RequestRenderIfNeeded();
             }
             else
             {
                 // 普通滾輪 = 垂直捲動
                 int scrollAmount = (int)(100 / _viewState.ZoomLevel);
                 _viewState.ScrollBy(0, e.Delta > 0 ? -scrollAmount : scrollAmount);
-                RequestRenderIfNeeded();
             }
 
+            RequestRenderIfNeeded();
+            ScrollChanged?.Invoke(this, EventArgs.Empty);
             ((HandledMouseEventArgs)e).Handled = true;
         }
 

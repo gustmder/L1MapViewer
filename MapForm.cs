@@ -85,9 +85,6 @@ namespace L1FlyMapViewer
         // 圖層切換防抖Timer
         private System.Windows.Forms.Timer renderDebounceTimer;
 
-        // 縮放防抖Timer
-        private System.Windows.Forms.Timer zoomDebounceTimer;
-
         // 拖曳結束後延遲渲染 Timer
         private System.Windows.Forms.Timer dragRenderTimer;
 
@@ -366,17 +363,7 @@ namespace L1FlyMapViewer
                     RenderS32Map();
                 }
             };
-            
-            // 初始化縮放防抖Timer（150ms延遲）
-            zoomDebounceTimer = new System.Windows.Forms.Timer();
-            zoomDebounceTimer.Interval = 150;
-            zoomDebounceTimer.Tick += (s, e) =>
-            {
-                zoomDebounceTimer.Stop();
-                // 縮放已在滾輪事件中立即設定，這裡只需要觸發渲染
-                CheckAndRerenderIfNeeded();
-            };
-            
+
             // 初始化拖曳渲染延遲Timer（150ms延遲）
             dragRenderTimer = new System.Windows.Forms.Timer();
             dragRenderTimer.Interval = 150;
@@ -448,6 +435,14 @@ namespace L1FlyMapViewer
             _mapViewerControl.PaintOverlay += MapViewerControl_PaintOverlay;
             _mapViewerControl.CoordinateChanged += MapViewerControl_CoordinateChanged;
             _mapViewerControl.RenderCompleted += MapViewerControl_RenderCompleted;
+            _mapViewerControl.ScrollChanged += (s, e) => UpdateMiniMapViewportRect();
+            _mapViewerControl.ZoomChanged += (s, e) =>
+            {
+                // 縮放按鈕觸發時，重新渲染並更新小地圖
+                CheckAndRerenderIfNeeded();
+                UpdateMiniMapViewportRect();
+                lblS32Info.Text = $"縮放: {_viewState.ZoomLevel:P0}";
+            };
 
             // 設定 MiniMapControl（取代 miniMapPictureBox）
             SetupMiniMapControl();
@@ -3104,49 +3099,8 @@ namespace L1FlyMapViewer
         // S32 編輯器滑鼠滾輪事件
         private void S32MapPanel_MouseWheel(object sender, MouseEventArgs e)
         {
-            LogPerf($"[MOUSE-WHEEL] delta={e.Delta}, modifiers={Control.ModifierKeys}");
-
-            // Ctrl+滾輪 = 縮放
-            if (Control.ModifierKeys == Keys.Control)
-            {
-                // 檢查是否有載入地圖
-                if (_viewState.MapWidth <= 0 || _viewState.MapHeight <= 0)
-                {
-                    LogPerf($"[MOUSE-WHEEL] no map loaded, mapWidth={_viewState.MapWidth}, mapHeight={_viewState.MapHeight}");
-                    return;
-                }
-
-                double oldZoom = _viewState.ZoomLevel;
-                double newZoom;
-                if (e.Delta > 0)
-                {
-                    newZoom = Math.Min(ZOOM_MAX, oldZoom + ZOOM_STEP);
-                }
-                else
-                {
-                    newZoom = Math.Max(ZOOM_MIN, oldZoom - ZOOM_STEP);
-                }
-
-                if (Math.Abs(oldZoom - newZoom) < 0.001)
-                    return;
-
-                // 立即設定縮放值
-                _viewState.ZoomLevel = newZoom;
-                LogPerf($"[ZOOM-WHEEL] {oldZoom} -> {newZoom}");
-
-                // 立即更新狀態欄顯示縮放級別
-                this.lblS32Info.Text = $"縮放: {newZoom:P0}";
-
-                // 使用防抖計時器延遲執行渲染
-                zoomDebounceTimer.Stop();
-                zoomDebounceTimer.Start();
-
-                // 阻止事件繼續傳遞
-                ((HandledMouseEventArgs)e).Handled = true;
-                return;
-            }
-
             // Shift+滾輪 = 左右捲動，普通滾輪 = 上下捲動
+            // 注意：Ctrl+滾輪縮放已移至 MapViewerControl 的縮放按鈕
             int scrollAmount = (int)(100 / _viewState.ZoomLevel);  // 捲動量（世界座標像素）
             int currentX = _viewState.ScrollX;
             int currentY = _viewState.ScrollY;
@@ -9739,13 +9693,6 @@ namespace L1FlyMapViewer
             // 中鍵拖拽移動視圖
             if (e.Button == MouseButtons.Middle)
             {
-                // 如果縮放 timer 正在運行，立即觸發渲染
-                if (zoomDebounceTimer.Enabled)
-                {
-                    zoomDebounceTimer.Stop();
-                    CheckAndRerenderIfNeeded();
-                }
-
                 _interaction.StartMainMapDrag(e.Location, _viewState.ScrollX, _viewState.ScrollY);
                 this._mapViewerControl.Cursor = Cursors.SizeAll;
 
