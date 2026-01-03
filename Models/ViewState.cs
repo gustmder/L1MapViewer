@@ -208,8 +208,9 @@ namespace L1MapViewer.Models
             int bufferY = Math.Min(S32BlockHeight, viewportWorldHeight / 2);
 
             // 捲動限制（世界座標）
-            MinScrollX = -bufferX;
-            MinScrollY = -bufferY;
+            // 額外加一個 S32 區塊，確保地圖邊緣內容完整顯示
+            MinScrollX = -S32BlockWidth - bufferX;
+            MinScrollY = -S32BlockHeight - bufferY;
 
             // MaxScrollX: 確保在最右側時，地圖右邊緣位於 viewport 中央左側
             // 這樣至少有一半的 viewport 顯示地圖內容
@@ -392,9 +393,10 @@ namespace L1MapViewer.Models
         public Rectangle GetRenderWorldRect()
         {
             var viewport = GetViewportWorldRect();
-            // 計算渲染範圍，但限制在地圖實際內容範圍 [0, MapWidth/Height]
-            int x = Math.Max(0, viewport.X - RenderBufferMargin);
-            int y = Math.Max(0, viewport.Y - RenderBufferMargin);
+            // 計算渲染範圍
+            // 允許負值以支援地圖邊緣的額外緩衝區顯示
+            int x = Math.Max(-S32BlockWidth, viewport.X - RenderBufferMargin);
+            int y = Math.Max(-S32BlockHeight, viewport.Y - RenderBufferMargin);
             int right = Math.Min(MapWidth, viewport.Right + RenderBufferMargin);
             int bottom = Math.Min(MapHeight, viewport.Bottom + RenderBufferMargin);
 
