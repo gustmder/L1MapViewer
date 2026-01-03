@@ -19,6 +19,7 @@ namespace L1MapViewer.Controls
         private PictureBox _pictureBox;
         private readonly MapRenderingCore _renderingCore;
         private Bitmap _miniMapBitmap;
+        private MiniMapRenderer.MiniMapBounds _bounds;
 
         private bool _isDragging;
         private bool _isRendering;
@@ -166,7 +167,8 @@ namespace L1MapViewer.Controls
             _document = document;
             if (document == null) return;
 
-            var bitmap = _renderingCore.RenderMiniMap(document, MiniMapSize);
+            var bitmap = _renderingCore.RenderMiniMap(document, MiniMapSize, out var bounds);
+            _bounds = bounds;
 
             _miniMapBitmap?.Dispose();
             _miniMapBitmap = bitmap;
@@ -193,12 +195,13 @@ namespace L1MapViewer.Controls
             {
                 try
                 {
-                    var bitmap = _renderingCore.RenderMiniMap(document, MiniMapSize);
+                    var bitmap = _renderingCore.RenderMiniMap(document, MiniMapSize, out var bounds);
 
                     this.BeginInvoke((MethodInvoker)delegate
                     {
                         _miniMapBitmap?.Dispose();
                         _miniMapBitmap = bitmap;
+                        _bounds = bounds;
                         _isRendering = false;
                         _pictureBox.Invalidate();
                         RenderCompleted?.Invoke(this, EventArgs.Empty);
@@ -289,22 +292,26 @@ namespace L1MapViewer.Controls
 
         private void NavigateToPosition(Point mouseLocation)
         {
-            if (ViewState == null || _document == null) return;
+            if (ViewState == null || _document == null || _miniMapBitmap == null) return;
+            if (ViewState.MapWidth <= 0 || ViewState.MapHeight <= 0) return;
 
-            // 計算小地圖的實際顯示區域
-            float scaleX = (float)this.Width / ViewState.MapWidth;
-            float scaleY = (float)this.Height / ViewState.MapHeight;
-            float scale = Math.Min(scaleX, scaleY);
+            // 計算 minimap bitmap 在控制項上的顯示區域
+            float scaleX = (float)this.Width / _miniMapBitmap.Width;
+            float scaleY = (float)this.Height / _miniMapBitmap.Height;
+            float displayScale = Math.Min(scaleX, scaleY);
 
-            int scaledWidth = (int)(ViewState.MapWidth * scale);
-            int scaledHeight = (int)(ViewState.MapHeight * scale);
+            int drawWidth = (int)(_miniMapBitmap.Width * displayScale);
+            int drawHeight = (int)(_miniMapBitmap.Height * displayScale);
+            int offsetX = (this.Width - drawWidth) / 2;
+            int offsetY = (this.Height - drawHeight) / 2;
 
-            int offsetX = (this.Width - scaledWidth) / 2;
-            int offsetY = (this.Height - scaledHeight) / 2;
+            // 滑鼠位置在 bitmap 顯示區域內的比例
+            float ratioX = (float)(mouseLocation.X - offsetX) / drawWidth;
+            float ratioY = (float)(mouseLocation.Y - offsetY) / drawHeight;
 
-            // 轉換為世界座標
-            int worldX = (int)((mouseLocation.X - offsetX) / scale);
-            int worldY = (int)((mouseLocation.Y - offsetY) / scale);
+            // 比例 → 世界座標
+            int worldX = (int)(ratioX * ViewState.MapWidth);
+            int worldY = (int)(ratioY * ViewState.MapHeight);
 
             // 限制在有效範圍內
             worldX = Math.Max(0, Math.Min(ViewState.MapWidth, worldX));
@@ -319,29 +326,33 @@ namespace L1MapViewer.Controls
 
         private void HandleRightClick(Point mouseLocation)
         {
-            if (ViewState == null || _document == null) return;
+            if (ViewState == null || _document == null || _miniMapBitmap == null) return;
+            if (ViewState.MapWidth <= 0 || ViewState.MapHeight <= 0) return;
 
-            // 計算小地圖的實際顯示區域
-            float scaleX = (float)this.Width / ViewState.MapWidth;
-            float scaleY = (float)this.Height / ViewState.MapHeight;
-            float scale = Math.Min(scaleX, scaleY);
+            // 計算 minimap bitmap 在控制項上的顯示區域
+            float scaleX = (float)this.Width / _miniMapBitmap.Width;
+            float scaleY = (float)this.Height / _miniMapBitmap.Height;
+            float displayScale = Math.Min(scaleX, scaleY);
 
-            int scaledWidth = (int)(ViewState.MapWidth * scale);
-            int scaledHeight = (int)(ViewState.MapHeight * scale);
-
-            int offsetX = (this.Width - scaledWidth) / 2;
-            int offsetY = (this.Height - scaledHeight) / 2;
+            int drawWidth = (int)(_miniMapBitmap.Width * displayScale);
+            int drawHeight = (int)(_miniMapBitmap.Height * displayScale);
+            int offsetX = (this.Width - drawWidth) / 2;
+            int offsetY = (this.Height - drawHeight) / 2;
 
             // 檢查是否在有效範圍內
             int clickX = mouseLocation.X - offsetX;
             int clickY = mouseLocation.Y - offsetY;
 
-            if (clickX < 0 || clickY < 0 || clickX > scaledWidth || clickY > scaledHeight)
+            if (clickX < 0 || clickY < 0 || clickX > drawWidth || clickY > drawHeight)
                 return;
 
-            // 轉換為世界座標
-            int worldX = (int)((float)clickX / scaledWidth * ViewState.MapWidth);
-            int worldY = (int)((float)clickY / scaledHeight * ViewState.MapHeight);
+            // 滑鼠位置在 bitmap 顯示區域內的比例
+            float ratioX = (float)clickX / drawWidth;
+            float ratioY = (float)clickY / drawHeight;
+
+            // 比例 → 世界座標
+            int worldX = (int)(ratioX * ViewState.MapWidth);
+            int worldY = (int)(ratioY * ViewState.MapHeight);
 
             // 使用 L1MapHelper 轉換為遊戲座標
             var linLoc = L1MapHelper.GetLinLocation(worldX, worldY);
@@ -387,35 +398,40 @@ namespace L1MapViewer.Controls
 
         private void DrawViewportRect(Graphics g)
         {
-            // 計算縮放比例
-            float scaleX = (float)this.Width / ViewState.MapWidth;
-            float scaleY = (float)this.Height / ViewState.MapHeight;
-            float scale = Math.Min(scaleX, scaleY);
+            if (_miniMapBitmap == null || _bounds == null) return;
+            if (_bounds.ContentWidth <= 0 || _bounds.ContentHeight <= 0) return;
 
-            int scaledWidth = (int)(ViewState.MapWidth * scale);
-            int scaledHeight = (int)(ViewState.MapHeight * scale);
+            // 計算 minimap bitmap 在控制項上的顯示區域
+            float scaleX = (float)this.Width / _miniMapBitmap.Width;
+            float scaleY = (float)this.Height / _miniMapBitmap.Height;
+            float displayScale = Math.Min(scaleX, scaleY);
 
-            int offsetX = (this.Width - scaledWidth) / 2;
-            int offsetY = (this.Height - scaledHeight) / 2;
+            int drawWidth = (int)(_miniMapBitmap.Width * displayScale);
+            int drawHeight = (int)(_miniMapBitmap.Height * displayScale);
+            int offsetX = (this.Width - drawWidth) / 2;
+            int offsetY = (this.Height - drawHeight) / 2;
 
-            // 計算視窗在小地圖上的位置
-            int rectX = offsetX + (int)(ViewState.ScrollX * scale);
-            int rectY = offsetY + (int)(ViewState.ScrollY * scale);
-            int rectW = (int)(ViewState.ViewportWidth / ViewState.ZoomLevel * scale);
-            int rectH = (int)(ViewState.ViewportHeight / ViewState.ZoomLevel * scale);
+            // 計算 viewport 在世界座標中的位置和大小
+            int viewportWorldX = ViewState.ScrollX;
+            int viewportWorldY = ViewState.ScrollY;
+            int viewportWorldW = (int)(ViewState.ViewportWidth / ViewState.ZoomLevel);
+            int viewportWorldH = (int)(ViewState.ViewportHeight / ViewState.ZoomLevel);
 
-            // 限制在小地圖範圍內
-            rectX = Math.Max(offsetX, rectX);
-            rectY = Math.Max(offsetY, rectY);
-            rectW = Math.Min(scaledWidth - (rectX - offsetX), rectW);
-            rectH = Math.Min(scaledHeight - (rectY - offsetY), rectH);
+            // 使用 MiniMapBounds 的座標轉換公式
+            var (miniX, miniY) = _bounds.WorldToMiniMap(viewportWorldX, viewportWorldY);
+            float ratioW = (float)viewportWorldW / _bounds.ContentWidth;
+            float ratioH = (float)viewportWorldH / _bounds.ContentHeight;
 
-            if (rectW > 0 && rectH > 0)
+            // 映射到顯示區域
+            float rectX = offsetX + miniX * displayScale;
+            float rectY = offsetY + miniY * displayScale;
+            float rectW = ratioW * drawWidth;
+            float rectH = ratioH * drawHeight;
+
+            // 畫矩形
+            using (var pen = new Pen(ViewportRectColor, ViewportRectWidth))
             {
-                using (var pen = new Pen(ViewportRectColor, ViewportRectWidth))
-                {
-                    g.DrawRectangle(pen, rectX, rectY, rectW, rectH);
-                }
+                g.DrawRectangle(pen, rectX, rectY, rectW, rectH);
             }
         }
 

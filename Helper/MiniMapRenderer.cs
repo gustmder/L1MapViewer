@@ -33,6 +33,47 @@ namespace L1MapViewer.Helper
             public bool IsSimplified;
         }
 
+        /// <summary>
+        /// 小地圖座標邊界資訊 - 用於 world ↔ minimap 座標轉換
+        /// </summary>
+        public class MiniMapBounds
+        {
+            /// <summary>世界座標最小 X</summary>
+            public int WorldMinX;
+            /// <summary>世界座標最小 Y</summary>
+            public int WorldMinY;
+            /// <summary>世界座標內容寬度</summary>
+            public int ContentWidth;
+            /// <summary>世界座標內容高度</summary>
+            public int ContentHeight;
+            /// <summary>小地圖 bitmap 寬度</summary>
+            public int BitmapWidth;
+            /// <summary>小地圖 bitmap 高度</summary>
+            public int BitmapHeight;
+
+            /// <summary>
+            /// 世界座標 → 小地圖 bitmap 座標
+            /// </summary>
+            public (float x, float y) WorldToMiniMap(int worldX, int worldY)
+            {
+                if (ContentWidth <= 0 || ContentHeight <= 0) return (0, 0);
+                float x = (float)(worldX - WorldMinX) / ContentWidth * BitmapWidth;
+                float y = (float)(worldY - WorldMinY) / ContentHeight * BitmapHeight;
+                return (x, y);
+            }
+
+            /// <summary>
+            /// 小地圖 bitmap 座標 → 世界座標
+            /// </summary>
+            public (int x, int y) MiniMapToWorld(float miniMapX, float miniMapY)
+            {
+                if (BitmapWidth <= 0 || BitmapHeight <= 0) return (0, 0);
+                int x = (int)(miniMapX / BitmapWidth * ContentWidth) + WorldMinX;
+                int y = (int)(miniMapY / BitmapHeight * ContentHeight) + WorldMinY;
+                return (x, y);
+            }
+        }
+
         // S32 區塊快取
         private ConcurrentDictionary<string, Bitmap> _s32BlockCache = new ConcurrentDictionary<string, Bitmap>();
 
@@ -55,19 +96,66 @@ namespace L1MapViewer.Helper
             int targetSize,
             Dictionary<string, S32Data> s32Files,
             HashSet<string> checkedFiles,
-            out RenderStats stats)
+            out RenderStats stats,
+            out MiniMapBounds bounds)
         {
             stats = new RenderStats();
+            bounds = new MiniMapBounds();
             var totalSw = Stopwatch.StartNew();
 
-            // 計算縮放比例
-            float scale = Math.Min((float)targetSize / mapWidth, (float)targetSize / mapHeight);
-            int scaledWidth = (int)(mapWidth * scale);
-            int scaledHeight = (int)(mapHeight * scale);
+            // 先計算所有區塊的世界座標邊界
+            int worldMinX = int.MaxValue, worldMinY = int.MaxValue;
+            int worldMaxX = int.MinValue, worldMaxY = int.MinValue;
+            var sortedFilePaths = Utils.SortDesc(s32Files.Keys);
+
+            foreach (object filePathObj in sortedFilePaths)
+            {
+                string filePath = filePathObj as string;
+                if (filePath == null || !s32Files.ContainsKey(filePath)) continue;
+                if (!checkedFiles.Contains(filePath)) continue;
+
+                var s32Data = s32Files[filePath];
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                int blockX = loc[0];
+                int blockY = loc[1];
+
+                worldMinX = Math.Min(worldMinX, blockX);
+                worldMinY = Math.Min(worldMinY, blockY);
+                worldMaxX = Math.Max(worldMaxX, blockX + BlockWidth);
+                worldMaxY = Math.Max(worldMaxY, blockY + BlockHeight);
+            }
+
+            // 如果沒有有效區塊，使用預設值
+            if (worldMinX == int.MaxValue)
+            {
+                worldMinX = worldMinY = 0;
+                worldMaxX = mapWidth;
+                worldMaxY = mapHeight;
+            }
+
+            int contentWidth = worldMaxX - worldMinX;
+            int contentHeight = worldMaxY - worldMinY;
+
+            // 計算縮放比例（基於實際內容大小）
+            float scale = Math.Min((float)targetSize / contentWidth, (float)targetSize / contentHeight);
+            int scaledWidth = (int)(contentWidth * scale);
+            int scaledHeight = (int)(contentHeight * scale);
+
+            // 確保至少有 1 像素
+            if (scaledWidth < 1) scaledWidth = 1;
+            if (scaledHeight < 1) scaledHeight = 1;
 
             stats.Scale = scale;
             stats.ScaledWidth = scaledWidth;
             stats.ScaledHeight = scaledHeight;
+
+            // 設置邊界資訊
+            bounds.WorldMinX = worldMinX;
+            bounds.WorldMinY = worldMinY;
+            bounds.ContentWidth = contentWidth;
+            bounds.ContentHeight = contentHeight;
+            bounds.BitmapWidth = scaledWidth;
+            bounds.BitmapHeight = scaledHeight;
 
             // 決定渲染模式：超過 20 個 S32 時使用簡化渲染
             int s32Count = checkedFiles.Count;
@@ -93,15 +181,12 @@ namespace L1MapViewer.Helper
                 g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighSpeed;
                 g.Clear(Color.Black);
 
-                // 排序
-                var sortedFilePaths = Utils.SortDesc(s32Files.Keys);
-
                 if (useSimplifiedRendering)
                 {
                     // 直接渲染到 mini map（不經過 full-size bitmap）
                     var getBlockSw = Stopwatch.StartNew();
 
-                    // 收集所有需要渲染的區塊資訊
+                    // 收集所有需要渲染的區塊資訊（使用相對於 worldMin 的座標）
                     var blocksToRender = new List<(S32Data s32Data, int blockX, int blockY)>();
                     foreach (object filePathObj in sortedFilePaths)
                     {
@@ -111,7 +196,8 @@ namespace L1MapViewer.Helper
 
                         var s32Data = s32Files[filePath];
                         int[] loc = s32Data.SegInfo.GetLoc(1.0);
-                        blocksToRender.Add((s32Data, loc[0], loc[1]));
+                        // 使用相對於 worldMin 的座標
+                        blocksToRender.Add((s32Data, loc[0] - worldMinX, loc[1] - worldMinY));
                     }
                     blockCount = blocksToRender.Count;
 
@@ -155,10 +241,8 @@ namespace L1MapViewer.Helper
                     // 完整渲染（全域 Layer 排序）- 先渲染到完整大小，再縮小
                     var getBlockSw = Stopwatch.StartNew();
 
-                    // 收集所有需要渲染的 S32 區塊
+                    // 收集所有需要渲染的 S32 區塊（使用已計算的邊界）
                     var blocksToRender = new List<(S32Data s32Data, int offsetX, int offsetY)>();
-                    int worldMinX = int.MaxValue, worldMinY = int.MaxValue;
-                    int worldMaxX = int.MinValue, worldMaxY = int.MinValue;
 
                     foreach (object filePathObj in sortedFilePaths)
                     {
@@ -171,25 +255,16 @@ namespace L1MapViewer.Helper
                         int blockX = loc[0];
                         int blockY = loc[1];
 
-                        worldMinX = Math.Min(worldMinX, blockX);
-                        worldMinY = Math.Min(worldMinY, blockY);
-                        worldMaxX = Math.Max(worldMaxX, blockX + BlockWidth);
-                        worldMaxY = Math.Max(worldMaxY, blockY + BlockHeight);
-
-                        blocksToRender.Add((s32Data, blockX, blockY));
+                        // 使用相對於 worldMin 的座標
+                        blocksToRender.Add((s32Data, blockX - worldMinX, blockY - worldMinY));
                     }
                     blockCount = blocksToRender.Count;
-
-                    int fullWidth = worldMaxX - worldMinX;
-                    int fullHeight = worldMaxY - worldMinY;
 
                     // 收集所有 Layer 物件
                     var allTiles = new List<(int pixelX, int pixelY, int layer, int tileId, int indexId)>();
 
-                    foreach (var (s32Data, blockX, blockY) in blocksToRender)
+                    foreach (var (s32Data, offsetX, offsetY) in blocksToRender)
                     {
-                        int offsetX = blockX - worldMinX;
-                        int offsetY = blockY - worldMinY;
 
                         // Layer 1 (地板)
                         for (int y = 0; y < 64; y++)
@@ -247,9 +322,9 @@ namespace L1MapViewer.Helper
 
                     // 渲染到完整大小的 bitmap，再用高品質插值縮小
                     var drawSw = Stopwatch.StartNew();
-                    using (var fullBitmap = new Bitmap(fullWidth, fullHeight, PixelFormat.Format16bppRgb555))
+                    using (var fullBitmap = new Bitmap(contentWidth, contentHeight, PixelFormat.Format16bppRgb555))
                     {
-                        Rectangle rect = new Rectangle(0, 0, fullWidth, fullHeight);
+                        Rectangle rect = new Rectangle(0, 0, contentWidth, contentHeight);
                         BitmapData bmpData = fullBitmap.LockBits(rect, ImageLockMode.ReadWrite, fullBitmap.PixelFormat);
                         int rowpix = bmpData.Stride;
 
@@ -260,7 +335,7 @@ namespace L1MapViewer.Helper
                             foreach (var tile in sortedTiles)
                             {
                                 DrawTilToBufferDirect(tile.pixelX, tile.pixelY, tile.tileId, tile.indexId,
-                                    rowpix, ptr, fullWidth, fullHeight);
+                                    rowpix, ptr, contentWidth, contentHeight);
                             }
                         }
 

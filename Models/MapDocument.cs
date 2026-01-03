@@ -57,6 +57,40 @@ namespace L1MapViewer.Models
         /// </summary>
         public int MapPixelHeight { get; private set; }
 
+        #region 地圖遊戲座標邊界
+
+        /// <summary>
+        /// 地圖遊戲座標最小 X
+        /// </summary>
+        public int MapMinGameX { get; private set; }
+
+        /// <summary>
+        /// 地圖遊戲座標最大 X
+        /// </summary>
+        public int MapMaxGameX { get; private set; }
+
+        /// <summary>
+        /// 地圖遊戲座標最小 Y
+        /// </summary>
+        public int MapMinGameY { get; private set; }
+
+        /// <summary>
+        /// 地圖遊戲座標最大 Y
+        /// </summary>
+        public int MapMaxGameY { get; private set; }
+
+        /// <summary>
+        /// 地圖遊戲座標寬度
+        /// </summary>
+        public int MapGameWidth => MapMaxGameX - MapMinGameX;
+
+        /// <summary>
+        /// 地圖遊戲座標高度
+        /// </summary>
+        public int MapGameHeight => MapMaxGameY - MapMinGameY;
+
+        #endregion
+
         /// <summary>
         /// 每個區塊的像素寬度 (3072)
         /// </summary>
@@ -180,9 +214,47 @@ namespace L1MapViewer.Models
                 CheckedS32Files.Add(filePath);
             }
             collectSw.Stop();
+
+            // 計算遊戲座標邊界
+            CalculateGameBounds();
+
             totalSw.Stop();
 
             Console.WriteLine($"[LoadS32Files] files={s32FilePaths.Length}, enum={enumSw}ms, parse={parseSw.ElapsedMilliseconds}ms, collect={collectSw.ElapsedMilliseconds}ms, total={totalSw.ElapsedMilliseconds}ms");
+            Console.WriteLine($"[MapBounds] GameX: {MapMinGameX}~{MapMaxGameX}, GameY: {MapMinGameY}~{MapMaxGameY}");
+        }
+
+        /// <summary>
+        /// 計算地圖遊戲座標邊界
+        /// </summary>
+        private void CalculateGameBounds()
+        {
+            int minX = int.MaxValue, maxX = int.MinValue;
+            int minY = int.MaxValue, maxY = int.MinValue;
+
+            foreach (var s32Data in S32Files.Values)
+            {
+                if (s32Data.SegInfo == null) continue;
+
+                // SegInfo 包含遊戲座標範圍
+                minX = Math.Min(minX, s32Data.SegInfo.nLinBeginX);
+                maxX = Math.Max(maxX, s32Data.SegInfo.nLinEndX);
+                minY = Math.Min(minY, s32Data.SegInfo.nLinBeginY);
+                maxY = Math.Max(maxY, s32Data.SegInfo.nLinEndY);
+            }
+
+            if (minX != int.MaxValue)
+            {
+                MapMinGameX = minX;
+                MapMaxGameX = maxX;
+                MapMinGameY = minY;
+                MapMaxGameY = maxY;
+            }
+            else
+            {
+                MapMinGameX = MapMaxGameX = 0;
+                MapMinGameY = MapMaxGameY = 0;
+            }
         }
 
         /// <summary>

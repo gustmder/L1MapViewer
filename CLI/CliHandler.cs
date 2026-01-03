@@ -5299,7 +5299,8 @@ L1MapViewer CLI - S32 檔案解析工具
                 renderer.ClearCache();
 
                 L1MapViewer.Helper.MiniMapRenderer.RenderStats stats;
-                using (var bitmap = renderer.RenderMiniMap(mapWidth, mapHeight, targetSize, s32Files, checkedFiles, out stats))
+                L1MapViewer.Helper.MiniMapRenderer.MiniMapBounds bounds;
+                using (var bitmap = renderer.RenderMiniMap(mapWidth, mapHeight, targetSize, s32Files, checkedFiles, out stats, out bounds))
                 {
                     // 儲存第一次的結果（轉換成 24bpp 以便正常顯示）
                     if (i == 0)

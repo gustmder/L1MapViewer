@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using L1MapViewer.Helper;
 
 namespace L1MapViewer.Models
 {
@@ -442,6 +443,77 @@ namespace L1MapViewer.Models
         public Point WorldToScreen(Point worldPoint)
         {
             return WorldToScreen(worldPoint.X, worldPoint.Y);
+        }
+
+        #endregion
+
+        #region Viewport 遊戲座標
+
+        /// <summary>
+        /// Viewport 四角的遊戲座標
+        /// </summary>
+        public struct ViewportGameBounds
+        {
+            public Point TopLeft;      // 左上角遊戲座標
+            public Point TopRight;     // 右上角遊戲座標
+            public Point BottomLeft;   // 左下角遊戲座標
+            public Point BottomRight;  // 右下角遊戲座標
+
+            /// <summary>
+            /// 取得最小遊戲座標 X
+            /// </summary>
+            public int MinGameX => Math.Min(Math.Min(TopLeft.X, TopRight.X), Math.Min(BottomLeft.X, BottomRight.X));
+
+            /// <summary>
+            /// 取得最大遊戲座標 X
+            /// </summary>
+            public int MaxGameX => Math.Max(Math.Max(TopLeft.X, TopRight.X), Math.Max(BottomLeft.X, BottomRight.X));
+
+            /// <summary>
+            /// 取得最小遊戲座標 Y
+            /// </summary>
+            public int MinGameY => Math.Min(Math.Min(TopLeft.Y, TopRight.Y), Math.Min(BottomLeft.Y, BottomRight.Y));
+
+            /// <summary>
+            /// 取得最大遊戲座標 Y
+            /// </summary>
+            public int MaxGameY => Math.Max(Math.Max(TopLeft.Y, TopRight.Y), Math.Max(BottomLeft.Y, BottomRight.Y));
+
+            /// <summary>
+            /// 是否有效
+            /// </summary>
+            public bool IsValid => TopLeft.X != 0 || TopLeft.Y != 0 || TopRight.X != 0 || BottomLeft.X != 0;
+        }
+
+        /// <summary>
+        /// 取得 Viewport 四角的遊戲座標
+        /// </summary>
+        public ViewportGameBounds GetViewportGameBounds()
+        {
+            var bounds = new ViewportGameBounds();
+
+            // Viewport 的四個角落（世界像素座標）
+            int left = ScrollX;
+            int top = ScrollY;
+            int right = ScrollX + (int)(ViewportWidth / ZoomLevel);
+            int bottom = ScrollY + (int)(ViewportHeight / ZoomLevel);
+
+            // 轉換為遊戲座標
+            var topLeftLoc = L1MapHelper.GetLinLocation(left, top);
+            var topRightLoc = L1MapHelper.GetLinLocation(right, top);
+            var bottomLeftLoc = L1MapHelper.GetLinLocation(left, bottom);
+            var bottomRightLoc = L1MapHelper.GetLinLocation(right, bottom);
+
+            if (topLeftLoc != null)
+                bounds.TopLeft = new Point(topLeftLoc.x, topLeftLoc.y);
+            if (topRightLoc != null)
+                bounds.TopRight = new Point(topRightLoc.x, topRightLoc.y);
+            if (bottomLeftLoc != null)
+                bounds.BottomLeft = new Point(bottomLeftLoc.x, bottomLeftLoc.y);
+            if (bottomRightLoc != null)
+                bounds.BottomRight = new Point(bottomRightLoc.x, bottomRightLoc.y);
+
+            return bounds;
         }
 
         #endregion

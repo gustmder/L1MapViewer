@@ -128,13 +128,15 @@ namespace L1MapViewer.Rendering
         /// <param name="targetSize">目標小地圖大小</param>
         /// <param name="s32Files">S32 檔案集合</param>
         /// <param name="checkedFiles">要顯示的 S32 檔案路徑集合</param>
+        /// <param name="bounds">輸出：小地圖邊界資訊，用於座標轉換</param>
         /// <returns>渲染後的小地圖 Bitmap</returns>
         public Bitmap RenderMiniMap(
             int mapWidth,
             int mapHeight,
             int targetSize,
             Dictionary<string, S32Data> s32Files,
-            HashSet<string> checkedFiles)
+            HashSet<string> checkedFiles,
+            out MiniMapRenderer.MiniMapBounds bounds)
         {
             return _miniMapRenderer.RenderMiniMap(
                 mapWidth,
@@ -142,20 +144,30 @@ namespace L1MapViewer.Rendering
                 targetSize,
                 s32Files,
                 checkedFiles,
-                out _);
+                out _,
+                out bounds);
         }
 
         /// <summary>
         /// 使用 MapDocument 渲染小地圖
         /// </summary>
-        public Bitmap RenderMiniMap(MapDocument document, int targetSize)
+        public Bitmap RenderMiniMap(MapDocument document, int targetSize, out MiniMapRenderer.MiniMapBounds bounds)
         {
             return RenderMiniMap(
                 document.MapPixelWidth,
                 document.MapPixelHeight,
                 targetSize,
                 document.S32Files,
-                document.CheckedS32Files);
+                document.CheckedS32Files,
+                out bounds);
+        }
+
+        /// <summary>
+        /// 使用 MapDocument 渲染小地圖（不需要邊界資訊）
+        /// </summary>
+        public Bitmap RenderMiniMap(MapDocument document, int targetSize)
+        {
+            return RenderMiniMap(document, targetSize, out _);
         }
 
         /// <summary>

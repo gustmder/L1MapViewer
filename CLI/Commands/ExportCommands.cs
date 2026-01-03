@@ -311,7 +311,8 @@ namespace L1MapViewer.CLI.Commands
                 // 使用 MiniMapRenderer 的直接縮放模式
                 int targetSize = Math.Max(scaledWidth, scaledHeight);
                 MiniMapRenderer.RenderStats stats;
-                return renderer.RenderMiniMap(fullWidth, fullHeight, targetSize, loadResult.S32Files, checkedFiles, out stats);
+                MiniMapRenderer.MiniMapBounds bounds;
+                return renderer.RenderMiniMap(fullWidth, fullHeight, targetSize, loadResult.S32Files, checkedFiles, out stats, out bounds);
             }
             else
             {
