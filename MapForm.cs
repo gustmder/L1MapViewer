@@ -18336,6 +18336,12 @@ namespace L1FlyMapViewer
                 if (globalLayer1Y < minY) minY = globalLayer1Y;
             }
 
+            // 確保 minX 是偶數，以保持相對座標的奇偶性
+            if (minX % 2 != 0)
+            {
+                minX -= 1;
+            }
+
             // 複製物件（使用 Layer1 座標系統）
             foreach (var (s32, obj) in allObjects)
             {
