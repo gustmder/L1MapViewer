@@ -23,8 +23,8 @@ namespace L1FlyMapViewer
 
             // 使用 ViewState 的捲動位置（世界座標）
             // 將螢幕座標轉換為世界座標（考慮縮放和捲動）
-            int worldX = (int)(screenX / s32ZoomLevel) + _viewState.ScrollX;
-            int worldY = (int)(screenY / s32ZoomLevel) + _viewState.ScrollY;
+            int worldX = (int)(screenX / _viewState.ZoomLevel) + _viewState.ScrollX;
+            int worldY = (int)(screenY / _viewState.ZoomLevel) + _viewState.ScrollY;
 
             // 使用空間索引快速查找可能包含這個點的 S32
             // 建立擴展範圍的查詢矩形（支援超出邊界的格子）
@@ -131,8 +131,8 @@ namespace L1FlyMapViewer
 
             // 使用 ViewState 的捲動位置（世界座標）
             // 世界座標轉螢幕座標（考慮縮放和捲動）
-            int screenX = (int)((worldX - _viewState.ScrollX) * s32ZoomLevel);
-            int screenY = (int)((worldY - _viewState.ScrollY) * s32ZoomLevel);
+            int screenX = (int)((worldX - _viewState.ScrollX) * _viewState.ZoomLevel);
+            int screenY = (int)((worldY - _viewState.ScrollY) * _viewState.ZoomLevel);
 
             return (screenX, screenY);
         }
@@ -141,12 +141,12 @@ namespace L1FlyMapViewer
         private Point S32ScreenToWorld(int screenX, int screenY)
         {
             // bitmap 繪製位置 = (RenderOrigin - Scroll) * zoom
-            int drawOffsetX = (int)((_viewState.RenderOriginX - _viewState.ScrollX) * s32ZoomLevel);
-            int drawOffsetY = (int)((_viewState.RenderOriginY - _viewState.ScrollY) * s32ZoomLevel);
+            int drawOffsetX = (int)((_viewState.RenderOriginX - _viewState.ScrollX) * _viewState.ZoomLevel);
+            int drawOffsetY = (int)((_viewState.RenderOriginY - _viewState.ScrollY) * _viewState.ZoomLevel);
 
             // 螢幕座標 -> bitmap 座標 -> 世界座標
-            int bitmapX = (int)((screenX - drawOffsetX) / s32ZoomLevel);
-            int bitmapY = (int)((screenY - drawOffsetY) / s32ZoomLevel);
+            int bitmapX = (int)((screenX - drawOffsetX) / _viewState.ZoomLevel);
+            int bitmapY = (int)((screenY - drawOffsetY) / _viewState.ZoomLevel);
             int worldX = bitmapX + _viewState.RenderOriginX;
             int worldY = bitmapY + _viewState.RenderOriginY;
 
@@ -184,8 +184,8 @@ namespace L1FlyMapViewer
             int worldY = my + localBaseY + localY * 12;
 
             // 捲動到該位置（世界座標）
-            int viewportWidthWorld = (int)(s32MapPanel.Width / s32ZoomLevel);
-            int viewportHeightWorld = (int)(s32MapPanel.Height / s32ZoomLevel);
+            int viewportWidthWorld = (int)(s32MapPanel.Width / _viewState.ZoomLevel);
+            int viewportHeightWorld = (int)(s32MapPanel.Height / _viewState.ZoomLevel);
             int scrollX = worldX - viewportWidthWorld / 2;
             int scrollY = worldY - viewportHeightWorld / 2;
 
@@ -275,8 +275,8 @@ namespace L1FlyMapViewer
                     int worldY = my + localBaseY + localY * 12;
 
                     // 捲動到該位置（世界座標）
-                    int viewportWidthWorld = (int)(s32MapPanel.Width / s32ZoomLevel);
-                    int viewportHeightWorld = (int)(s32MapPanel.Height / s32ZoomLevel);
+                    int viewportWidthWorld = (int)(s32MapPanel.Width / _viewState.ZoomLevel);
+                    int viewportHeightWorld = (int)(s32MapPanel.Height / _viewState.ZoomLevel);
                     int scrollX = worldX - viewportWidthWorld / 2;
                     int scrollY = worldY - viewportHeightWorld / 2;
 

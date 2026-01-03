@@ -77,10 +77,9 @@ namespace L1FlyMapViewer
         private Image originalMapImage;
 
         // S32 編輯器縮放相關
-        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-        public double s32ZoomLevel { get; set; } = 1.0;
+        // 注意：縮放值統一使用 _viewState.ZoomLevel，_pendingZoom 僅用於 debounce
         private Image originalS32Image;
-        private double pendingS32ZoomLevel = 1.0;
+        private double _pendingZoom = 1.0;
 
         // MiniMapControl（取代原本的 PictureBox 和渲染邏輯）
         private L1MapViewer.Controls.MiniMapControl _miniMapControl;
@@ -376,7 +375,7 @@ namespace L1FlyMapViewer
             zoomDebounceTimer.Tick += (s, e) =>
             {
                 zoomDebounceTimer.Stop();
-                ApplyS32Zoom(pendingS32ZoomLevel);
+                ApplyS32Zoom(_pendingZoom);
             };
             
             // 初始化拖曳渲染延遲Timer（150ms延遲）
@@ -1928,10 +1927,10 @@ namespace L1FlyMapViewer
             int maxScreenX = Math.Max(startPoint.X, endPoint.X);
             int maxScreenY = Math.Max(startPoint.Y, endPoint.Y);
 
-            int worldLeft = (int)(minScreenX / s32ZoomLevel) + _viewState.ScrollX;
-            int worldTop = (int)(minScreenY / s32ZoomLevel) + _viewState.ScrollY;
-            int worldRight = (int)(maxScreenX / s32ZoomLevel) + _viewState.ScrollX;
-            int worldBottom = (int)(maxScreenY / s32ZoomLevel) + _viewState.ScrollY;
+            int worldLeft = (int)(minScreenX / _viewState.ZoomLevel) + _viewState.ScrollX;
+            int worldTop = (int)(minScreenY / _viewState.ZoomLevel) + _viewState.ScrollY;
+            int worldRight = (int)(maxScreenX / _viewState.ZoomLevel) + _viewState.ScrollX;
+            int worldBottom = (int)(maxScreenY / _viewState.ZoomLevel) + _viewState.ScrollY;
 
             // 擴大查詢範圍以確保不漏掉邊界的 S32（含擴展區域）
             Rectangle queryRect = new Rectangle(worldLeft - 6144, worldTop - 3072,
@@ -2633,7 +2632,8 @@ namespace L1FlyMapViewer
             }
 
             // 重置 S32 編輯器縮放級別
-            s32ZoomLevel = 1.0;
+            _viewState.ZoomLevel = 1.0;
+            _pendingZoom = 1.0;
             if (originalS32Image != null)
             {
                 originalS32Image.Dispose();
@@ -2854,7 +2854,8 @@ namespace L1FlyMapViewer
             }
 
             // 重置 S32 編輯器縮放級別
-            s32ZoomLevel = 1.0;
+            _viewState.ZoomLevel = 1.0;
+            _pendingZoom = 1.0;
             if (originalS32Image != null)
             {
                 originalS32Image.Dispose();
@@ -3116,23 +3117,23 @@ namespace L1FlyMapViewer
                     return;
                 }
 
-                double oldZoom = pendingS32ZoomLevel;
+                double oldZoom = _pendingZoom;
                 if (e.Delta > 0)
                 {
-                    pendingS32ZoomLevel = Math.Min(ZOOM_MAX, pendingS32ZoomLevel + ZOOM_STEP);
+                    _pendingZoom = Math.Min(ZOOM_MAX, _pendingZoom + ZOOM_STEP);
                 }
                 else
                 {
-                    pendingS32ZoomLevel = Math.Max(ZOOM_MIN, pendingS32ZoomLevel - ZOOM_STEP);
+                    _pendingZoom = Math.Max(ZOOM_MIN, _pendingZoom - ZOOM_STEP);
                 }
 
-                LogPerf($"[MOUSE-WHEEL] zoom oldZoom={oldZoom}, newZoom={pendingS32ZoomLevel}");
+                LogPerf($"[MOUSE-WHEEL] zoom oldZoom={oldZoom}, newZoom={_pendingZoom}");
 
-                if (Math.Abs(oldZoom - pendingS32ZoomLevel) < 0.001)
+                if (Math.Abs(oldZoom - _pendingZoom) < 0.001)
                     return;
 
                 // 立即更新狀態欄顯示縮放級別（給用戶即時反饋）
-                this.lblS32Info.Text = $"縮放: {pendingS32ZoomLevel:P0}";
+                this.lblS32Info.Text = $"縮放: {_pendingZoom:P0}";
 
                 // 使用防抖計時器延遲執行實際的縮放操作
                 zoomDebounceTimer.Stop();
@@ -3144,7 +3145,7 @@ namespace L1FlyMapViewer
             }
 
             // Shift+滾輪 = 左右捲動，普通滾輪 = 上下捲動
-            int scrollAmount = (int)(100 / s32ZoomLevel);  // 捲動量（世界座標像素）
+            int scrollAmount = (int)(100 / _viewState.ZoomLevel);  // 捲動量（世界座標像素）
             int currentX = _viewState.ScrollX;
             int currentY = _viewState.ScrollY;
 
@@ -3179,7 +3180,7 @@ namespace L1FlyMapViewer
         {
             try
             {
-                LogPerf($"[APPLY-ZOOM] start, targetZoom={targetZoomLevel}, currentZoom={s32ZoomLevel}");
+                LogPerf($"[APPLY-ZOOM] start, targetZoom={targetZoomLevel}, currentZoom={_viewState.ZoomLevel}");
 
                 // 檢查是否有載入地圖
                 if (_viewState.MapWidth <= 0 || _viewState.MapHeight <= 0)
@@ -3188,8 +3189,7 @@ namespace L1FlyMapViewer
                     return;
                 }
 
-                // 更新縮放級別
-                s32ZoomLevel = targetZoomLevel;
+                // 更新縮放級別（統一在 _viewState 中管理）
                 _viewState.ZoomLevel = targetZoomLevel;
 
                 // 注意：不要清除舊的渲染狀態，讓舊 bitmap 繼續顯示直到新的準備好
@@ -3206,7 +3206,7 @@ namespace L1FlyMapViewer
                 UpdateMiniMapViewportRect();
 
                 // 更新狀態欄顯示縮放級別
-                this.lblS32Info.Text = $"縮放: {s32ZoomLevel:P0}";
+                this.lblS32Info.Text = $"縮放: {_viewState.ZoomLevel:P0}";
 
                 LogPerf($"[APPLY-ZOOM] done");
             }
@@ -5805,7 +5805,7 @@ namespace L1FlyMapViewer
                 _viewState.MapHeight = mapHeight;
                 _viewState.ViewportWidth = s32MapPanel.Width;
                 _viewState.ViewportHeight = s32MapPanel.Height;
-                _viewState.ZoomLevel = s32ZoomLevel;
+                // ZoomLevel 已經在 _viewState 中，不需要同步
 
                 // 更新捲動限制（保留現有的捲動位置，ViewState.ScrollX/ScrollY 會在限制範圍內調整）
                 _viewState.UpdateScrollLimits(mapWidth, mapHeight);
@@ -6181,8 +6181,7 @@ namespace L1FlyMapViewer
                 return;
             }
 
-            // 更新縮放和 Viewport 大小到 ViewState
-            _viewState.ZoomLevel = s32ZoomLevel;
+            // 更新 Viewport 大小到 ViewState（ZoomLevel 已經在 _viewState 中）
             _viewState.ViewportWidth = s32MapPanel.Width;
             _viewState.ViewportHeight = s32MapPanel.Height;
             // ScrollX/ScrollY 已經在拖曳時更新了，這裡不需要再設定
@@ -6380,7 +6379,7 @@ namespace L1FlyMapViewer
             _viewState.MapHeight = mapHeight;
             _viewState.ViewportWidth = s32MapPanel.Width;
             _viewState.ViewportHeight = s32MapPanel.Height;
-            _viewState.ZoomLevel = s32ZoomLevel;
+            // ZoomLevel 已經在地圖選擇時重置為 1.0
             _viewState.UpdateScrollLimits(mapWidth, mapHeight);
 
             if (_document.S32Files.Count == 0)
@@ -6425,8 +6424,8 @@ namespace L1FlyMapViewer
                 return;
 
             // 計算中央位置（世界座標）
-            int viewportWidthWorld = (int)(s32MapPanel.Width / s32ZoomLevel);
-            int viewportHeightWorld = (int)(s32MapPanel.Height / s32ZoomLevel);
+            int viewportWidthWorld = (int)(s32MapPanel.Width / _viewState.ZoomLevel);
+            int viewportHeightWorld = (int)(s32MapPanel.Height / _viewState.ZoomLevel);
             int centerX = mapWidth / 2 - viewportWidthWorld / 2;
             int centerY = mapHeight / 2 - viewportHeightWorld / 2;
 
@@ -9259,8 +9258,8 @@ namespace L1FlyMapViewer
             Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
 
             // 將點擊位置轉換為世界座標（考慮縮放和捲動位置）
-            int worldX = (int)(e.Location.X / s32ZoomLevel) + _viewState.ScrollX;
-            int worldY = (int)(e.Location.Y / s32ZoomLevel) + _viewState.ScrollY;
+            int worldX = (int)(e.Location.X / _viewState.ZoomLevel) + _viewState.ScrollX;
+            int worldY = (int)(e.Location.Y / _viewState.ZoomLevel) + _viewState.ScrollY;
 
             // 使用優化的格子查找
             var result = CellFinder.FindCellOptimized(worldX, worldY, _document.S32Files.Values);
@@ -9592,8 +9591,8 @@ namespace L1FlyMapViewer
 
             // 將螢幕座標轉換為世界座標（考慮縮放和捲動偏移）
             var scaledPolygon = polygonPoints.Select(p => new PointF(
-                (float)(p.X / s32ZoomLevel) + _viewState.ScrollX,
-                (float)(p.Y / s32ZoomLevel) + _viewState.ScrollY
+                (float)(p.X / _viewState.ZoomLevel) + _viewState.ScrollX,
+                (float)(p.Y / _viewState.ZoomLevel) + _viewState.ScrollY
             )).ToArray();
 
             // 收集多邊形內的邊界資訊 (S32Data, layer3X, layer3Y, isAttribute1)
@@ -9738,6 +9737,13 @@ namespace L1FlyMapViewer
             // 中鍵拖拽移動視圖
             if (e.Button == MouseButtons.Middle)
             {
+                // 如果有待處理的縮放，立即套用（避免拖曳時縮放看起來重置）
+                if (Math.Abs(_pendingZoom - _viewState.ZoomLevel) > 0.001)
+                {
+                    zoomDebounceTimer.Stop();
+                    _viewState.ZoomLevel = _pendingZoom;
+                }
+
                 _interaction.StartMainMapDrag(e.Location, _viewState.ScrollX, _viewState.ScrollY);
                 this._mapViewerControl.Cursor = Cursors.SizeAll;
 
@@ -9838,8 +9844,8 @@ namespace L1FlyMapViewer
                 int deltaY = e.Y - _interaction.MainMapDragStartPoint.Y;
 
                 // 計算新的捲動位置（世界座標，需要除以縮放）
-                int newScrollX = _interaction.MainMapDragStartScroll.X - (int)(deltaX / s32ZoomLevel);
-                int newScrollY = _interaction.MainMapDragStartScroll.Y - (int)(deltaY / s32ZoomLevel);
+                int newScrollX = _interaction.MainMapDragStartScroll.X - (int)(deltaX / _viewState.ZoomLevel);
+                int newScrollY = _interaction.MainMapDragStartScroll.Y - (int)(deltaY / _viewState.ZoomLevel);
 
                 // 限制在有效範圍內（使用 ViewState 的限制，含緩衝區）
                 newScrollX = Math.Max(_viewState.MinScrollX, Math.Min(newScrollX, _viewState.MaxScrollX));
@@ -10689,12 +10695,12 @@ namespace L1FlyMapViewer
                     // _viewState.RenderOriginX/Y 是已渲染區域的世界座標原點
                     // _viewState.ScrollX/Y 是當前視圖的世界座標位置
                     // 繪製位置 = (RenderOrigin - Scroll) * ZoomLevel
-                    int drawX = (int)((_viewState.RenderOriginX - _viewState.ScrollX) * s32ZoomLevel);
-                    int drawY = (int)((_viewState.RenderOriginY - _viewState.ScrollY) * s32ZoomLevel);
+                    int drawX = (int)((_viewState.RenderOriginX - _viewState.ScrollX) * _viewState.ZoomLevel);
+                    int drawY = (int)((_viewState.RenderOriginY - _viewState.ScrollY) * _viewState.ZoomLevel);
             
                     // Viewport Bitmap 是未縮放的，需要縮放繪製
-                    drawW = (int)(_viewState.RenderWidth * s32ZoomLevel);
-                    drawH = (int)(_viewState.RenderHeight * s32ZoomLevel);
+                    drawW = (int)(_viewState.RenderWidth * _viewState.ZoomLevel);
+                    drawH = (int)(_viewState.RenderHeight * _viewState.ZoomLevel);
             
                     var drawSw = Stopwatch.StartNew();
                     e.Graphics.DrawImage(_renderCache.ViewportBitmap, drawX, drawY, drawW, drawH);
@@ -10832,10 +10838,10 @@ namespace L1FlyMapViewer
 
                     // 轉換為螢幕座標（考慮捲動位置和縮放）
                     // 螢幕座標 = (世界座標 - 捲動位置) * 縮放
-                    int screenX = (int)((worldX - scrollX) * s32ZoomLevel);
-                    int screenY = (int)((worldY - scrollY) * s32ZoomLevel);
-                    int scaledWidth = (int)(48 * s32ZoomLevel);
-                    int scaledHeight = (int)(24 * s32ZoomLevel);
+                    int screenX = (int)((worldX - scrollX) * _viewState.ZoomLevel);
+                    int screenY = (int)((worldY - scrollY) * _viewState.ZoomLevel);
+                    int scaledWidth = (int)(48 * _viewState.ZoomLevel);
+                    int scaledHeight = (int)(24 * _viewState.ZoomLevel);
 
                     // Layer3 菱形四個頂點（48x24，與 DrawS32Grid 一致）
                     Point[] diamondPoints = new Point[]
@@ -17600,8 +17606,8 @@ namespace L1FlyMapViewer
             int worldY = my + localBaseY + obj.Y * 12;
 
             // 捲動到該位置（世界座標）
-            int viewportWidthWorld = (int)(s32MapPanel.Width / s32ZoomLevel);
-            int viewportHeightWorld = (int)(s32MapPanel.Height / s32ZoomLevel);
+            int viewportWidthWorld = (int)(s32MapPanel.Width / _viewState.ZoomLevel);
+            int viewportHeightWorld = (int)(s32MapPanel.Height / _viewState.ZoomLevel);
             int scrollX = worldX - viewportWidthWorld / 2;
             int scrollY = worldY - viewportHeightWorld / 2;
 

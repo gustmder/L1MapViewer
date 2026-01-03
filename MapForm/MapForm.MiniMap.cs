@@ -60,8 +60,8 @@ namespace L1FlyMapViewer
         private void MiniMapControl_NavigateRequested(object sender, Point worldPos)
         {
             // 讓點擊位置成為視窗中央
-            int viewportWidthWorld = (int)(s32MapPanel.Width / s32ZoomLevel);
-            int viewportHeightWorld = (int)(s32MapPanel.Height / s32ZoomLevel);
+            int viewportWidthWorld = (int)(s32MapPanel.Width / _viewState.ZoomLevel);
+            int viewportHeightWorld = (int)(s32MapPanel.Height / _viewState.ZoomLevel);
             int newScrollX = worldPos.X - viewportWidthWorld / 2;
             int newScrollY = worldPos.Y - viewportHeightWorld / 2;
 
