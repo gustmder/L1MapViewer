@@ -2087,21 +2087,22 @@ namespace L1FlyMapViewer
                     continue;
 
                 // 先檢查這個 S32 的遊戲座標範圍是否與選取範圍有交集
+                // 擴展範圍: 0-127 (原始 0-63 的 2 倍，支援超出邊界的物件)
                 int s32MinGameX = s32Data.SegInfo.nLinBeginX;
-                int s32MaxGameX = s32Data.SegInfo.nLinBeginX + 63;
+                int s32MaxGameX = s32Data.SegInfo.nLinBeginX + 127;  // 擴展到 128 格
                 int s32MinGameY = s32Data.SegInfo.nLinBeginY;
-                int s32MaxGameY = s32Data.SegInfo.nLinBeginY + 63;
+                int s32MaxGameY = s32Data.SegInfo.nLinBeginY + 127;  // 擴展到 128 格
 
                 // 快速排除不相交的 S32
                 if (s32MaxGameX < minGameX || s32MinGameX > maxGameX ||
                     s32MaxGameY < minGameY || s32MinGameY > maxGameY)
                     continue;
 
-                // 計算在這個 S32 內需要檢查的範圍
+                // 計算在這個 S32 內需要檢查的範圍（擴展到 0-127）
                 int localMinX3 = Math.Max(0, minGameX - s32Data.SegInfo.nLinBeginX);
-                int localMaxX3 = Math.Min(63, maxGameX - s32Data.SegInfo.nLinBeginX);
+                int localMaxX3 = Math.Min(127, maxGameX - s32Data.SegInfo.nLinBeginX);
                 int localMinY = Math.Max(0, minGameY - s32Data.SegInfo.nLinBeginY);
-                int localMaxY = Math.Min(63, maxGameY - s32Data.SegInfo.nLinBeginY);
+                int localMaxY = Math.Min(127, maxGameY - s32Data.SegInfo.nLinBeginY);
 
                 for (int y = localMinY; y <= localMaxY; y++)
                 {
@@ -3956,12 +3957,15 @@ namespace L1FlyMapViewer
             int worldY = (int)(screenY / s32ZoomLevel) + _viewState.ScrollY;
 
             // 使用空間索引快速查找可能包含這個點的 S32
-            // 建立一個小範圍的查詢矩形（點周圍的區域）
-            Rectangle queryRect = new Rectangle(worldX - 48, worldY - 24, 96, 48);
+            // 建立擴展範圍的查詢矩形（支援超出邊界的格子）
+            Rectangle queryRect = new Rectangle(worldX - 3072, worldY - 1536, 6144, 3072);
             var candidateFiles = GetS32FilesInRect(queryRect);
 
-            int blockWidth = 64 * 24 * 2;   // 3072
-            int blockHeight = 64 * 12 * 2;  // 1536
+            // 擴展範圍以支援超出邊界的格子 (128x128 Layer3 格子)
+            int blockWidth = 128 * 24 * 2;   // 6144 (擴展後)
+            int blockHeight = 128 * 12 * 2;  // 3072 (擴展後)
+            int offsetX = -1536;  // 向左擴展
+            int offsetY = -768;   // 向上擴展
 
             foreach (var filePath in candidateFiles)
             {
@@ -3972,14 +3976,15 @@ namespace L1FlyMapViewer
                 int mx = loc[0];
                 int my = loc[1];
 
-                // 先檢查點是否在這個 S32 block 範圍內（粗略檢查）
-                if (worldX < mx || worldX > mx + blockWidth || worldY < my || worldY > my + blockHeight)
+                // 先檢查點是否在這個 S32 的擴展範圍內（粗略檢查）
+                if (worldX < mx + offsetX || worldX > mx + offsetX + blockWidth ||
+                    worldY < my + offsetY || worldY > my + offsetY + blockHeight)
                     continue;
 
-                // 使用 Layer3 格子（與 DrawS32Grid 一致）
-                for (int y = 0; y < 64; y++)
+                // 使用 Layer3 格子（與 DrawS32Grid 一致）- 擴展到 128x128
+                for (int y = 0; y < 128; y++)
                 {
-                    for (int x3 = 0; x3 < 64; x3++)
+                    for (int x3 = 0; x3 < 128; x3++)
                     {
                         int x = x3 * 2;  // Layer1 座標
 
@@ -7600,13 +7605,32 @@ namespace L1FlyMapViewer
             }
         }
 
-        // 繪製 S32 格子網格線 - 基於 Layer3 (64x64) 繪製格線
-        // Layer3 的一個格子 = Layer1 的兩個格子 (x*2, x*2+1)，形成一個完整的等距菱形
+        // 繪製 S32 格子網格線 - 基於 Layer3 繪製格線
+        // 擴展範圍: X 0-255, Y 0-127 (原始範圍的 2 倍，支援超出邊界的物件)
         private void DrawS32Grid(Bitmap bitmap, Struct.L1Map currentMap)
         {
+            // 預先收集所有 S32 的正常範圍 (遊戲座標)，用於判斷擴展區域是否被覆蓋
+            var normalCoverage = new HashSet<(int gameX, int gameY)>();
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                for (int y = 0; y < 64; y++)
+                {
+                    for (int x3 = 0; x3 < 64; x3++)
+                    {
+                        int gameX = s32Data.SegInfo.nLinBeginX + x3;
+                        int gameY = s32Data.SegInfo.nLinBeginY + y;
+                        normalCoverage.Add((gameX, gameY));
+                    }
+                }
+            }
+
+            // 記錄已繪製的擴展區域格子，避免重複繪製
+            var drawnExtended = new HashSet<(int gameX, int gameY)>();
+
             using (Graphics g = Graphics.FromImage(bitmap))
             {
                 using (Pen gridPen = new Pen(Color.FromArgb(100, Color.Red), 1)) // 半透明紅色
+                using (Pen extendedGridPen = new Pen(Color.FromArgb(60, Color.Blue), 1)) // 擴展區域用淡藍色
                 {
                     // 遍歷所有 S32 檔案
                     foreach (var s32Data in _document.S32Files.Values)
@@ -7616,12 +7640,31 @@ namespace L1FlyMapViewer
                         int mx = loc[0];
                         int my = loc[1];
 
-                        // 繪製格線 - 基於 Layer3（每個格子對應 Layer1 的 2 個格子）
-                        // S32 覆蓋 128 個 Layer1 X 格子，對應 64 個 Layer3 X 格子
-                        for (int y = 0; y < 64; y++)
+                        // 繪製格線 - 擴展範圍 Y: 0-127, X3: 0-127 (Layer1 X: 0-255)
+                        for (int y = 0; y < 128; y++)
                         {
-                            for (int x3 = 0; x3 < 64; x3++)  // Layer3 座標 (0-63)
+                            for (int x3 = 0; x3 < 128; x3++)  // Layer3 座標 (0-127)
                             {
+                                // 判斷是否在原始範圍內 (0-63, 0-63)
+                                bool isExtended = (x3 >= 64 || y >= 64);
+
+                                // 計算遊戲座標
+                                int gameX = s32Data.SegInfo.nLinBeginX + x3;
+                                int gameY = s32Data.SegInfo.nLinBeginY + y;
+
+                                if (isExtended)
+                                {
+                                    // 擴展區域：檢查是否被其他 S32 的正常範圍覆蓋
+                                    if (normalCoverage.Contains((gameX, gameY)))
+                                        continue; // 已被其他 S32 正常範圍覆蓋，不畫藍線
+
+                                    // 檢查是否已經畫過
+                                    if (drawnExtended.Contains((gameX, gameY)))
+                                        continue; // 已畫過，不重複畫
+
+                                    drawnExtended.Add((gameX, gameY));
+                                }
+
                                 // Layer3 座標轉 Layer1 座標（取偶數 x）
                                 int x = x3 * 2;
 
@@ -7634,6 +7677,8 @@ namespace L1FlyMapViewer
                                 int X = mx + localBaseX + x * 24 + y * 24;
                                 int Y = my + localBaseY + y * 12;
 
+                                Pen currentPen = isExtended ? extendedGridPen : gridPen;
+
                                 // Layer3 菱形的四個頂點（48x24，覆蓋兩個 Layer1 格子）
                                 Point p1 = new Point(X, Y + 12);       // 左
                                 Point p2 = new Point(X + 24, Y);       // 上
@@ -7641,10 +7686,10 @@ namespace L1FlyMapViewer
                                 Point p4 = new Point(X + 24, Y + 24);  // 下
 
                                 // 繪製菱形的四條邊
-                                g.DrawLine(gridPen, p1, p2);  // 左上邊
-                                g.DrawLine(gridPen, p2, p3);  // 右上邊
-                                g.DrawLine(gridPen, p3, p4);  // 右下邊
-                                g.DrawLine(gridPen, p4, p1);  // 左下邊
+                                g.DrawLine(currentPen, p1, p2);  // 左上邊
+                                g.DrawLine(currentPen, p2, p3);  // 右上邊
+                                g.DrawLine(currentPen, p3, p4);  // 右下邊
+                                g.DrawLine(currentPen, p4, p1);  // 左下邊
                             }
                         }
                     }
@@ -8506,12 +8551,31 @@ namespace L1FlyMapViewer
             }
         }
 
-        // 繪製格線（Viewport 版本）
+        // 繪製格線（Viewport 版本）- 擴展範圍: X 0-255, Y 0-127
         private void DrawS32GridViewport(Bitmap bitmap, Struct.L1Map currentMap, Rectangle worldRect)
         {
+            // 預先收集所有 S32 的正常範圍 (遊戲座標)，用於判斷擴展區域是否被覆蓋
+            var normalCoverage = new HashSet<(int gameX, int gameY)>();
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                for (int y = 0; y < 64; y++)
+                {
+                    for (int x3 = 0; x3 < 64; x3++)
+                    {
+                        int gameX = s32Data.SegInfo.nLinBeginX + x3;
+                        int gameY = s32Data.SegInfo.nLinBeginY + y;
+                        normalCoverage.Add((gameX, gameY));
+                    }
+                }
+            }
+
+            // 記錄已繪製的擴展區域格子，避免重複繪製
+            var drawnExtended = new HashSet<(int gameX, int gameY)>();
+
             using (Graphics g = Graphics.FromImage(bitmap))
             {
                 using (Pen gridPen = new Pen(Color.FromArgb(100, Color.Red), 1))
+                using (Pen extendedGridPen = new Pen(Color.FromArgb(60, Color.Blue), 1))
                 {
                     foreach (var s32Data in _document.S32Files.Values)
                     {
@@ -8519,10 +8583,31 @@ namespace L1FlyMapViewer
                         int mx = loc[0];
                         int my = loc[1];
 
-                        for (int y = 0; y < 64; y++)
+                        // 擴展範圍 Y: 0-127, X3: 0-127 (Layer1 X: 0-255)
+                        for (int y = 0; y < 128; y++)
                         {
-                            for (int x3 = 0; x3 < 64; x3++)
+                            for (int x3 = 0; x3 < 128; x3++)
                             {
+                                // 判斷是否在原始範圍內 (0-63, 0-63)
+                                bool isExtended = (x3 >= 64 || y >= 64);
+
+                                // 計算遊戲座標
+                                int gameX = s32Data.SegInfo.nLinBeginX + x3;
+                                int gameY = s32Data.SegInfo.nLinBeginY + y;
+
+                                if (isExtended)
+                                {
+                                    // 擴展區域：檢查是否被其他 S32 的正常範圍覆蓋
+                                    if (normalCoverage.Contains((gameX, gameY)))
+                                        continue; // 已被其他 S32 正常範圍覆蓋，不畫藍線
+
+                                    // 檢查是否已經畫過
+                                    if (drawnExtended.Contains((gameX, gameY)))
+                                        continue; // 已畫過，不重複畫
+
+                                    drawnExtended.Add((gameX, gameY));
+                                }
+
                                 int x = x3 * 2;
 
                                 int localBaseX = 0 - 24 * (x / 2);
@@ -8535,15 +8620,17 @@ namespace L1FlyMapViewer
                                 if (X + 48 < 0 || X > worldRect.Width || Y + 24 < 0 || Y > worldRect.Height)
                                     continue;
 
+                                Pen currentPen = isExtended ? extendedGridPen : gridPen;
+
                                 Point p1 = new Point(X, Y + 12);
                                 Point p2 = new Point(X + 24, Y);
                                 Point p3 = new Point(X + 48, Y + 12);
                                 Point p4 = new Point(X + 24, Y + 24);
 
-                                g.DrawLine(gridPen, p1, p2);
-                                g.DrawLine(gridPen, p2, p3);
-                                g.DrawLine(gridPen, p3, p4);
-                                g.DrawLine(gridPen, p4, p1);
+                                g.DrawLine(currentPen, p1, p2);
+                                g.DrawLine(currentPen, p2, p3);
+                                g.DrawLine(currentPen, p3, p4);
+                                g.DrawLine(currentPen, p4, p1);
                             }
                         }
                     }
@@ -9946,6 +10033,77 @@ namespace L1FlyMapViewer
 
             sw.Stop();
             LogPerf($"[MOUSE-CLICK] no cell found, total={sw.ElapsedMilliseconds}ms, s32Count={_document.S32Files.Count}");
+
+            // 點擊空白區域時，顯示右鍵選單以新增 S32
+            if (e.Button == MouseButtons.Right && _document.S32Files.Count > 0)
+            {
+                Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
+                ShowEmptyAreaContextMenu(e.Location, new Point(worldX, worldY), currentMap);
+            }
+        }
+
+        // 顯示空白區域的右鍵選單
+        private void ShowEmptyAreaContextMenu(Point screenLocation, Point worldPos, Struct.L1Map currentMap)
+        {
+            ContextMenuStrip menu = new ContextMenuStrip();
+
+            ToolStripMenuItem addS32Item = new ToolStripMenuItem("➕ 在此位置新增 S32 區塊...");
+            addS32Item.Font = new Font(addS32Item.Font, FontStyle.Bold);
+            addS32Item.Click += (s, args) =>
+            {
+                TryCreateS32AtClickPosition(worldPos, currentMap);
+            };
+            menu.Items.Add(addS32Item);
+
+            // 顯示預估的 Block 座標
+            if (_document.S32Files.Count > 0)
+            {
+                var (blockX, blockY) = EstimateBlockCoordinates(worldPos, currentMap);
+                string fileName = $"{blockX:X4}{blockY:X4}.s32".ToLower();
+
+                menu.Items.Add(new ToolStripSeparator());
+                ToolStripMenuItem infoItem = new ToolStripMenuItem($"預估位置: {fileName} ({blockX:X4},{blockY:X4})");
+                infoItem.Enabled = false;
+                menu.Items.Add(infoItem);
+            }
+
+            menu.Show(pictureBox4, screenLocation);
+        }
+
+        // 估算點擊位置的 Block 座標
+        private (int blockX, int blockY) EstimateBlockCoordinates(Point clickPos, Struct.L1Map currentMap)
+        {
+            if (_document.S32Files.Count == 0)
+            {
+                int defaultBlockX = currentMap.nMinBlockX != 0xFFFF ? currentMap.nMinBlockX : 0x7FFF;
+                int defaultBlockY = currentMap.nMinBlockY != 0xFFFF ? currentMap.nMinBlockY : 0x8000;
+                return (defaultBlockX, defaultBlockY);
+            }
+
+            var refS32 = _document.S32Files.Values.First();
+            int[] refLoc = refS32.SegInfo.GetLoc(1.0);
+            int refMx = refLoc[0];
+            int refMy = refLoc[1];
+
+            int blockWidth = 64 * 24 * 2;  // 3072
+            int blockHeight = 64 * 12 * 2; // 1536
+
+            int refCenterX = refMx + blockWidth / 2;
+            int refCenterY = refMy + blockHeight / 2;
+
+            int deltaPixelX = clickPos.X - refCenterX;
+            int deltaPixelY = clickPos.Y - refCenterY;
+
+            double dBx = (double)(deltaPixelX * blockHeight - deltaPixelY * blockWidth) / (blockWidth * blockHeight);
+            double dBy = (double)(deltaPixelX * blockHeight + deltaPixelY * blockWidth) / (blockWidth * blockHeight);
+
+            int deltaBlockX = (int)Math.Round(dBx);
+            int deltaBlockY = (int)Math.Round(dBy);
+
+            int targetBlockX = refS32.SegInfo.nBlockX + deltaBlockX;
+            int targetBlockY = refS32.SegInfo.nBlockY + deltaBlockY;
+
+            return (targetBlockX, targetBlockY);
         }
 
         // S32 地圖雙擊事件 - 顯示格子詳細資訊或新增 S32
