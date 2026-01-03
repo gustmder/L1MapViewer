@@ -11440,6 +11440,12 @@ namespace L1FlyMapViewer
             tabL8.Controls.Add(layer8Panel);
             tabControl.TabPages.Add(tabL8);
 
+            // 渲染資料
+            TabPage tabRender = new TabPage("渲染資料");
+            var renderPanel = CreateRenderInfoPanel(cellX, cellY);
+            tabRender.Controls.Add(renderPanel);
+            tabControl.TabPages.Add(tabRender);
+
             layerForm.Controls.Add(tabControl);
             layerForm.ShowDialog();
         }
@@ -11517,6 +11523,13 @@ namespace L1FlyMapViewer
             split.Dock = DockStyle.Fill;
             split.Orientation = Orientation.Vertical;
             split.SplitterDistance = 350;
+            split.SplitterMoved += (s, e) => { }; // 允許手動調整
+            // 視窗大小改變時自動置中
+            split.Resize += (s, e) =>
+            {
+                if (split.Width > 0)
+                    split.SplitterDistance = split.Width / 2;
+            };
 
             // 左三角面板
             Panel leftPanel = new Panel();
@@ -12478,30 +12491,61 @@ namespace L1FlyMapViewer
             return panel;
         }
 
-        // 創建第八層面板 - 特效、裝飾品
+        // 創建第八層面板 - 特效、裝飾品（只顯示與當前格子相關的項目）
         private Panel CreateLayer8Panel(int x, int y)
         {
             Panel panel = new Panel();
             panel.BorderStyle = BorderStyle.FixedSingle;
             panel.Dock = DockStyle.Fill;
 
+            // 計算當前格子的全域座標
+            int normX = (x / 2) * 2;
+            int globalLayer1X = currentS32Data.SegInfo.nLinBeginX * 2 + normX;
+            int globalLayer1Y = currentS32Data.SegInfo.nLinBeginY + y;
+
+            // 收集與當前格子相關的 Layer8 項目（搜尋所有 S32）
+            var cellLayer8Items = new List<(Layer8Item item, S32Data s32, int localX, int localY)>();
+
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                if (s32Data.Layer8.Count == 0) continue;
+                int s32StartX = s32Data.SegInfo.nLinBeginX * 2;
+                int s32StartY = s32Data.SegInfo.nLinBeginY;
+
+                foreach (var item8 in s32Data.Layer8)
+                {
+                    int itemGlobalX = s32StartX + item8.X;
+                    int itemGlobalY = s32StartY + item8.Y;
+
+                    // 檢查是否在當前格子範圍內（左右兩個三角都算）
+                    if ((itemGlobalX == globalLayer1X || itemGlobalX == globalLayer1X + 1) && itemGlobalY == globalLayer1Y)
+                    {
+                        cellLayer8Items.Add((item8, s32Data, item8.X, item8.Y));
+                    }
+                }
+            }
+
+            // 標題
             Label title = new Label();
-            title.Text = "第8層 (特效)";
+            title.Text = $"第8層 (特效) - 格子座標 ({x}, {y})";
             title.Font = new Font("Arial", 10, FontStyle.Bold);
             title.Dock = DockStyle.Top;
             title.Height = 25;
             title.TextAlign = ContentAlignment.MiddleCenter;
             panel.Controls.Add(title);
 
-            if (currentS32Data.Layer8.Count > 0)
+            if (cellLayer8Items.Count > 0)
             {
+                // 數量標籤
                 Label countLabel = new Label();
-                countLabel.Text = $"數量: {currentS32Data.Layer8.Count}";
+                countLabel.Text = $"此格子共 {cellLayer8Items.Count} 個特效";
                 countLabel.Dock = DockStyle.Top;
                 countLabel.Height = 20;
                 countLabel.TextAlign = ContentAlignment.MiddleCenter;
+                countLabel.ForeColor = Color.Blue;
                 panel.Controls.Add(countLabel);
 
+                // 資料表格
                 ListView listView = new ListView();
                 listView.Dock = DockStyle.Fill;
                 listView.View = View.Details;
@@ -12509,18 +12553,20 @@ namespace L1FlyMapViewer
                 listView.GridLines = true;
                 listView.Font = new Font("Consolas", 9, FontStyle.Regular);
 
-                listView.Columns.Add("SprId", 60);
+                listView.Columns.Add("SprId", 70);
                 listView.Columns.Add("X", 50);
                 listView.Columns.Add("Y", 50);
-                listView.Columns.Add("Unknown", 80);
+                listView.Columns.Add("ExtendedData", 100);
+                listView.Columns.Add("S32 檔案", 200);
 
-                for (int i = 0; i < currentS32Data.Layer8.Count; i++)
+                foreach (var (item8, s32, localX, localY) in cellLayer8Items)
                 {
-                    var item8 = currentS32Data.Layer8[i];
                     var lvItem = new ListViewItem(item8.SprId.ToString());
-                    lvItem.SubItems.Add(item8.X.ToString());
-                    lvItem.SubItems.Add(item8.Y.ToString());
+                    lvItem.SubItems.Add(localX.ToString());
+                    lvItem.SubItems.Add(localY.ToString());
                     lvItem.SubItems.Add($"0x{item8.ExtendedData:X8}");
+                    lvItem.SubItems.Add(System.IO.Path.GetFileName(s32.FilePath));
+                    lvItem.Tag = (item8, s32);
                     listView.Items.Add(lvItem);
                 }
 
@@ -12529,9 +12575,10 @@ namespace L1FlyMapViewer
             else
             {
                 Label info = new Label();
-                info.Text = "無資料";
+                info.Text = "此格子無 Layer8 資料";
                 info.Dock = DockStyle.Fill;
                 info.TextAlign = ContentAlignment.MiddleCenter;
+                info.ForeColor = Color.Gray;
                 panel.Controls.Add(info);
             }
 
@@ -14033,18 +14080,59 @@ namespace L1FlyMapViewer
 
             // 第一層資訊
             info.AppendLine("【第1層 - 地板】");
-            var cell = currentS32Data.Layer1[cellY, cellX];
-            if (cell != null && cell.TileId > 0)
+            // 計算全域座標（正規化為偶數）
+            int normX = (cellX / 2) * 2;
+            int globalLayer1X_Even = currentS32Data.SegInfo.nLinBeginX * 2 + normX;      // 左三角（偶數）
+            int globalLayer1X_Odd = globalLayer1X_Even + 1;                               // 右三角（奇數）
+            int globalLayer1Y = currentS32Data.SegInfo.nLinBeginY + cellY;
+
+            // 左三角（X=偶數）
+            info.AppendLine("  ◀ 左三角 (X=偶數):");
+            bool foundLeft = false;
+            foreach (var s32Data in _document.S32Files.Values)
             {
-                info.AppendLine($"  Tile ID: {cell.TileId}");
-                info.AppendLine($"  Index ID: {cell.IndexId}");
-                info.AppendLine($"  檔案: {cell.TileId}.til");
-                info.AppendLine($"  已修改: {(cell.IsModified ? "是" : "否")}");
+                int s32StartX = s32Data.SegInfo.nLinBeginX * 2;
+                int s32StartY = s32Data.SegInfo.nLinBeginY;
+                int localX = globalLayer1X_Even - s32StartX;
+                int localY = globalLayer1Y - s32StartY;
+
+                if (localX >= 0 && localX < 128 && localY >= 0 && localY < 64)
+                {
+                    var cell = s32Data.Layer1[localY, localX];
+                    if (cell != null && cell.TileId > 0)
+                    {
+                        info.AppendLine($"    Tile ID: {cell.TileId}, Index: {cell.IndexId}");
+                        info.AppendLine($"    來源: {System.IO.Path.GetFileName(s32Data.FilePath)}");
+                        foundLeft = true;
+                        break;
+                    }
+                }
             }
-            else
+            if (!foundLeft) info.AppendLine("    (空)");
+
+            // 右三角（X=奇數）
+            info.AppendLine("  ▶ 右三角 (X=奇數):");
+            bool foundRight = false;
+            foreach (var s32Data in _document.S32Files.Values)
             {
-                info.AppendLine("  (空)");
+                int s32StartX = s32Data.SegInfo.nLinBeginX * 2;
+                int s32StartY = s32Data.SegInfo.nLinBeginY;
+                int localX = globalLayer1X_Odd - s32StartX;
+                int localY = globalLayer1Y - s32StartY;
+
+                if (localX >= 0 && localX < 128 && localY >= 0 && localY < 64)
+                {
+                    var cell = s32Data.Layer1[localY, localX];
+                    if (cell != null && cell.TileId > 0)
+                    {
+                        info.AppendLine($"    Tile ID: {cell.TileId}, Index: {cell.IndexId}");
+                        info.AppendLine($"    來源: {System.IO.Path.GetFileName(s32Data.FilePath)}");
+                        foundRight = true;
+                        break;
+                    }
+                }
             }
+            if (!foundRight) info.AppendLine("    (空)");
             info.AppendLine();
 
             // 第二層資訊
@@ -14055,40 +14143,60 @@ namespace L1FlyMapViewer
 
             // 第三層資訊
             info.AppendLine("【第3層 - 屬性】");
-            var attr = currentS32Data.Layer3[cellY, layer3X];
-            if (attr != null)
+            // 計算全域 Layer3 座標（遊戲座標）
+            int globalGameX = currentS32Data.SegInfo.nLinBeginX + layer3X;
+            int globalGameY = currentS32Data.SegInfo.nLinBeginY + cellY;
+
+            // 搜尋所有 S32 找到有效範圍內的資料
+            bool foundLayer3 = false;
+            foreach (var s32Data in _document.S32Files.Values)
             {
-                info.AppendLine($"  左上邊: 0x{attr.Attribute1:X4} ({attr.Attribute1})");
-                info.AppendLine($"  右上邊: 0x{attr.Attribute2:X4} ({attr.Attribute2})");
+                int s32GameStartX = s32Data.SegInfo.nLinBeginX;
+                int s32GameStartY = s32Data.SegInfo.nLinBeginY;
+                int localGameX = globalGameX - s32GameStartX;
+                int localGameY = globalGameY - s32GameStartY;
 
-                // 左上邊標記
-                List<string> flags1 = new List<string>();
-                if ((attr.Attribute1 & 0x01) != 0)
-                    flags1.Add("不可通行");
-                else
-                    flags1.Add("可通行");
-                // 根據 MapTool 邏輯判斷區域
-                int val1 = attr.Attribute1 & 0x0F;
-                if ((val1 & 0x04) != 0) flags1.Add("安全區");
-                else if ((val1 & 0x0C) == 0x08) flags1.Add("戰鬥區");
-                if ((attr.Attribute1 & 0x02) != 0) flags1.Add("標記2");
-                if ((attr.Attribute1 & 0x10) != 0) flags1.Add("標記16");
-                info.AppendLine($"  左上邊標記: {string.Join(", ", flags1)}");
+                // 檢查是否在此 S32 的有效範圍內
+                if (localGameX >= 0 && localGameX < 64 && localGameY >= 0 && localGameY < 64)
+                {
+                    var attr = s32Data.Layer3[localGameY, localGameX];
+                    if (attr != null && (attr.Attribute1 != 0 || attr.Attribute2 != 0))
+                    {
+                        info.AppendLine($"  左上邊: 0x{attr.Attribute1:X4} ({attr.Attribute1})");
+                        info.AppendLine($"  右上邊: 0x{attr.Attribute2:X4} ({attr.Attribute2})");
 
-                // 右上邊標記
-                List<string> flags2 = new List<string>();
-                if ((attr.Attribute2 & 0x01) != 0)
-                    flags2.Add("不可通行");
-                else
-                    flags2.Add("可通行");
-                int val2 = attr.Attribute2 & 0x0F;
-                if ((val2 & 0x04) != 0) flags2.Add("安全區");
-                else if ((val2 & 0x0C) == 0x08) flags2.Add("戰鬥區");
-                if ((attr.Attribute2 & 0x02) != 0) flags2.Add("標記2");
-                if ((attr.Attribute2 & 0x10) != 0) flags2.Add("標記16");
-                info.AppendLine($"  右上邊標記: {string.Join(", ", flags2)}");
+                        // 左上邊標記
+                        List<string> flags1 = new List<string>();
+                        if ((attr.Attribute1 & 0x01) != 0)
+                            flags1.Add("不可通行");
+                        else
+                            flags1.Add("可通行");
+                        int val1 = attr.Attribute1 & 0x0F;
+                        if ((val1 & 0x04) != 0) flags1.Add("安全區");
+                        else if ((val1 & 0x0C) == 0x08) flags1.Add("戰鬥區");
+                        if ((attr.Attribute1 & 0x02) != 0) flags1.Add("標記2");
+                        if ((attr.Attribute1 & 0x10) != 0) flags1.Add("標記16");
+                        info.AppendLine($"  左上邊標記: {string.Join(", ", flags1)}");
+
+                        // 右上邊標記
+                        List<string> flags2 = new List<string>();
+                        if ((attr.Attribute2 & 0x01) != 0)
+                            flags2.Add("不可通行");
+                        else
+                            flags2.Add("可通行");
+                        int val2 = attr.Attribute2 & 0x0F;
+                        if ((val2 & 0x04) != 0) flags2.Add("安全區");
+                        else if ((val2 & 0x0C) == 0x08) flags2.Add("戰鬥區");
+                        if ((attr.Attribute2 & 0x02) != 0) flags2.Add("標記2");
+                        if ((attr.Attribute2 & 0x10) != 0) flags2.Add("標記16");
+                        info.AppendLine($"  右上邊標記: {string.Join(", ", flags2)}");
+                        info.AppendLine($"  來源 S32: {System.IO.Path.GetFileName(s32Data.FilePath)}");
+                        foundLayer3 = true;
+                        break;
+                    }
+                }
             }
-            else
+            if (!foundLayer3)
             {
                 info.AppendLine("  (空)");
             }
@@ -14096,27 +14204,70 @@ namespace L1FlyMapViewer
 
             // 第四層資訊
             info.AppendLine("【第4層 - 物件】");
-            var objectsAtCell = currentS32Data.Layer4.Where(o => o.X == cellX && o.Y == cellY).OrderBy(o => o.Layer).ToList();
-            if (objectsAtCell.Count > 0)
+            // 搜尋所有 S32 找到此格子的物件，分左右三角
+            var leftObjects = new List<(ObjectTile obj, S32Data s32)>();
+            var rightObjects = new List<(ObjectTile obj, S32Data s32)>();
+
+            foreach (var s32Data in _document.S32Files.Values)
             {
-                info.AppendLine($"  此格子有 {objectsAtCell.Count} 個物件:");
-                foreach (var obj in objectsAtCell)
+                int s32StartX = s32Data.SegInfo.nLinBeginX * 2;
+                int s32StartY = s32Data.SegInfo.nLinBeginY;
+
+                foreach (var obj in s32Data.Layer4)
                 {
-                    info.AppendLine($"    - Tile ID: {obj.TileId}, Index: {obj.IndexId}");
-                    info.AppendLine($"      Layer: {obj.Layer}, Group: {obj.GroupId}");
-                    info.AppendLine($"      檔案: {obj.TileId}.til 或 {obj.TileId}.spr");
+                    int objGlobalX = s32StartX + obj.X;
+                    int objGlobalY = s32StartY + obj.Y;
+
+                    if (objGlobalY == globalLayer1Y)
+                    {
+                        if (objGlobalX == globalLayer1X_Even)
+                            leftObjects.Add((obj, s32Data));
+                        else if (objGlobalX == globalLayer1X_Odd)
+                            rightObjects.Add((obj, s32Data));
+                    }
+                }
+            }
+
+            // 左三角物件（X=偶數）
+            info.AppendLine("  ◀ 左三角 (X=偶數):");
+            if (leftObjects.Count > 0)
+            {
+                foreach (var (obj, s32) in leftObjects.OrderBy(x => x.obj.Layer))
+                {
+                    info.AppendLine($"    區域:{obj.X},{obj.Y} S32:{System.IO.Path.GetFileName(s32.FilePath)} 高度:{obj.Layer} 群組:{obj.GroupId} Tile:{obj.TileId}/{obj.IndexId}");
                 }
             }
             else
             {
-                info.AppendLine("  (無物件)");
+                info.AppendLine("    (無物件)");
+            }
+
+            // 右三角物件（X=奇數）
+            info.AppendLine("  ▶ 右三角 (X=奇數):");
+            if (rightObjects.Count > 0)
+            {
+                foreach (var (obj, s32) in rightObjects.OrderBy(x => x.obj.Layer))
+                {
+                    info.AppendLine($"    區域:{obj.X},{obj.Y} S32:{System.IO.Path.GetFileName(s32.FilePath)} 高度:{obj.Layer} 群組:{obj.GroupId} Tile:{obj.TileId}/{obj.IndexId}");
+                }
+            }
+            else
+            {
+                info.AppendLine("    (無物件)");
             }
             info.AppendLine();
 
-            // 周圍物件統計
+            // 周圍物件統計（使用全域座標）
             info.AppendLine("【周圍物件統計】");
-            int nearbyCount = currentS32Data.Layer4.Count(o =>
-                Math.Abs(o.X - cellX) <= 5 && Math.Abs(o.Y - cellY) <= 5);
+            int nearbyCount = 0;
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                int s32StartX = s32Data.SegInfo.nLinBeginX * 2;
+                int s32StartY = s32Data.SegInfo.nLinBeginY;
+                nearbyCount += s32Data.Layer4.Count(o =>
+                    Math.Abs((s32StartX + o.X) - globalLayer1X_Even) <= 10 &&
+                    Math.Abs((s32StartY + o.Y) - globalLayer1Y) <= 5);
+            }
             info.AppendLine($"  5格範圍內物件數: {nearbyCount}");
             info.AppendLine();
 
