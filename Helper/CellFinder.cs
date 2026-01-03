@@ -27,6 +27,7 @@ namespace L1MapViewer.Helper
 
         /// <summary>
         /// 根據世界座標找到對應的格子（暴力搜尋法）
+        /// 擴展範圍: X 0-255, Y 0-127 (支援超出邊界的物件)
         /// </summary>
         public static FindResult FindCellBruteForce(int worldX, int worldY, IEnumerable<S32Data> s32Files)
         {
@@ -42,10 +43,10 @@ namespace L1MapViewer.Helper
                 int mx = loc[0];
                 int my = loc[1];
 
-                // 遍歷該 S32 的所有格子
-                for (int y = 0; y < 64; y++)
+                // 遍歷該 S32 的所有格子（擴展範圍 Y: 0-127, X: 0-255）
+                for (int y = 0; y < 128; y++)
                 {
-                    for (int x = 0; x < 128; x++)
+                    for (int x = 0; x < 256; x++)
                     {
                         result.CellsChecked++;
 
@@ -80,14 +81,20 @@ namespace L1MapViewer.Helper
 
         /// <summary>
         /// 根據世界座標找到對應的格子（優化版：先過濾 S32 範圍）
+        /// 擴展範圍: X 0-255, Y 0-127 (支援超出邊界的物件)
         /// </summary>
         public static FindResult FindCellOptimized(int worldX, int worldY, IEnumerable<S32Data> s32Files)
         {
             var sw = Stopwatch.StartNew();
             var result = new FindResult { Found = false };
 
-            const int BlockWidth = 3072;  // 64 * 24 * 2
-            const int BlockHeight = 1536; // 64 * 12 * 2
+            // 擴展區塊範圍以支援超出邊界的格子
+            // 原始區塊: 3072 x 1536
+            // 擴展後需要覆蓋更大的區域（向各方向擴展）
+            const int ExtendedBlockWidth = 12288;  // 256 * 24 * 2 (覆蓋擴展的 X 範圍)
+            const int ExtendedBlockHeight = 6144;  // 256 * 12 * 2 (覆蓋擴展的 Y 範圍)
+            const int OffsetX = -3072;    // 擴展區域可能向左延伸
+            const int OffsetY = -1536;    // 擴展區域可能向上延伸
 
             foreach (var s32Data in s32Files)
             {
@@ -98,17 +105,17 @@ namespace L1MapViewer.Helper
                 int mx = loc[0];
                 int my = loc[1];
 
-                // 先檢查點擊位置是否在這個 S32 的大致範圍內
-                if (worldX < mx || worldX >= mx + BlockWidth ||
-                    worldY < my || worldY >= my + BlockHeight)
+                // 先檢查點擊位置是否在這個 S32 的擴展範圍內（使用更寬鬆的邊界）
+                if (worldX < mx + OffsetX || worldX >= mx + ExtendedBlockWidth + OffsetX ||
+                    worldY < my + OffsetY || worldY >= my + ExtendedBlockHeight + OffsetY)
                 {
                     continue; // 跳過不在範圍內的 S32
                 }
 
-                // 遍歷該 S32 的所有格子
-                for (int y = 0; y < 64; y++)
+                // 遍歷該 S32 的所有格子（擴展範圍 Y: 0-127, X: 0-255）
+                for (int y = 0; y < 128; y++)
                 {
-                    for (int x = 0; x < 128; x++)
+                    for (int x = 0; x < 256; x++)
                     {
                         result.CellsChecked++;
 

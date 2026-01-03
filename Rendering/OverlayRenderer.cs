@@ -424,6 +424,75 @@ namespace L1MapViewer.Rendering
         }
 
         /// <summary>
+        /// 繪製群組高亮覆蓋層（綠色標記）
+        /// </summary>
+        public void DrawGroupHighlight(Bitmap bitmap, Rectangle worldRect, IEnumerable<S32Data> s32Files, List<(int globalX, int globalY)> highlightCells)
+        {
+            if (highlightCells == null || highlightCells.Count == 0)
+                return;
+
+            // 建立快速查找的 HashSet
+            var highlightSet = new HashSet<(int, int)>(highlightCells);
+
+            using (Graphics g = Graphics.FromImage(bitmap))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+
+                // 綠色半透明填充
+                using (SolidBrush fillBrush = new SolidBrush(Color.FromArgb(100, 50, 200, 50)))
+                using (Pen borderPen = new Pen(Color.FromArgb(200, 30, 180, 30), 2f))
+                {
+                    foreach (var s32Data in s32Files)
+                    {
+                        int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                        int mx = loc[0];
+                        int my = loc[1];
+
+                        int segStartX = s32Data.SegInfo.nLinBeginX * 2;
+                        int segStartY = s32Data.SegInfo.nLinBeginY;
+
+                        // 檢查此 S32 範圍內是否有高亮格子
+                        for (int localY = 0; localY < 64; localY++)
+                        {
+                            for (int localX = 0; localX < 128; localX += 2)  // 每次跳 2（一格）
+                            {
+                                int globalX = segStartX + localX;
+                                int globalY = segStartY + localY;
+
+                                if (!highlightSet.Contains((globalX, globalY)))
+                                    continue;
+
+                                // 計算像素位置（整格，包含左右兩半）
+                                int x1 = localX;  // 偶數 X（左半）
+                                int localBaseX = 0 - 24 * (x1 / 2);
+                                int localBaseY = 63 * 12 - 12 * (x1 / 2);
+
+                                int X = mx + localBaseX + x1 * 24 + localY * 24 - worldRect.X;
+                                int Y = my + localBaseY + localY * 12 - worldRect.Y;
+
+                                // 跳過不在 Viewport 內的格子
+                                if (X + 48 < 0 || X > worldRect.Width || Y + 24 < 0 || Y > worldRect.Height)
+                                    continue;
+
+                                // 繪製整格菱形
+                                Point[] diamond = new Point[]
+                                {
+                                    new Point(X + 24, Y),       // 上
+                                    new Point(X + 48, Y + 12),  // 右
+                                    new Point(X + 24, Y + 24),  // 下
+                                    new Point(X, Y + 12)        // 左
+                                };
+
+                                g.FillPolygon(fillBrush, diamond);
+                                g.DrawPolygon(borderPen, diamond);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// 繪製座標標籤
         /// </summary>
         public void DrawCoordinateLabels(Bitmap bitmap, Rectangle worldRect, IEnumerable<S32Data> s32Files)

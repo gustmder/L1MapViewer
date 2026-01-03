@@ -22,6 +22,11 @@ static class Program
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
+        // 初始化 Debug Log（每次啟動清除舊 log）
+        DebugLog.Clear();
+        DebugLog.Log($"[PROGRAM] Version: {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}");
+        DebugLog.Log($"[PROGRAM] Args: {string.Join(" ", args)}");
+
         // 檢查是否啟用效能 Log
         var argsList = args.ToList();
         if (argsList.Contains("--perf-log"))

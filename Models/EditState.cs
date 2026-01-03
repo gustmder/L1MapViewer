@@ -102,6 +102,12 @@ namespace L1MapViewer.Models
         public List<Layer8Item> Layer8Clipboard { get; private set; } = new List<Layer8Item>();
 
         /// <summary>
+        /// 已啟用顯示的 Layer8 項目（點擊 marker 切換後永久顯示）
+        /// Key: (S32 檔案路徑, Layer8 項目索引)
+        /// </summary>
+        public HashSet<(string s32Path, int index)> EnabledLayer8Items { get; set; } = new HashSet<(string, int)>();
+
+        /// <summary>
         /// 複製區域的原點（全域座標）- 用於貼上時的基準位置
         /// </summary>
         public Point CopyRegionOrigin { get; set; }
@@ -277,6 +283,23 @@ namespace L1MapViewer.Models
 
         #endregion
 
+        #region 群組高亮顯示
+
+        /// <summary>
+        /// 群組高亮的格子列表（全域 Layer1 座標）
+        /// </summary>
+        public List<(int globalX, int globalY)> GroupHighlightCells { get; set; } = new List<(int, int)>();
+
+        /// <summary>
+        /// 清除群組高亮
+        /// </summary>
+        public void ClearGroupHighlight()
+        {
+            GroupHighlightCells.Clear();
+        }
+
+        #endregion
+
         #region 方法
 
         /// <summary>
@@ -313,6 +336,7 @@ namespace L1MapViewer.Models
             ClearSelection();
             ClearClipboard();
             ClearUndoHistory();
+            ClearGroupHighlight();
             PassableMode = PassableEditMode.None;
             PassabilityPolygonPoints.Clear();
             IsDrawingPassabilityPolygon = false;

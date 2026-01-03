@@ -7,35 +7,44 @@ namespace L1MapViewer.Reader {
     class L1PakReader {
 
         public static byte[]? UnPack(string szIdxType, string szFileName) {
+            DebugLog.Log($"[L1PakReader.UnPack] Finding {szIdxType}/{szFileName}...");
 
             L1Idx? pIdx = L1IdxReader.Find(szIdxType, szFileName);
 
             if (pIdx == null) {
+                DebugLog.Log($"[L1PakReader.UnPack] Not found: {szIdxType}/{szFileName}");
                 return null;
             }
 
+            DebugLog.Log($"[L1PakReader.UnPack] Reading from pak: pos={pIdx.nPosition}, size={pIdx.nSize}");
             byte[] data = Read(pIdx);
 
             //解DES-通常只有text有加密
             if (pIdx.isDesEncode) {
+                DebugLog.Log("[L1PakReader.UnPack] Decoding DES...");
                 data = Algorithm.DecodeDes(data, 0);
             }
             //解壓縮
             if (pIdx.nCompressSize > 0) {
                 if (pIdx.nCompressType == 2) {
+                    DebugLog.Log("[L1PakReader.UnPack] Decompressing Brotli...");
                     data = Algorithm.BrotliDecompress(data);
                 } else if (pIdx.nCompressType == 1) {
+                    DebugLog.Log("[L1PakReader.UnPack] Decompressing Zlib...");
                     data = Algorithm.ZilbDecompress(data, pIdx.nSize);
                 }
             }
 
             //解XML
             if (szFileName.ToLower().EndsWith(".spz")) {
+                DebugLog.Log("[L1PakReader.UnPack] Decoding SPZ...");
                 data = DecodeXml(data, 5);
             } else if (szFileName.ToLower().EndsWith(".xml") || szFileName.ToLower().EndsWith(".json") || szFileName.EndsWith(".ui")) {
+                DebugLog.Log("[L1PakReader.UnPack] Decoding XML/JSON...");
                 data = DecodeXml(data, 4);
             }
 
+            DebugLog.Log($"[L1PakReader.UnPack] Done: {data?.Length ?? 0} bytes");
             return data;
         }
 

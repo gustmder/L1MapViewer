@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using L1MapViewer.Helper;
 
 namespace L1MapViewer.Models
 {
@@ -32,12 +33,12 @@ namespace L1MapViewer.Models
         /// <summary>
         /// 最小縮放比例
         /// </summary>
-        public double ZoomMin { get; set; } = 0.1;
+        public double ZoomMin { get; set; } = 0.4;
 
         /// <summary>
         /// 最大縮放比例
         /// </summary>
-        public double ZoomMax { get; set; } = 5.0;
+        public double ZoomMax { get; set; } = 1.5;
 
         /// <summary>
         /// 縮放步進
@@ -88,7 +89,7 @@ namespace L1MapViewer.Models
             get => _scrollX;
             set
             {
-                int newValue = Math.Max(0, Math.Min(value, MaxScrollX));
+                int newValue = Math.Max(MinScrollX, Math.Min(value, MaxScrollX));
                 if (_scrollX != newValue)
                 {
                     _scrollX = newValue;
@@ -105,7 +106,7 @@ namespace L1MapViewer.Models
             get => _scrollY;
             set
             {
-                int newValue = Math.Max(0, Math.Min(value, MaxScrollY));
+                int newValue = Math.Max(MinScrollY, Math.Min(value, MaxScrollY));
                 if (_scrollY != newValue)
                 {
                     _scrollY = newValue;
@@ -113,6 +114,26 @@ namespace L1MapViewer.Models
                 }
             }
         }
+
+        /// <summary>
+        /// S32 區塊寬度（像素）- 用於計算捲動緩衝區
+        /// </summary>
+        public const int S32BlockWidth = 3072;
+
+        /// <summary>
+        /// S32 區塊高度（像素）- 用於計算捲動緩衝區
+        /// </summary>
+        public const int S32BlockHeight = 1536;
+
+        /// <summary>
+        /// 最小水平捲動值（支援左側緩衝區）
+        /// </summary>
+        public int MinScrollX { get; set; }
+
+        /// <summary>
+        /// 最小垂直捲動值（支援上側緩衝區）
+        /// </summary>
+        public int MinScrollY { get; set; }
 
         /// <summary>
         /// 最大水平捲動值
@@ -144,8 +165,8 @@ namespace L1MapViewer.Models
         /// </summary>
         public void SetScrollSilent(int x, int y)
         {
-            _scrollX = Math.Max(0, Math.Min(x, MaxScrollX));
-            _scrollY = Math.Max(0, Math.Min(y, MaxScrollY));
+            _scrollX = Math.Max(MinScrollX, Math.Min(x, MaxScrollX));
+            _scrollY = Math.Max(MinScrollY, Math.Min(y, MaxScrollY));
         }
 
         /// <summary>
@@ -164,23 +185,45 @@ namespace L1MapViewer.Models
         /// </summary>
         public void ScrollToCenter(int worldX, int worldY)
         {
-            ScrollX = worldX - ViewportWidth / 2;
-            ScrollY = worldY - ViewportHeight / 2;
+            // ViewportWidth/Height 是螢幕像素，需轉換為世界座標
+            int halfViewportWorldW = (int)(ViewportWidth / (2 * ZoomLevel));
+            int halfViewportWorldH = (int)(ViewportHeight / (2 * ZoomLevel));
+            ScrollX = worldX - halfViewportWorldW;
+            ScrollY = worldY - halfViewportWorldH;
         }
 
         /// <summary>
-        /// 更新最大捲動值
+        /// 更新最大捲動值（含緩衝區）
+        /// 注意：ScrollX/ScrollY 是世界座標，所有計算都在世界座標系進行
         /// </summary>
         public void UpdateScrollLimits(int mapWidth, int mapHeight)
         {
-            int scaledWidth = (int)(mapWidth * ZoomLevel);
-            int scaledHeight = (int)(mapHeight * ZoomLevel);
-            MaxScrollX = Math.Max(0, scaledWidth - ViewportWidth);
-            MaxScrollY = Math.Max(0, scaledHeight - ViewportHeight);
+            // Viewport 尺寸轉換為世界座標（受縮放影響）
+            int viewportWorldWidth = (int)(ViewportWidth / ZoomLevel);
+            int viewportWorldHeight = (int)(ViewportHeight / ZoomLevel);
 
-            // 確保當前位置不超過限制
+            // 緩衝區大小（世界座標，一個 S32 區塊）
+            // 但限制緩衝區最多只佔 viewport 的一半，確保地圖內容始終佔據至少一半 viewport
+            int bufferX = Math.Min(S32BlockWidth, viewportWorldWidth / 2);
+            int bufferY = Math.Min(S32BlockHeight, viewportWorldHeight / 2);
+
+            // 捲動限制（世界座標）
+            // 額外加一個 S32 區塊，確保地圖邊緣內容完整顯示
+            MinScrollX = -S32BlockWidth - bufferX;
+            MinScrollY = -S32BlockHeight - bufferY;
+
+            // MaxScrollX: 確保在最右側時，地圖右邊緣位於 viewport 中央左側
+            // 這樣至少有一半的 viewport 顯示地圖內容
+            int normalMaxX = Math.Max(0, mapWidth - viewportWorldWidth);
+            int normalMaxY = Math.Max(0, mapHeight - viewportWorldHeight);
+            MaxScrollX = normalMaxX + bufferX;
+            MaxScrollY = normalMaxY + bufferY;
+
+            // 確保當前位置在新限制範圍內
             if (_scrollX > MaxScrollX) _scrollX = MaxScrollX;
+            if (_scrollX < MinScrollX) _scrollX = MinScrollX;
             if (_scrollY > MaxScrollY) _scrollY = MaxScrollY;
+            if (_scrollY < MinScrollY) _scrollY = MinScrollY;
         }
 
         #endregion
@@ -268,6 +311,17 @@ namespace L1MapViewer.Models
             set { if (_showS32Boundary != value) { _showS32Boundary = value; DisplayOptionsChanged?.Invoke(this, EventArgs.Empty); } }
         }
 
+        private bool _showLayer8 = true;
+
+        /// <summary>
+        /// 顯示 Layer8 (SPR 特效標記)
+        /// </summary>
+        public bool ShowLayer8
+        {
+            get => _showLayer8;
+            set { if (_showLayer8 != value) { _showLayer8 = value; DisplayOptionsChanged?.Invoke(this, EventArgs.Empty); } }
+        }
+
         /// <summary>
         /// 顯示選項變更事件
         /// </summary>
@@ -334,15 +388,23 @@ namespace L1MapViewer.Models
 
         /// <summary>
         /// 取得需要渲染的範圍（含緩衝區，世界座標）
+        /// 注意：會限制在地圖實際範圍內，緩衝區只是允許捲動超出，不會渲染地圖外的內容
         /// </summary>
         public Rectangle GetRenderWorldRect()
         {
             var viewport = GetViewportWorldRect();
-            int x = Math.Max(0, viewport.X - RenderBufferMargin);
-            int y = Math.Max(0, viewport.Y - RenderBufferMargin);
+            // 計算渲染範圍
+            // 允許負值以支援地圖邊緣的額外緩衝區顯示
+            int x = Math.Max(-S32BlockWidth, viewport.X - RenderBufferMargin);
+            int y = Math.Max(-S32BlockHeight, viewport.Y - RenderBufferMargin);
             int right = Math.Min(MapWidth, viewport.Right + RenderBufferMargin);
             int bottom = Math.Min(MapHeight, viewport.Bottom + RenderBufferMargin);
-            return new Rectangle(x, y, right - x, bottom - y);
+
+            // 確保寬高不為負數
+            int width = Math.Max(0, right - x);
+            int height = Math.Max(0, bottom - y);
+
+            return new Rectangle(x, y, width, height);
         }
 
         /// <summary>
@@ -373,11 +435,22 @@ namespace L1MapViewer.Models
             var viewport = GetViewportWorldRect();
             int safeMargin = RenderBufferMargin / 2;
 
-            // 檢查 Viewport 是否超出已渲染範圍的安全區域
-            return viewport.X < RenderOriginX + safeMargin ||
-                   viewport.Y < RenderOriginY + safeMargin ||
-                   viewport.Right > RenderOriginX + RenderWidth - safeMargin ||
-                   viewport.Bottom > RenderOriginY + RenderHeight - safeMargin;
+            // 計算 viewport 與地圖實際內容的交集
+            // 超出地圖範圍的部分是緩衝區（空白），不需要重新渲染
+            int effectiveLeft = Math.Max(0, viewport.X);
+            int effectiveTop = Math.Max(0, viewport.Y);
+            int effectiveRight = Math.Min(MapWidth, viewport.Right);
+            int effectiveBottom = Math.Min(MapHeight, viewport.Bottom);
+
+            // 如果 viewport 完全在地圖外（純緩衝區），不需要重新渲染
+            if (effectiveRight <= effectiveLeft || effectiveBottom <= effectiveTop)
+                return false;
+
+            // 檢查有效 Viewport 區域是否超出已渲染範圍的安全區域
+            return effectiveLeft < RenderOriginX + safeMargin ||
+                   effectiveTop < RenderOriginY + safeMargin ||
+                   effectiveRight > RenderOriginX + RenderWidth - safeMargin ||
+                   effectiveBottom > RenderOriginY + RenderHeight - safeMargin;
         }
 
         /// <summary>
@@ -402,8 +475,9 @@ namespace L1MapViewer.Models
         /// </summary>
         public Point ScreenToWorld(int screenX, int screenY)
         {
-            int worldX = (int)(screenX / ZoomLevel) + (int)(ScrollX / ZoomLevel);
-            int worldY = (int)(screenY / ZoomLevel) + (int)(ScrollY / ZoomLevel);
+            // ScrollX/ScrollY 已經是世界座標，不需要除以 ZoomLevel
+            int worldX = (int)(screenX / ZoomLevel) + ScrollX;
+            int worldY = (int)(screenY / ZoomLevel) + ScrollY;
             return new Point(worldX, worldY);
         }
 
@@ -420,8 +494,9 @@ namespace L1MapViewer.Models
         /// </summary>
         public Point WorldToScreen(int worldX, int worldY)
         {
-            int screenX = (int)(worldX * ZoomLevel) - ScrollX;
-            int screenY = (int)(worldY * ZoomLevel) - ScrollY;
+            // 先計算世界座標差，再乘以 ZoomLevel
+            int screenX = (int)((worldX - ScrollX) * ZoomLevel);
+            int screenY = (int)((worldY - ScrollY) * ZoomLevel);
             return new Point(screenX, screenY);
         }
 
@@ -431,6 +506,77 @@ namespace L1MapViewer.Models
         public Point WorldToScreen(Point worldPoint)
         {
             return WorldToScreen(worldPoint.X, worldPoint.Y);
+        }
+
+        #endregion
+
+        #region Viewport 遊戲座標
+
+        /// <summary>
+        /// Viewport 四角的遊戲座標
+        /// </summary>
+        public struct ViewportGameBounds
+        {
+            public Point TopLeft;      // 左上角遊戲座標
+            public Point TopRight;     // 右上角遊戲座標
+            public Point BottomLeft;   // 左下角遊戲座標
+            public Point BottomRight;  // 右下角遊戲座標
+
+            /// <summary>
+            /// 取得最小遊戲座標 X
+            /// </summary>
+            public int MinGameX => Math.Min(Math.Min(TopLeft.X, TopRight.X), Math.Min(BottomLeft.X, BottomRight.X));
+
+            /// <summary>
+            /// 取得最大遊戲座標 X
+            /// </summary>
+            public int MaxGameX => Math.Max(Math.Max(TopLeft.X, TopRight.X), Math.Max(BottomLeft.X, BottomRight.X));
+
+            /// <summary>
+            /// 取得最小遊戲座標 Y
+            /// </summary>
+            public int MinGameY => Math.Min(Math.Min(TopLeft.Y, TopRight.Y), Math.Min(BottomLeft.Y, BottomRight.Y));
+
+            /// <summary>
+            /// 取得最大遊戲座標 Y
+            /// </summary>
+            public int MaxGameY => Math.Max(Math.Max(TopLeft.Y, TopRight.Y), Math.Max(BottomLeft.Y, BottomRight.Y));
+
+            /// <summary>
+            /// 是否有效
+            /// </summary>
+            public bool IsValid => TopLeft.X != 0 || TopLeft.Y != 0 || TopRight.X != 0 || BottomLeft.X != 0;
+        }
+
+        /// <summary>
+        /// 取得 Viewport 四角的遊戲座標
+        /// </summary>
+        public ViewportGameBounds GetViewportGameBounds()
+        {
+            var bounds = new ViewportGameBounds();
+
+            // Viewport 的四個角落（世界像素座標）
+            int left = ScrollX;
+            int top = ScrollY;
+            int right = ScrollX + (int)(ViewportWidth / ZoomLevel);
+            int bottom = ScrollY + (int)(ViewportHeight / ZoomLevel);
+
+            // 轉換為遊戲座標
+            var topLeftLoc = L1MapHelper.GetLinLocation(left, top);
+            var topRightLoc = L1MapHelper.GetLinLocation(right, top);
+            var bottomLeftLoc = L1MapHelper.GetLinLocation(left, bottom);
+            var bottomRightLoc = L1MapHelper.GetLinLocation(right, bottom);
+
+            if (topLeftLoc != null)
+                bounds.TopLeft = new Point(topLeftLoc.x, topLeftLoc.y);
+            if (topRightLoc != null)
+                bounds.TopRight = new Point(topRightLoc.x, topRightLoc.y);
+            if (bottomLeftLoc != null)
+                bounds.BottomLeft = new Point(bottomLeftLoc.x, bottomLeftLoc.y);
+            if (bottomRightLoc != null)
+                bounds.BottomRight = new Point(bottomRightLoc.x, bottomRightLoc.y);
+
+            return bounds;
         }
 
         #endregion
@@ -445,6 +591,8 @@ namespace L1MapViewer.Models
             _zoomLevel = 1.0;
             _scrollX = 0;
             _scrollY = 0;
+            MinScrollX = 0;
+            MinScrollY = 0;
             MaxScrollX = 0;
             MaxScrollY = 0;
             MapWidth = 0;

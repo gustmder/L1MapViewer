@@ -12,6 +12,7 @@ using L1MapViewer.Converter;
 using L1MapViewer.Helper;
 using L1MapViewer.Models;
 using L1MapViewer.Reader;
+using L1MapViewer.CLI.Commands;
 using static L1MapViewer.Other.Struct;
 
 namespace L1MapViewer.CLI
@@ -107,6 +108,10 @@ namespace L1MapViewer.CLI
                         return Commands.BenchmarkCommands.Thumbnails(cmdArgs);
                     case "render-adjacent":
                         return Commands.BenchmarkCommands.RenderAdjacent(cmdArgs);
+                    case "test-layer8":
+                        return CmdTestLayer8(cmdArgs);
+                    case "test-layer8-click":
+                        return CmdTestLayer8Click(cmdArgs);
                     case "render-material":
                         return Commands.MaterialCommands.RenderMaterial(cmdArgs);
                     case "verify-material-tiles":
@@ -117,6 +122,10 @@ namespace L1MapViewer.CLI
                         return CmdListIdx(cmdArgs);
                     case "validate-tiles":
                         return CmdValidateTiles(cmdArgs);
+                    case "validate-l5":
+                        return CmdValidateL5(cmdArgs);
+                    case "l5-stats":
+                        return CmdLayer5Stats(cmdArgs);
                     case "export-fs32":
                         return CmdExportFs32(cmdArgs);
                     case "import-fs32":
@@ -133,6 +142,8 @@ namespace L1MapViewer.CLI
                         return Commands.ExportCommands.ExportFullMap(cmdArgs);
                     case "batch-export":
                         return Commands.ExportCommands.BatchExport(cmdArgs);
+                    case "test-load":
+                        return CmdTestLoad(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -185,6 +196,8 @@ L1MapViewer CLI - S32 檔案解析工具
                               渲染素材到指定地圖位置並存成圖片
   validate-tiles <s32檔案或地圖資料夾> [--client <路徑>]
                               驗證 S32 中使用的 TileId 是否存在於 Tile.idx 中
+  validate-l5 <s32檔案或地圖資料夾>
+                              驗證 Layer5 的 GroupId 是否存在於同一 S32 的 Layer4 中
   export-fs32 <地圖資料夾> <輸出.fs32> [--downscale]
                               匯出地圖為 fs32 格式（--downscale 將 R 版 Tile 降級為 24x24）
   import-fs32 <fs32檔案> <目標地圖資料夾> [--replace]
@@ -204,6 +217,62 @@ L1MapViewer CLI - S32 檔案解析工具
   L1MapViewer.exe -cli l4 map.s32 --groups
   L1MapViewer.exe -cli export map.s32 output.json
 ");
+        }
+
+        /// <summary>
+        /// test-load 命令 - 測試載入地圖（用於 debug）
+        /// </summary>
+        private static int CmdTestLoad(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: -cli test-load <client_path>");
+                Console.WriteLine();
+                Console.WriteLine("測試讀取地圖資料（用於診斷載入問題）");
+                Console.WriteLine($"Debug Log 會寫入: {DebugLog.LogPath}");
+                return 1;
+            }
+
+            string clientPath = args[0];
+            Console.WriteLine($"測試載入: {clientPath}");
+            Console.WriteLine($"Debug Log: {DebugLog.LogPath}");
+
+            DebugLog.Clear();
+            DebugLog.Log("[test-load] Starting test load...");
+
+            Share.LineagePath = clientPath;
+            Console.WriteLine($"Share.LineagePath = {Share.LineagePath}");
+            DebugLog.Log($"[test-load] Share.LineagePath = {Share.LineagePath}");
+
+            try
+            {
+                Console.WriteLine("正在讀取地圖列表...");
+                var result = L1MapHelper.Read(clientPath);
+                Console.WriteLine($"完成! 找到 {result.Count} 個地圖");
+                DebugLog.Log($"[test-load] Complete! Found {result.Count} maps");
+
+                // 列出前 10 個地圖
+                int i = 0;
+                foreach (var kvp in result)
+                {
+                    Console.WriteLine($"  {kvp.Key}: {kvp.Value.szName}");
+                    if (++i >= 10) break;
+                }
+                if (result.Count > 10)
+                {
+                    Console.WriteLine($"  ... 還有 {result.Count - 10} 個地圖");
+                }
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"錯誤: {ex.Message}");
+                Console.WriteLine(ex.StackTrace);
+                DebugLog.Log($"[test-load] ERROR: {ex.Message}");
+                DebugLog.Log($"[test-load] StackTrace: {ex.StackTrace}");
+                return 1;
+            }
         }
 
         /// <summary>
@@ -864,6 +933,420 @@ L1MapViewer CLI - S32 檔案解析工具
             }
 
             return invalidTiles.Count > 0 ? 1 : 0;
+        }
+
+        /// <summary>
+        /// validate-l5 命令 - 驗證 Layer5 的 GroupId 是否存在於同一 S32 的 Layer4 中
+        /// </summary>
+        private static int CmdValidateL5(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: -cli validate-l5 <s32檔案或地圖資料夾> [--coord x,y]");
+                Console.WriteLine();
+                Console.WriteLine("驗證 Layer5 的 GroupId (ObjectIndex) 是否存在於同一 S32 的 Layer4 中");
+                Console.WriteLine("Layer5 的透明設定必須指向同一 S32 中存在的 Layer4 群組");
+                Console.WriteLine();
+                Console.WriteLine("選項:");
+                Console.WriteLine("  --coord x,y    查詢指定遊戲座標的所有 L5 項目");
+                Console.WriteLine();
+                Console.WriteLine("範例:");
+                Console.WriteLine("  validate-l5 C:\\client\\map\\4\\7fff8000.s32");
+                Console.WriteLine("  validate-l5 C:\\client\\map\\4");
+                Console.WriteLine("  validate-l5 C:\\client\\map\\100002");
+                Console.WriteLine("  validate-l5 C:\\client\\map\\100001 --coord 33400,32832");
+                return 1;
+            }
+
+            string path = args[0];
+
+            // 檢查是否有 --coord 參數
+            int? queryX = null, queryY = null;
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (args[i] == "--coord" && i + 1 < args.Length)
+                {
+                    var parts = args[i + 1].Split(',');
+                    if (parts.Length == 2 && int.TryParse(parts[0], out int x) && int.TryParse(parts[1], out int y))
+                    {
+                        queryX = x;
+                        queryY = y;
+                    }
+                }
+            }
+
+            // 收集所有要驗證的 S32 檔案
+            List<string> s32Files = new List<string>();
+            if (File.Exists(path) && path.EndsWith(".s32", StringComparison.OrdinalIgnoreCase))
+            {
+                s32Files.Add(path);
+            }
+            else if (Directory.Exists(path))
+            {
+                s32Files.AddRange(Directory.GetFiles(path, "*.s32"));
+            }
+            else
+            {
+                Console.WriteLine($"路徑不存在: {path}");
+                return 1;
+            }
+
+            if (s32Files.Count == 0)
+            {
+                Console.WriteLine("找不到任何 S32 檔案");
+                return 1;
+            }
+
+            Console.WriteLine($"=== Layer5 GroupId 驗證 ===");
+            Console.WriteLine($"檢查路徑: {path}");
+            Console.WriteLine($"S32 檔案數: {s32Files.Count}");
+            Console.WriteLine();
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            // 第一次遍歷：收集所有 S32 的 Layer4 GroupId
+            var allLayer4GroupIds = new HashSet<int>();  // 所有 S32 的 GroupId
+            var perS32Layer4GroupIds = new Dictionary<string, HashSet<int>>();  // 每個 S32 的 GroupId
+            var s32DataCache = new Dictionary<string, (Models.S32Data data, int baseGameX, int baseGameY)>();
+
+            foreach (var filePath in s32Files)
+            {
+                var s32Data = S32Parser.ParseFile(filePath);
+                string fileName = Path.GetFileName(filePath);
+
+                // 解析檔名取得遊戲座標起點
+                int baseGameX = 0, baseGameY = 0;
+                if (s32Data.SegInfo != null)
+                {
+                    baseGameX = s32Data.SegInfo.nLinBeginX;
+                    baseGameY = s32Data.SegInfo.nLinBeginY;
+                }
+                else
+                {
+                    string name = Path.GetFileNameWithoutExtension(filePath);
+                    if (name.Length >= 8)
+                    {
+                        try
+                        {
+                            int blockX = Convert.ToInt32(name.Substring(0, 4), 16);
+                            int blockY = Convert.ToInt32(name.Substring(4, 4), 16);
+                            baseGameX = (blockX - 0x7FFF) * 64 + 0x7FFF - 64 + 1;
+                            baseGameY = (blockY - 0x7FFF) * 64 + 0x7FFF - 64 + 1;
+                        }
+                        catch { }
+                    }
+                }
+
+                s32DataCache[fileName] = (s32Data, baseGameX, baseGameY);
+
+                // 收集此 S32 的 Layer4 GroupId
+                var groupIds = new HashSet<int>();
+                foreach (var obj in s32Data.Layer4)
+                {
+                    groupIds.Add(obj.GroupId);
+                    allLayer4GroupIds.Add(obj.GroupId);
+                }
+                perS32Layer4GroupIds[fileName] = groupIds;
+            }
+
+            // 收集所有 Layer4 物件的遊戲座標 (按 GroupId 分組)
+            var layer4PositionsByGroupId = new Dictionary<int, List<(int gameX, int gameY, string fileName)>>();
+            foreach (var kvp in s32DataCache)
+            {
+                string fileName = kvp.Key;
+                var (s32Data, baseGameX, baseGameY) = kvp.Value;
+                foreach (var obj in s32Data.Layer4)
+                {
+                    int objGameX = baseGameX + obj.X / 2;
+                    int objGameY = baseGameY + obj.Y;
+                    if (!layer4PositionsByGroupId.ContainsKey(obj.GroupId))
+                        layer4PositionsByGroupId[obj.GroupId] = new List<(int, int, string)>();
+                    layer4PositionsByGroupId[obj.GroupId].Add((objGameX, objGameY, fileName));
+                }
+            }
+
+            // 計算地圖邊界
+            int mapMinX = int.MaxValue, mapMaxX = int.MinValue;
+            int mapMinY = int.MaxValue, mapMaxY = int.MinValue;
+            foreach (var kvp in s32DataCache)
+            {
+                var (s32Data, baseGameX, baseGameY) = kvp.Value;
+                // 使用 RealGameWidth/Height 計算實際邊界
+                int endX = baseGameX + s32Data.RealGameWidth - 1;
+                int endY = baseGameY + s32Data.RealGameHeight - 1;
+                if (baseGameX < mapMinX) mapMinX = baseGameX;
+                if (endX > mapMaxX) mapMaxX = endX;
+                if (baseGameY < mapMinY) mapMinY = baseGameY;
+                if (endY > mapMaxY) mapMaxY = endY;
+            }
+
+            // 錯誤記錄 - 分成多類
+            var errorsNotInSameS32 = new List<(string fileName, int l5X, int l5Y, int gameX, int gameY, int groupId, byte type, string actualS32)>();
+            var errorsNotInAnyS32 = new List<(string fileName, int l5X, int l5Y, int gameX, int gameY, int groupId, byte type)>();
+            var errorsTooFar = new List<(string fileName, int l5X, int l5Y, int gameX, int gameY, int groupId, byte type, int minDist, int nearestX, int nearestY)>();
+            var crossS32Duplicates = new List<(string fileName, int l5X, int l5Y, int gameX, int gameY, int groupId, byte type, string otherFiles)>();
+
+            const int MAX_DISTANCE = 20;  // L5 與 GroupId 物件的最大距離
+            int totalL5Items = 0;
+            int totalL4Groups = allLayer4GroupIds.Count;
+            int skippedEdgeL5 = 0;  // 跳過的邊緣 L5 數量
+
+            // 收集所有 L5 的遊戲座標，用於跨 S32 重複檢查
+            var allL5GameCoords = new Dictionary<(int gameX, int gameY), List<(string fileName, int l5X, int l5Y, int groupId, byte type)>>();
+
+            // 第二次遍歷：檢查 L5
+            foreach (var kvp in s32DataCache)
+            {
+                string fileName = kvp.Key;
+                var (s32Data, baseGameX, baseGameY) = kvp.Value;
+
+                if (s32Data.Layer5.Count == 0) continue;
+
+                var sameS32GroupIds = perS32Layer4GroupIds[fileName];
+
+                foreach (var l5Item in s32Data.Layer5)
+                {
+                    totalL5Items++;
+
+                    int gameX = baseGameX + (l5Item.X / 2);
+                    int gameY = baseGameY + l5Item.Y;
+                    int groupId = l5Item.ObjectIndex;
+
+                    // 收集到全域字典，用於跨 S32 重複檢查
+                    var gameCoord = (gameX, gameY);
+                    if (!allL5GameCoords.ContainsKey(gameCoord))
+                        allL5GameCoords[gameCoord] = new List<(string, int, int, int, byte)>();
+                    allL5GameCoords[gameCoord].Add((fileName, l5Item.X, l5Item.Y, groupId, l5Item.Type));
+
+                    // 檢查 GroupId
+                    bool inSameS32 = sameS32GroupIds.Contains(groupId);
+                    bool inAnyS32 = allLayer4GroupIds.Contains(groupId);
+
+                    if (!inSameS32 && !inAnyS32)
+                    {
+                        // GroupId 完全不存在
+                        errorsNotInAnyS32.Add((fileName, l5Item.X, l5Item.Y, gameX, gameY, groupId, l5Item.Type));
+                    }
+                    else if (!inSameS32 && inAnyS32)
+                    {
+                        // GroupId 存在於其他 S32，找出是哪些
+                        var actualS32List = perS32Layer4GroupIds
+                            .Where(kv => kv.Value.Contains(groupId))
+                            .Select(kv => kv.Key)
+                            .ToList();
+                        string actualS32 = string.Join(", ", actualS32List);
+                        errorsNotInSameS32.Add((fileName, l5Item.X, l5Item.Y, gameX, gameY, groupId, l5Item.Type, actualS32));
+                    }
+
+                    // 檢查距離：GroupId 物件是否在 ±20 格內
+                    if (inAnyS32 && layer4PositionsByGroupId.TryGetValue(groupId, out var positions))
+                    {
+                        // 邊緣檢查：如果 L5 位於地圖邊緣 ±20 格內，跳過距離驗證
+                        bool nearEdge = (gameX - mapMinX < MAX_DISTANCE) ||
+                                       (mapMaxX - gameX < MAX_DISTANCE) ||
+                                       (gameY - mapMinY < MAX_DISTANCE) ||
+                                       (mapMaxY - gameY < MAX_DISTANCE);
+
+                        if (nearEdge)
+                        {
+                            skippedEdgeL5++;
+                            continue;  // 跳過距離檢查，繼續下一個 L5
+                        }
+
+                        int minDist = int.MaxValue;
+                        int nearestX = 0, nearestY = 0;
+                        foreach (var pos in positions)
+                        {
+                            int dist = Math.Max(Math.Abs(pos.gameX - gameX), Math.Abs(pos.gameY - gameY));
+                            if (dist < minDist)
+                            {
+                                minDist = dist;
+                                nearestX = pos.gameX;
+                                nearestY = pos.gameY;
+                            }
+                        }
+                        if (minDist > MAX_DISTANCE)
+                        {
+                            errorsTooFar.Add((fileName, l5Item.X, l5Item.Y, gameX, gameY, groupId, l5Item.Type, minDist, nearestX, nearestY));
+                        }
+                    }
+                }
+            }
+
+            // 跨 S32 重複檢查
+            foreach (var kvp in allL5GameCoords)
+            {
+                var entries = kvp.Value;
+                var distinctFiles = entries.Select(e => e.fileName).Distinct().ToList();
+                if (distinctFiles.Count > 1)
+                {
+                    var gameCoord = kvp.Key;
+                    foreach (var entry in entries)
+                    {
+                        string otherFiles = string.Join(", ", distinctFiles.Where(f => f != entry.fileName));
+                        crossS32Duplicates.Add((entry.fileName, entry.l5X, entry.l5Y, gameCoord.gameX, gameCoord.gameY,
+                            entry.groupId, entry.type, otherFiles));
+                    }
+                }
+            }
+
+            sw.Stop();
+
+            // 如果指定了座標查詢，只輸出該座標的 L5
+            if (queryX.HasValue && queryY.HasValue)
+            {
+                Console.WriteLine($"=== 查詢座標 ({queryX},{queryY}) 的所有 L5 ===");
+                Console.WriteLine();
+
+                var coord = (queryX.Value, queryY.Value);
+                if (allL5GameCoords.TryGetValue(coord, out var l5List))
+                {
+                    Console.WriteLine($"找到 {l5List.Count} 個 L5 項目:");
+                    Console.WriteLine();
+                    Console.WriteLine($"{"S32檔案",-20} {"本地X",-8} {"本地Y",-8} {"GroupId",-10} {"Type",-6} {"GroupId狀態"}");
+                    Console.WriteLine(new string('-', 90));
+
+                    foreach (var l5 in l5List)
+                    {
+                        // 檢查 GroupId 狀態
+                        string status;
+                        bool inSame = perS32Layer4GroupIds[l5.fileName].Contains(l5.groupId);
+                        bool inAny = allLayer4GroupIds.Contains(l5.groupId);
+
+                        if (inSame)
+                        {
+                            status = "OK (同S32)";
+                        }
+                        else if (inAny)
+                        {
+                            var actualS32 = perS32Layer4GroupIds
+                                .Where(kv => kv.Value.Contains(l5.groupId))
+                                .Select(kv => kv.Key)
+                                .ToList();
+                            status = $"跨S32: {string.Join(", ", actualS32)}";
+                        }
+                        else
+                        {
+                            status = "不存在!";
+                        }
+
+                        Console.WriteLine($"{l5.fileName,-20} {l5.l5X,-8} {l5.l5Y,-8} {l5.groupId,-10} {l5.type,-6} {status}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"該座標沒有任何 L5 項目");
+                }
+
+                return 0;
+            }
+
+            Console.WriteLine($"驗證完成 ({sw.ElapsedMilliseconds}ms)");
+            Console.WriteLine();
+            Console.WriteLine("=== 統計 ===");
+            Console.WriteLine($"Layer5 項目數: {totalL5Items:N0}");
+            Console.WriteLine($"Layer4 群組數: {totalL4Groups:N0} (整張地圖不重複)");
+            Console.WriteLine($"地圖邊界: X={mapMinX}~{mapMaxX}, Y={mapMinY}~{mapMaxY}");
+            Console.WriteLine($"邊緣 L5 (距邊界<{MAX_DISTANCE}格，跳過距離檢查): {skippedEdgeL5:N0}");
+            Console.WriteLine();
+
+            // === 列表 1: GroupId 不在同一 S32 (但存在於其他 S32) ===
+            Console.WriteLine($"=== 列表 1: GroupId 不在同一 S32 (但存在於其他 S32) - {errorsNotInSameS32.Count} 個 ===");
+            if (errorsNotInSameS32.Count > 0)
+            {
+                Console.WriteLine($"{"L5所在檔案",-20} {"遊戲座標",-18} {"GroupId",-10} {"GroupId實際所在S32"}");
+                Console.WriteLine(new string('-', 80));
+                foreach (var item in errorsNotInSameS32.Take(50))
+                {
+                    Console.WriteLine($"{item.fileName,-20} ({item.gameX},{item.gameY})      {item.groupId,-10} {item.actualS32}");
+                }
+                if (errorsNotInSameS32.Count > 50)
+                    Console.WriteLine($"... 還有 {errorsNotInSameS32.Count - 50} 筆");
+            }
+            else
+            {
+                Console.WriteLine("(無)");
+            }
+            Console.WriteLine();
+
+            // === 列表 2: GroupId 完全不存在於任何 S32 ===
+            Console.WriteLine($"=== 列表 2: GroupId 完全不存在於任何 S32 - {errorsNotInAnyS32.Count} 個 ===");
+            if (errorsNotInAnyS32.Count > 0)
+            {
+                Console.WriteLine($"{"檔案",-20} {"遊戲座標",-18} {"GroupId",-10}");
+                Console.WriteLine(new string('-', 50));
+                foreach (var item in errorsNotInAnyS32.Take(50))
+                {
+                    Console.WriteLine($"{item.fileName,-20} ({item.gameX},{item.gameY})      {item.groupId,-10}");
+                }
+                if (errorsNotInAnyS32.Count > 50)
+                    Console.WriteLine($"... 還有 {errorsNotInAnyS32.Count - 50} 筆");
+            }
+            else
+            {
+                Console.WriteLine("(無)");
+            }
+            Console.WriteLine();
+
+            // === 列表 3: GroupId 物件距離 L5 超過 20 格 ===
+            Console.WriteLine($"=== 列表 3: GroupId 物件距離 L5 超過 {MAX_DISTANCE} 格 - {errorsTooFar.Count} 個 ===");
+            if (errorsTooFar.Count > 0)
+            {
+                Console.WriteLine($"{"檔案",-20} {"L5座標",-18} {"GroupId",-10} {"最近物件座標",-18} {"距離"}");
+                Console.WriteLine(new string('-', 80));
+                foreach (var item in errorsTooFar.Take(50))
+                {
+                    Console.WriteLine($"{item.fileName,-20} ({item.gameX},{item.gameY})      {item.groupId,-10} ({item.nearestX},{item.nearestY})      {item.minDist}");
+                }
+                if (errorsTooFar.Count > 50)
+                    Console.WriteLine($"... 還有 {errorsTooFar.Count - 50} 筆");
+            }
+            else
+            {
+                Console.WriteLine("(無)");
+            }
+            Console.WriteLine();
+
+            // === 列表 4: 跨 S32 重複 (按座標分組) ===
+            // 按座標分組統計
+            var coordGroups = allL5GameCoords
+                .Where(kv => kv.Value.Select(e => e.fileName).Distinct().Count() > 1)
+                .OrderBy(kv => kv.Key.gameX)
+                .ThenBy(kv => kv.Key.gameY)
+                .ToList();
+
+            Console.WriteLine($"=== 列表 4: 同位置多個 S32 都有 L5 - {coordGroups.Count} 個座標 ===");
+            if (coordGroups.Count > 0)
+            {
+                Console.WriteLine($"{"遊戲座標",-18} {"涉及S32檔案 (GroupId)"}");
+                Console.WriteLine(new string('-', 80));
+                foreach (var group in coordGroups.Take(50))
+                {
+                    var coord = group.Key;
+                    var entries = group.Value;
+                    // 按 S32 分組顯示
+                    var byS32 = entries.GroupBy(e => e.fileName)
+                        .Select(g => $"{g.Key}({string.Join(",", g.Select(x => x.groupId).Distinct())})")
+                        .ToList();
+                    Console.WriteLine($"({coord.gameX},{coord.gameY})      {string.Join(" | ", byS32)}");
+                }
+                if (coordGroups.Count > 50)
+                    Console.WriteLine($"... 還有 {coordGroups.Count - 50} 個座標");
+            }
+            else
+            {
+                Console.WriteLine("(無)");
+            }
+            Console.WriteLine();
+
+            int totalErrors = errorsNotInSameS32.Count + errorsNotInAnyS32.Count + errorsTooFar.Count + coordGroups.Count;
+            if (totalErrors == 0)
+            {
+                Console.WriteLine("結果: 所有 Layer5 的 GroupId 都有效，沒有發現問題。");
+                return 0;
+            }
+
+            return 1;
         }
 
         /// <summary>
@@ -1913,6 +2396,15 @@ L1MapViewer CLI - S32 檔案解析工具
             Console.WriteLine($"檔案大小: {fileInfo.Length:N0} bytes");
             Console.WriteLine($"修改時間: {fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss}");
             Console.WriteLine();
+            Console.WriteLine($"=== 邊界資訊 ===");
+            Console.WriteLine($"標準大小: {S32Data.StandardWidth} x {S32Data.StandardHeight} (Layer1 本地座標)");
+            Console.WriteLine($"實際大小: {s32.RealLocalWidth} x {s32.RealLocalHeight} (Layer1 本地座標)");
+            Console.WriteLine($"實際大小: {s32.RealGameWidth} x {s32.RealGameHeight} (遊戲座標)");
+            if (s32.RealLocalWidth > S32Data.StandardWidth || s32.RealLocalHeight > S32Data.StandardHeight)
+            {
+                Console.WriteLine($"** 有資料超出標準範圍 **");
+            }
+            Console.WriteLine();
             Console.WriteLine($"=== 各層資料統計 ===");
             Console.WriteLine($"Layer1 (地板): 64x128 = 8192 格");
             Console.WriteLine($"Layer2 (資料): {s32.Layer2.Count} 項");
@@ -2278,6 +2770,87 @@ L1MapViewer CLI - S32 檔案解析工具
             }
 
             return invalidItems.Count > 0 ? 1 : 0;
+        }
+
+        /// <summary>
+        /// l5-stats 命令 - 統計 L5 Type 分布
+        /// </summary>
+        private static int CmdLayer5Stats(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: -cli l5-stats <地圖資料夾>");
+                Console.WriteLine("  統計地圖資料夾下所有 S32 檔案中 Layer5 的 Type 分布");
+                return 1;
+            }
+
+            string path = args[0];
+            if (!Directory.Exists(path))
+            {
+                Console.WriteLine($"資料夾不存在: {path}");
+                return 1;
+            }
+
+            // 收集所有子目錄中的 S32 檔案
+            var allS32Files = new List<string>();
+            foreach (var mapDir in Directory.GetDirectories(path))
+            {
+                allS32Files.AddRange(Directory.GetFiles(mapDir, "*.s32"));
+            }
+
+            if (allS32Files.Count == 0)
+            {
+                Console.WriteLine("找不到任何 S32 檔案");
+                return 1;
+            }
+
+            Console.WriteLine($"找到 {allS32Files.Count} 個 S32 檔案，正在統計...");
+
+            // Type -> Count 的統計
+            var typeStats = new Dictionary<byte, int>();
+            int totalL5Items = 0;
+            int filesWithL5 = 0;
+
+            foreach (var filePath in allS32Files)
+            {
+                try
+                {
+                    var s32 = S32Parser.ParseFile(filePath);
+                    if (s32.Layer5.Count > 0)
+                    {
+                        filesWithL5++;
+                        foreach (var item in s32.Layer5)
+                        {
+                            totalL5Items++;
+                            if (typeStats.ContainsKey(item.Type))
+                                typeStats[item.Type]++;
+                            else
+                                typeStats[item.Type] = 1;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"警告: 無法解析 {filePath}: {ex.Message}");
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("=== L5 Type 統計 ===");
+            Console.WriteLine($"總 S32 檔案: {allS32Files.Count}");
+            Console.WriteLine($"有 L5 的檔案: {filesWithL5}");
+            Console.WriteLine($"總 L5 項目數: {totalL5Items}");
+            Console.WriteLine();
+            Console.WriteLine("Type 分布:");
+            Console.WriteLine("  Type | 數量     | 百分比");
+            Console.WriteLine("-------|----------|--------");
+            foreach (var kv in typeStats.OrderBy(x => x.Key))
+            {
+                double percent = totalL5Items > 0 ? (double)kv.Value / totalL5Items * 100 : 0;
+                Console.WriteLine($"  {kv.Key,4} | {kv.Value,8} | {percent,6:F2}%");
+            }
+
+            return 0;
         }
 
         /// <summary>
@@ -4726,7 +5299,8 @@ L1MapViewer CLI - S32 檔案解析工具
                 renderer.ClearCache();
 
                 L1MapViewer.Helper.MiniMapRenderer.RenderStats stats;
-                using (var bitmap = renderer.RenderMiniMap(mapWidth, mapHeight, targetSize, s32Files, checkedFiles, out stats))
+                L1MapViewer.Helper.MiniMapRenderer.MiniMapBounds bounds;
+                using (var bitmap = renderer.RenderMiniMap(mapWidth, mapHeight, targetSize, s32Files, checkedFiles, out stats, out bounds))
                 {
                     // 儲存第一次的結果（轉換成 24bpp 以便正常顯示）
                     if (i == 0)
@@ -5368,6 +5942,381 @@ L1MapViewer CLI - S32 檔案解析工具
         }
 
         // CmdBenchmarkCellFind, CmdBenchmarkMouseClick 已移至 Commands/BenchmarkCommands.cs
+
+        /// <summary>
+        /// test-layer8 命令 - 測試 Layer8 資料和渲染
+        /// </summary>
+        private static int CmdTestLayer8(string[] args)
+        {
+            if (args.Length < 3)
+            {
+                Console.WriteLine("用法: -cli test-layer8 <地圖資料夾> <gameX> <gameY> [--render]");
+                Console.WriteLine();
+                Console.WriteLine("範例:");
+                Console.WriteLine("  -cli test-layer8 C:\\client\\map\\4 33712 32380");
+                Console.WriteLine("  -cli test-layer8 C:\\client\\map\\4 33712 32380 --render");
+                return 1;
+            }
+
+            string mapFolder = args[0];
+            if (!int.TryParse(args[1], out int gameX) || !int.TryParse(args[2], out int gameY))
+            {
+                Console.WriteLine("錯誤: gameX 和 gameY 必須是數字");
+                return 1;
+            }
+            bool doRender = args.Any(a => a.ToLower() == "--render");
+
+            if (!Directory.Exists(mapFolder))
+            {
+                Console.WriteLine($"錯誤: 地圖資料夾不存在: {mapFolder}");
+                return 1;
+            }
+
+            // 載入地圖
+            var loadResult = MapLoader.Load(mapFolder);
+            if (!loadResult.Success) return 1;
+
+            Console.WriteLine($"載入 {loadResult.S32Files.Count} 個 S32 檔案");
+            Console.WriteLine();
+
+            // 統計 Layer8 資料
+            int totalLayer8 = 0;
+            var s32WithLayer8 = new List<S32Data>();
+
+            foreach (var s32 in loadResult.S32Files.Values)
+            {
+                if (s32.Layer8.Count > 0)
+                {
+                    totalLayer8 += s32.Layer8.Count;
+                    s32WithLayer8.Add(s32);
+                }
+            }
+
+            Console.WriteLine($"=== Layer8 統計 ===");
+            Console.WriteLine($"總 Layer8 項目數: {totalLayer8}");
+            Console.WriteLine($"有 Layer8 的 S32 數量: {s32WithLayer8.Count}");
+            Console.WriteLine();
+
+            // 找出目標座標附近的 S32
+            S32Data targetS32 = null;
+            foreach (var s32 in loadResult.S32Files.Values)
+            {
+                var seg = s32.SegInfo;
+                if (gameX >= seg.nLinBeginX && gameX <= seg.nLinEndX &&
+                    gameY >= seg.nLinBeginY && gameY <= seg.nLinEndY)
+                {
+                    targetS32 = s32;
+                    break;
+                }
+            }
+
+            if (targetS32 != null)
+            {
+                Console.WriteLine($"=== 目標 S32: {Path.GetFileName(targetS32.FilePath)} ===");
+                Console.WriteLine($"座標範圍: ({targetS32.SegInfo.nLinBeginX},{targetS32.SegInfo.nLinBeginY}) - ({targetS32.SegInfo.nLinEndX},{targetS32.SegInfo.nLinEndY})");
+                Console.WriteLine($"Layer8 項目數: {targetS32.Layer8.Count}");
+
+                if (targetS32.Layer8.Count > 0)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("Layer8 項目:");
+                    int[] loc = targetS32.SegInfo.GetLoc(1.0);
+                    int mx = loc[0];
+                    int my = loc[1];
+
+                    for (int i = 0; i < targetS32.Layer8.Count && i < 20; i++)
+                    {
+                        var item = targetS32.Layer8[i];
+                        // Layer8 X,Y 是絕對遊戲座標，轉為本地座標
+                        int localL3X = item.X - targetS32.SegInfo.nLinBeginX;
+                        int localL3Y = item.Y - targetS32.SegInfo.nLinBeginY;
+
+                        // 計算世界像素座標
+                        int layer1X = localL3X * 2;
+                        int layer1Y = localL3Y;
+                        int baseX = -24 * (layer1X / 2);
+                        int baseY = 63 * 12 - 12 * (layer1X / 2);
+                        int worldX = mx + baseX + layer1X * 24 + layer1Y * 24 + 12;
+                        int worldY = my + baseY + layer1Y * 12 + 12;
+
+                        Console.WriteLine($"  [{i}] SprId={item.SprId}, GameXY=({item.X},{item.Y}), LocalXY=({localL3X},{localL3Y}), WorldPos=({worldX},{worldY})");
+                    }
+                    if (targetS32.Layer8.Count > 20)
+                        Console.WriteLine($"  ... 還有 {targetS32.Layer8.Count - 20} 個項目");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"找不到包含座標 ({gameX},{gameY}) 的 S32");
+            }
+
+            // 列出所有有 Layer8 的 S32
+            if (s32WithLayer8.Count > 0 && s32WithLayer8.Count <= 20)
+            {
+                Console.WriteLine();
+                Console.WriteLine("=== 所有有 Layer8 的 S32 ===");
+                foreach (var s32 in s32WithLayer8)
+                {
+                    Console.WriteLine($"  {Path.GetFileName(s32.FilePath)}: {s32.Layer8.Count} 個項目");
+                    foreach (var item in s32.Layer8.Take(5))
+                    {
+                        Console.WriteLine($"    SprId={item.SprId}, X={item.X}, Y={item.Y}");
+                    }
+                    if (s32.Layer8.Count > 5)
+                        Console.WriteLine($"    ...");
+                }
+            }
+
+            // 渲染測試
+            if (doRender && targetS32 != null && targetS32.Layer8.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine("=== 渲染測試 ===");
+
+                int[] loc = targetS32.SegInfo.GetLoc(1.0);
+                int mx = loc[0];
+                int my = loc[1];
+
+                // 計算第一個 Layer8 項目的世界座標（使用正確的座標轉換）
+                var firstItem = targetS32.Layer8[0];
+                int firstLocalX = firstItem.X - targetS32.SegInfo.nLinBeginX;
+                int firstLocalY = firstItem.Y - targetS32.SegInfo.nLinBeginY;
+                int layer1X = firstLocalX * 2;
+                int layer1Y = firstLocalY;
+                int baseX = -24 * (layer1X / 2);
+                int baseY = 63 * 12 - 12 * (layer1X / 2);
+                int centerX = mx + baseX + layer1X * 24 + layer1Y * 24 + 12;
+                int centerY = my + baseY + layer1Y * 12 + 12;
+
+                Console.WriteLine($"第一個 Layer8 項目世界座標: ({centerX}, {centerY})");
+
+                // 建立一個 800x600 的測試區域
+                int testWidth = 800;
+                int testHeight = 600;
+                var worldRect = new Rectangle(centerX - testWidth / 2, centerY - testHeight / 2, testWidth, testHeight);
+                Console.WriteLine($"測試渲染區域: {worldRect}");
+
+                using (var bitmap = new Bitmap(testWidth, testHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
+                using (var g = Graphics.FromImage(bitmap))
+                {
+                    g.Clear(Color.DarkGray);
+                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+                    int drawnCount = 0;
+                    foreach (var item in targetS32.Layer8)
+                    {
+                        // 正確的座標轉換
+                        int localL3X = item.X - targetS32.SegInfo.nLinBeginX;
+                        int localL3Y = item.Y - targetS32.SegInfo.nLinBeginY;
+
+                        if (localL3X < 0 || localL3X > 63 || localL3Y < 0 || localL3Y > 63)
+                            continue;
+
+                        int l1X = localL3X * 2;
+                        int l1Y = localL3Y;
+                        int bX = -24 * (l1X / 2);
+                        int bY = 63 * 12 - 12 * (l1X / 2);
+                        int wX = mx + bX + l1X * 24 + l1Y * 24 + 12;
+                        int wY = my + bY + l1Y * 12 + 12;
+
+                        int x = wX - worldRect.X;
+                        int y = wY - worldRect.Y;
+
+                        if (x >= -20 && x < testWidth + 20 && y >= -20 && y < testHeight + 20)
+                        {
+                            g.FillEllipse(Brushes.Orange, x - 8, y - 8, 16, 16);
+                            g.DrawEllipse(Pens.White, x - 8, y - 8, 16, 16);
+                            using (var font = new Font("Arial", 8))
+                            {
+                                g.DrawString(item.SprId.ToString(), font, Brushes.White, x + 10, y - 6);
+                            }
+                            drawnCount++;
+                        }
+                    }
+
+                    Console.WriteLine($"繪製了 {drawnCount} 個 marker");
+
+                    string outputPath = Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), "tests", "layer8_test.png");
+                    Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+                    bitmap.Save(outputPath);
+                    Console.WriteLine($"輸出: {outputPath}");
+                }
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// test-layer8-click 命令 - 測試 Layer8 點擊偵測
+        /// </summary>
+        private static int CmdTestLayer8Click(string[] args)
+        {
+            if (args.Length < 3)
+            {
+                Console.WriteLine("用法: -cli test-layer8-click <地圖資料夾> <gameX> <gameY> [--simulate-click <worldX> <worldY>]");
+                Console.WriteLine();
+                Console.WriteLine("範例:");
+                Console.WriteLine("  -cli test-layer8-click C:\\client\\map\\4 33706 32382");
+                Console.WriteLine("  -cli test-layer8-click C:\\client\\map\\4 33706 32382 --simulate-click 55000 12000");
+                return 1;
+            }
+
+            string mapFolder = args[0];
+            if (!int.TryParse(args[1], out int gameX) || !int.TryParse(args[2], out int gameY))
+            {
+                Console.WriteLine("錯誤: gameX 和 gameY 必須是數字");
+                return 1;
+            }
+
+            // 解析模擬點擊座標
+            int? simClickX = null, simClickY = null;
+            for (int i = 3; i < args.Length - 2; i++)
+            {
+                if (args[i].ToLower() == "--simulate-click" &&
+                    int.TryParse(args[i + 1], out int sx) &&
+                    int.TryParse(args[i + 2], out int sy))
+                {
+                    simClickX = sx;
+                    simClickY = sy;
+                    break;
+                }
+            }
+
+            if (!Directory.Exists(mapFolder))
+            {
+                Console.WriteLine($"錯誤: 地圖資料夾不存在: {mapFolder}");
+                return 1;
+            }
+
+            // 載入地圖
+            var loadResult = MapLoader.Load(mapFolder);
+            if (!loadResult.Success) return 1;
+
+            Console.WriteLine($"載入 {loadResult.S32Files.Count} 個 S32 檔案");
+            Console.WriteLine();
+
+            // 找出目標座標的 S32
+            S32Data targetS32 = null;
+            foreach (var s32 in loadResult.S32Files.Values)
+            {
+                var seg = s32.SegInfo;
+                if (gameX >= seg.nLinBeginX && gameX <= seg.nLinEndX &&
+                    gameY >= seg.nLinBeginY && gameY <= seg.nLinEndY)
+                {
+                    targetS32 = s32;
+                    break;
+                }
+            }
+
+            if (targetS32 == null)
+            {
+                Console.WriteLine($"找不到包含座標 ({gameX},{gameY}) 的 S32");
+                return 1;
+            }
+
+            Console.WriteLine($"=== 目標 S32: {Path.GetFileName(targetS32.FilePath)} ===");
+            Console.WriteLine($"座標範圍: ({targetS32.SegInfo.nLinBeginX},{targetS32.SegInfo.nLinBeginY}) - ({targetS32.SegInfo.nLinEndX},{targetS32.SegInfo.nLinEndY})");
+            Console.WriteLine($"Layer8 項目數: {targetS32.Layer8.Count}");
+            Console.WriteLine();
+
+            if (targetS32.Layer8.Count == 0)
+            {
+                Console.WriteLine("此 S32 沒有 Layer8 資料");
+                return 0;
+            }
+
+            int[] loc = targetS32.SegInfo.GetLoc(1.0);
+            int mx = loc[0];
+            int my = loc[1];
+            Console.WriteLine($"S32 世界起點: ({mx}, {my})");
+            Console.WriteLine();
+
+            // 列出所有 Layer8 marker 位置
+            Console.WriteLine("=== Layer8 Marker 位置 ===");
+            var markerPositions = new List<(int worldX, int worldY, int index, int sprId)>();
+
+            for (int i = 0; i < targetS32.Layer8.Count; i++)
+            {
+                var item = targetS32.Layer8[i];
+                int localL3X = item.X - targetS32.SegInfo.nLinBeginX;
+                int localL3Y = item.Y - targetS32.SegInfo.nLinBeginY;
+
+                if (localL3X < 0 || localL3X > 63 || localL3Y < 0 || localL3Y > 63)
+                {
+                    Console.WriteLine($"  [{i}] 超出範圍: GameXY=({item.X},{item.Y}), LocalXY=({localL3X},{localL3Y})");
+                    continue;
+                }
+
+                int layer1X = localL3X * 2;
+                int layer1Y = localL3Y;
+                int baseX = -24 * (layer1X / 2);
+                int baseY = 63 * 12 - 12 * (layer1X / 2);
+                // 標記中心位置（+12 偏移）
+                int markerWorldX = mx + baseX + layer1X * 24 + layer1Y * 24 + 12;
+                int markerWorldY = my + baseY + layer1Y * 12 + 12;
+
+                markerPositions.Add((markerWorldX, markerWorldY, i, item.SprId));
+                Console.WriteLine($"  [{i}] SprId={item.SprId}, GameXY=({item.X},{item.Y}), MarkerWorldXY=({markerWorldX},{markerWorldY})");
+            }
+
+            Console.WriteLine();
+
+            // 模擬點擊偵測
+            if (simClickX.HasValue && simClickY.HasValue)
+            {
+                Console.WriteLine($"=== 模擬點擊偵測: ({simClickX}, {simClickY}) ===");
+                const int hitRadius = 20;
+                bool found = false;
+
+                foreach (var (markerX, markerY, index, sprId) in markerPositions)
+                {
+                    int dx = simClickX.Value - markerX;
+                    int dy = simClickY.Value - markerY;
+                    int distSq = dx * dx + dy * dy;
+                    double dist = Math.Sqrt(distSq);
+
+                    if (distSq <= hitRadius * hitRadius)
+                    {
+                        Console.WriteLine($"  HIT! Marker[{index}] SprId={sprId} at ({markerX},{markerY}), dist={dist:F1}");
+                        found = true;
+                    }
+                    else if (dist < 50) // 顯示靠近的 marker
+                    {
+                        Console.WriteLine($"  NEAR: Marker[{index}] at ({markerX},{markerY}), dist={dist:F1} (need <= {hitRadius})");
+                    }
+                }
+
+                if (!found)
+                {
+                    Console.WriteLine("  沒有命中任何 marker");
+                    Console.WriteLine();
+                    Console.WriteLine("最近的 marker:");
+                    var nearest = markerPositions
+                        .Select(m => new { m.index, m.sprId, m.worldX, m.worldY,
+                            dist = Math.Sqrt(Math.Pow(simClickX.Value - m.worldX, 2) + Math.Pow(simClickY.Value - m.worldY, 2)) })
+                        .OrderBy(x => x.dist)
+                        .Take(3)
+                        .ToList();
+                    foreach (var n in nearest)
+                    {
+                        Console.WriteLine($"    Marker[{n.index}] SprId={n.sprId} at ({n.worldX},{n.worldY}), dist={n.dist:F1}");
+                    }
+                }
+            }
+            else
+            {
+                // 自動計算應該點擊的位置
+                Console.WriteLine("=== 點擊測試座標建議 ===");
+                if (markerPositions.Count > 0)
+                {
+                    var first = markerPositions[0];
+                    Console.WriteLine($"要測試第一個 marker，使用:");
+                    Console.WriteLine($"  --simulate-click {first.worldX} {first.worldY}");
+                }
+            }
+
+            return 0;
+        }
 
         /// <summary>
         /// export-passability 命令 - 匯出地圖通行資料為 L1J/DIR 格式

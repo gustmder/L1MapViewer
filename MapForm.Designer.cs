@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
+using L1MapViewer.Controls;
+using L1MapViewer.Localization;
 using L1MapViewer.Other;
 
 namespace L1FlyMapViewer
@@ -29,6 +31,7 @@ namespace L1FlyMapViewer
         private ToolStripTextBox toolStripJumpTextBox;
         private ToolStripButton toolStripJumpButton;
         private ToolStripButton toolStripCopyMoveCmd;
+        private ToolStripButton toolStripShowAllL8;
 
         // 左側面板
         private Panel leftPanel;
@@ -57,7 +60,8 @@ namespace L1FlyMapViewer
         private ListView lvMaterials;
         private Button btnMoreMaterials;
         private Label lblGroupThumbnails;
-        private Button btnShowAllGroups;
+        private TextBox txtGroupSearch;
+        private ComboBox cmbGroupMode;
         private ListView lvGroupThumbnails;
 
         // 工具列面板（右側功能區）
@@ -75,14 +79,16 @@ namespace L1FlyMapViewer
         private Button btnToolAddS32;
         private Button btnToolClearLayer7;
         private Button btnToolClearCell;
-        private Button btnToolCheckL5Invalid;
+        private Button btnMapValidate;
         private Button btnToolCheckL1;
         private Button btnToolCheckL2;
+        private Button btnToolCheckL3;
         private Button btnToolCheckL4;
         private Button btnToolCheckL5;
         private Button btnToolCheckL6;
         private Button btnToolCheckL7;
         private Button btnToolCheckL8;
+        private Button btnEnableVisibleL8;
         private ToolTip toolTip1;
 
         // 中間 TabControl
@@ -120,6 +126,7 @@ namespace L1FlyMapViewer
         private CheckBox chkFloatLayer5;
         private CheckBox chkFloatSafeZones;
         private CheckBox chkFloatCombatZones;
+        private CheckBox chkFloatLayer8;
         private CheckBox chkShowPassable;
         private CheckBox chkShowLayer5;
         private CheckBox chkShowGrid;
@@ -130,14 +137,13 @@ namespace L1FlyMapViewer
         private Button btnRegionEdit;
         private Button btnCopyMapCoords;
         private Button btnImportFs32;
-        private Button btnSetPassable;
-        private Button btnSetImpassable;
+        private Button btnEditPassable;
         private Button btnEditLayer5;
         private Button btnSaveS32;
         private Button btnReloadMap;
         private Button btnAnalyzeAttr;
         private Panel s32MapPanel;
-        private PictureBox s32PictureBox;
+        private MapViewerControl _mapViewerControl;
         private Label lblS32Info;
 
         protected override void Dispose(bool disposing)
@@ -174,6 +180,7 @@ namespace L1FlyMapViewer
             this.toolStripJumpLabel = new ToolStripStatusLabel();
             this.toolStripJumpTextBox = new ToolStripTextBox();
             this.toolStripJumpButton = new ToolStripButton();
+            this.toolStripShowAllL8 = new ToolStripButton();
             this.toolStripCopyMoveCmd = new ToolStripButton();
 
             // 左側面板
@@ -203,7 +210,8 @@ namespace L1FlyMapViewer
             this.lvMaterials = new ListView();
             this.btnMoreMaterials = new Button();
             this.lblGroupThumbnails = new Label();
-            this.btnShowAllGroups = new Button();
+            this.txtGroupSearch = new TextBox();
+            this.cmbGroupMode = new ComboBox();
             this.lvGroupThumbnails = new ListView();
 
             // 工具列面板
@@ -221,14 +229,16 @@ namespace L1FlyMapViewer
             this.btnToolAddS32 = new Button();
             this.btnToolClearLayer7 = new Button();
             this.btnToolClearCell = new Button();
-            this.btnToolCheckL5Invalid = new Button();
+            this.btnMapValidate = new Button();
             this.btnToolCheckL1 = new Button();
             this.btnToolCheckL2 = new Button();
+            this.btnToolCheckL3 = new Button();
             this.btnToolCheckL4 = new Button();
             this.btnToolCheckL5 = new Button();
             this.btnToolCheckL6 = new Button();
             this.btnToolCheckL7 = new Button();
             this.btnToolCheckL8 = new Button();
+            this.btnEnableVisibleL8 = new Button();
             this.toolTip1 = new ToolTip();
 
             // 中間 TabControl
@@ -261,14 +271,13 @@ namespace L1FlyMapViewer
             this.btnCopyMapCoords = new Button();
             this.btnImportFs32 = new Button();
             this.btnRegionEdit = new Button();
-            this.btnSetPassable = new Button();
-            this.btnSetImpassable = new Button();
+            this.btnEditPassable = new Button();
             this.btnEditLayer5 = new Button();
             this.btnSaveS32 = new Button();
             this.btnReloadMap = new Button();
             this.btnAnalyzeAttr = new Button();
             this.s32MapPanel = new Panel();
-            this.s32PictureBox = new PictureBox();
+            this._mapViewerControl = new MapViewerControl();
             this.lblS32Info = new Label();
 
             // 浮動圖層控制面板
@@ -284,6 +293,7 @@ namespace L1FlyMapViewer
             this.chkFloatLayer5 = new CheckBox();
             this.chkFloatSafeZones = new CheckBox();
             this.chkFloatCombatZones = new CheckBox();
+            this.chkFloatLayer8 = new CheckBox();
             this.chkShowLayer5 = new CheckBox();
 
             this.menuStrip1.SuspendLayout();
@@ -294,13 +304,10 @@ namespace L1FlyMapViewer
             this.tabS32Files.SuspendLayout();
             ((ISupportInitialize)this.miniMapPictureBox).BeginInit();
             this.tabControl1.SuspendLayout();
-            this.tabMapPreview.SuspendLayout();
             this.tabS32Editor.SuspendLayout();
             this.s32EditorPanel.SuspendLayout();
             this.s32LayerControlPanel.SuspendLayout();
             this.s32MapPanel.SuspendLayout();
-            ((ISupportInitialize)this.s32PictureBox).BeginInit();
-            this.panel1.SuspendLayout();
             ((ISupportInitialize)this.pictureBox4).BeginInit();
             ((ISupportInitialize)this.pictureBox3).BeginInit();
             ((ISupportInitialize)this.pictureBox2).BeginInit();
@@ -426,6 +433,8 @@ namespace L1FlyMapViewer
             //
             this.statusStrip1.Items.AddRange(new ToolStripItem[] {
                 this.toolStripStatusLabel1,
+                this.toolStripShowAllL8,
+                new ToolStripSeparator(),
                 this.toolStripStatusLabel2,
                 this.toolStripStatusLabel3,
                 this.toolStripProgressBar1,
@@ -445,8 +454,8 @@ namespace L1FlyMapViewer
             // toolStripStatusLabel1
             //
             this.toolStripStatusLabel1.Name = "toolStripStatusLabel1";
-            this.toolStripStatusLabel1.Size = new Size(400, 17);
-            this.toolStripStatusLabel1.Text = "点击获取坐标 | Ctrl+拖拽選择範圍 | Ctrl+滾輪縮放 | S32編輯器:Ctrl+左鍵刪除單格 | Shift+拖拽批量刪除區域";
+            this.toolStripStatusLabel1.Size = new Size(300, 17);
+            this.toolStripStatusLabel1.Text = "點擊獲取座標 | Ctrl+拖拽選擇範圍 | Ctrl+滾輪縮放";
 
             //
             // toolStripStatusLabel2
@@ -491,6 +500,15 @@ namespace L1FlyMapViewer
             this.toolStripJumpButton.Size = new Size(35, 20);
             this.toolStripJumpButton.Text = "Go";
             this.toolStripJumpButton.Click += new System.EventHandler(this.toolStripJumpButton_Click);
+
+            //
+            // toolStripShowAllL8
+            //
+            this.toolStripShowAllL8.Name = "toolStripShowAllL8";
+            this.toolStripShowAllL8.Size = new Size(80, 20);
+            this.toolStripShowAllL8.Text = LocalizationManager.L("L8_ShowAllL8");
+            this.toolStripShowAllL8.ToolTipText = LocalizationManager.L("L8_ShowAllL8");
+            this.toolStripShowAllL8.Click += new System.EventHandler(this.toolStripShowAllL8_Click);
 
             //
             // toolStripCopyMoveCmd
@@ -645,18 +663,19 @@ namespace L1FlyMapViewer
             this.lstS32Files.Size = new Size(254, 305);
             this.lstS32Files.TabIndex = 3;
             this.lstS32Files.CheckOnClick = false;
+            this.lstS32Files.DrawMode = DrawMode.OwnerDrawFixed;
             this.lstS32Files.SelectedIndexChanged += new System.EventHandler(this.lstS32Files_SelectedIndexChanged);
             this.lstS32Files.ItemCheck += new ItemCheckEventHandler(this.lstS32Files_ItemCheck);
             this.lstS32Files.MouseUp += new MouseEventHandler(this.lstS32Files_MouseUp);
+            this.lstS32Files.DrawItem += new DrawItemEventHandler(this.lstS32Files_DrawItem);
 
             //
             // tabControl1
             //
-            this.tabControl1.Controls.Add(this.tabMapPreview);
             this.tabControl1.Controls.Add(this.tabS32Editor);
             this.tabControl1.Location = new Point(290, 34);
             this.tabControl1.Name = "tabControl1";
-            this.tabControl1.SelectedIndex = 1;  // 預設開啟 S32 編輯器
+            this.tabControl1.SelectedIndex = 0;  // S32 編輯器
             this.tabControl1.Size = new Size(710, 640);
             this.tabControl1.TabIndex = 3;
 
@@ -787,8 +806,7 @@ namespace L1FlyMapViewer
             this.s32LayerControlPanel.Controls.Add(this.btnCopySettings);
             this.s32LayerControlPanel.Controls.Add(this.btnCopyMapCoords);
             this.s32LayerControlPanel.Controls.Add(this.btnImportFs32);
-            this.s32LayerControlPanel.Controls.Add(this.btnSetPassable);
-            this.s32LayerControlPanel.Controls.Add(this.btnSetImpassable);
+            this.s32LayerControlPanel.Controls.Add(this.btnEditPassable);
             this.s32LayerControlPanel.Controls.Add(this.btnEditLayer5);
             this.s32LayerControlPanel.Controls.Add(this.btnRegionEdit);
             this.s32LayerControlPanel.Controls.Add(this.btnSaveS32);
@@ -955,31 +973,20 @@ namespace L1FlyMapViewer
             this.btnImportFs32.Click += new System.EventHandler(this.btnImportFs32_Click);
 
             //
-            // btnSetPassable
+            // btnEditPassable
             //
-            this.btnSetPassable.Location = new Point(10, 35);
-            this.btnSetPassable.Name = "btnSetPassable";
-            this.btnSetPassable.Size = new Size(80, 25);
-            this.btnSetPassable.TabIndex = 9;
-            this.btnSetPassable.Text = "允許通行";
-            this.btnSetPassable.UseVisualStyleBackColor = true;
-            this.btnSetPassable.Click += new System.EventHandler(this.btnSetPassable_Click);
-
-            //
-            // btnSetImpassable
-            //
-            this.btnSetImpassable.Location = new Point(100, 35);
-            this.btnSetImpassable.Name = "btnSetImpassable";
-            this.btnSetImpassable.Size = new Size(80, 25);
-            this.btnSetImpassable.TabIndex = 10;
-            this.btnSetImpassable.Text = "禁止通行";
-            this.btnSetImpassable.UseVisualStyleBackColor = true;
-            this.btnSetImpassable.Click += new System.EventHandler(this.btnSetImpassable_Click);
+            this.btnEditPassable.Location = new Point(10, 35);
+            this.btnEditPassable.Name = "btnEditPassable";
+            this.btnEditPassable.Size = new Size(80, 25);
+            this.btnEditPassable.TabIndex = 9;
+            this.btnEditPassable.Text = "通行編輯";
+            this.btnEditPassable.UseVisualStyleBackColor = true;
+            this.btnEditPassable.Click += new System.EventHandler(this.btnEditPassable_Click);
 
             //
             // btnEditLayer5
             //
-            this.btnEditLayer5.Location = new Point(190, 35);
+            this.btnEditLayer5.Location = new Point(100, 35);
             this.btnEditLayer5.Name = "btnEditLayer5";
             this.btnEditLayer5.Size = new Size(80, 25);
             this.btnEditLayer5.TabIndex = 14;
@@ -1034,10 +1041,10 @@ namespace L1FlyMapViewer
             //
             // s32MapPanel
             //
-            this.s32MapPanel.AutoScroll = true;
+            this.s32MapPanel.AutoScroll = false;
             this.s32MapPanel.BackColor = Color.Black;
             this.s32MapPanel.BorderStyle = BorderStyle.FixedSingle;
-            this.s32MapPanel.Controls.Add(this.s32PictureBox);
+            this.s32MapPanel.Controls.Add(this._mapViewerControl);
             this.s32MapPanel.Dock = DockStyle.Fill;
             this.s32MapPanel.Location = new Point(0, 65);
             this.s32MapPanel.Name = "s32MapPanel";
@@ -1045,21 +1052,13 @@ namespace L1FlyMapViewer
             this.s32MapPanel.TabIndex = 1;
 
             //
-            // s32PictureBox
+            // _mapViewerControl
             //
-            this.s32PictureBox.BackColor = Color.Black;
-            this.s32PictureBox.Location = new Point(0, 0);
-            this.s32PictureBox.Name = "s32PictureBox";
-            this.s32PictureBox.Size = new Size(100, 50);
-            this.s32PictureBox.SizeMode = PictureBoxSizeMode.AutoSize;
-            this.s32PictureBox.TabIndex = 0;
-            this.s32PictureBox.TabStop = false;
-            this.s32PictureBox.MouseClick += new MouseEventHandler(this.s32PictureBox_MouseClick);
-            this.s32PictureBox.MouseDoubleClick += new MouseEventHandler(this.s32PictureBox_MouseDoubleClick);
-            this.s32PictureBox.MouseDown += new MouseEventHandler(this.s32PictureBox_MouseDown);
-            this.s32PictureBox.MouseMove += new MouseEventHandler(this.s32PictureBox_MouseMove);
-            this.s32PictureBox.MouseUp += new MouseEventHandler(this.s32PictureBox_MouseUp);
-            this.s32PictureBox.Paint += new PaintEventHandler(this.s32PictureBox_Paint);
+            this._mapViewerControl.BackColor = Color.Black;
+            this._mapViewerControl.Dock = DockStyle.Fill;
+            this._mapViewerControl.Name = "_mapViewerControl";
+            this._mapViewerControl.TabIndex = 0;
+            this._mapViewerControl.TabStop = false;
 
             //
             // lblS32Info
@@ -1081,7 +1080,7 @@ namespace L1FlyMapViewer
             this.layerFloatPanel.Controls.Add(this.layerPopupPanel);
             this.layerFloatPanel.Location = new Point(10, 10);
             this.layerFloatPanel.Name = "layerFloatPanel";
-            this.layerFloatPanel.Size = new Size(90, 235);
+            this.layerFloatPanel.Size = new Size(90, 295);
             this.layerFloatPanel.TabIndex = 10;
             this.layerFloatPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
 
@@ -1111,10 +1110,11 @@ namespace L1FlyMapViewer
             this.layerPopupPanel.Controls.Add(this.chkFloatS32Boundary);
             this.layerPopupPanel.Controls.Add(this.chkFloatSafeZones);
             this.layerPopupPanel.Controls.Add(this.chkFloatCombatZones);
+            this.layerPopupPanel.Controls.Add(this.chkFloatLayer8);
             this.layerPopupPanel.Location = new Point(0, 24);
             this.layerPopupPanel.Name = "layerPopupPanel";
             this.layerPopupPanel.Padding = new Padding(5);
-            this.layerPopupPanel.Size = new Size(90, 211);
+            this.layerPopupPanel.Size = new Size(90, 270);
             this.layerPopupPanel.TabIndex = 1;
             this.layerPopupPanel.Visible = true;
 
@@ -1241,6 +1241,20 @@ namespace L1FlyMapViewer
             this.chkFloatCombatZones.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
 
             //
+            // chkFloatLayer8
+            //
+            this.chkFloatLayer8.AutoSize = true;
+            this.chkFloatLayer8.ForeColor = Color.FromArgb(255, 180, 100);
+            this.chkFloatLayer8.Location = new Point(8, 203);
+            this.chkFloatLayer8.Name = "chkFloatLayer8";
+            this.chkFloatLayer8.Size = new Size(80, 19);
+            this.chkFloatLayer8.TabIndex = 9;
+            this.chkFloatLayer8.Text = "L8 特效";
+            this.chkFloatLayer8.UseVisualStyleBackColor = true;
+            this.chkFloatLayer8.Checked = true;
+            this.chkFloatLayer8.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
+
+            //
             // rightPanel
             //
             this.rightPanel.BorderStyle = BorderStyle.FixedSingle;
@@ -1251,7 +1265,8 @@ namespace L1FlyMapViewer
             this.rightPanel.Controls.Add(this.lvMaterials);
             this.rightPanel.Controls.Add(this.btnMoreMaterials);
             this.rightPanel.Controls.Add(this.lblGroupThumbnails);
-            this.rightPanel.Controls.Add(this.btnShowAllGroups);
+            this.rightPanel.Controls.Add(this.txtGroupSearch);
+            this.rightPanel.Controls.Add(this.cmbGroupMode);
             this.rightPanel.Controls.Add(this.lvGroupThumbnails);
             this.rightPanel.Dock = DockStyle.Right;
             this.rightPanel.Location = new Point(1010, 24);
@@ -1314,7 +1329,7 @@ namespace L1FlyMapViewer
             this.lvMaterials.View = View.LargeIcon;
             this.lvMaterials.MultiSelect = false;
             this.lvMaterials.AllowDrop = true;
-            this.lvMaterials.DoubleClick += new System.EventHandler(this.lvMaterials_DoubleClick);
+            this.lvMaterials.MouseDoubleClick += new MouseEventHandler(this.lvMaterials_MouseDoubleClick);
             this.lvMaterials.MouseUp += new MouseEventHandler(this.lvMaterials_MouseUp);
             this.lvMaterials.DragEnter += new DragEventHandler(this.lvMaterials_DragEnter);
             this.lvMaterials.DragOver += new DragEventHandler(this.lvMaterials_DragOver);
@@ -1342,22 +1357,33 @@ namespace L1FlyMapViewer
             this.lblGroupThumbnails.TextAlign = ContentAlignment.MiddleLeft;
 
             //
-            // btnShowAllGroups
+            // cmbGroupMode
             //
-            this.btnShowAllGroups.Location = new Point(150, 335);
-            this.btnShowAllGroups.Name = "btnShowAllGroups";
-            this.btnShowAllGroups.Size = new Size(60, 20);
-            this.btnShowAllGroups.TabIndex = 6;
-            this.btnShowAllGroups.Text = "全部";
-            this.btnShowAllGroups.UseVisualStyleBackColor = true;
-            this.btnShowAllGroups.Click += new System.EventHandler(this.btnShowAllGroups_Click);
+            this.cmbGroupMode.Location = new Point(5, 358);
+            this.cmbGroupMode.Name = "cmbGroupMode";
+            this.cmbGroupMode.Size = new Size(100, 23);
+            this.cmbGroupMode.TabIndex = 8;
+            this.cmbGroupMode.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.cmbGroupMode.Items.AddRange(new object[] { "選取區域", "區域-全部", "全部" });
+            this.cmbGroupMode.SelectedIndex = 0;
+            this.cmbGroupMode.SelectedIndexChanged += new System.EventHandler(this.cmbGroupMode_SelectedIndexChanged);
+
+            //
+            // txtGroupSearch
+            //
+            this.txtGroupSearch.Location = new Point(110, 358);
+            this.txtGroupSearch.Name = "txtGroupSearch";
+            this.txtGroupSearch.Size = new Size(100, 23);
+            this.txtGroupSearch.TabIndex = 9;
+            this.txtGroupSearch.PlaceholderText = "搜尋...";
+            this.txtGroupSearch.TextChanged += new System.EventHandler(this.txtGroupSearch_TextChanged);
 
             //
             // lvGroupThumbnails
             //
-            this.lvGroupThumbnails.Location = new Point(5, 360);
+            this.lvGroupThumbnails.Location = new Point(5, 385);
             this.lvGroupThumbnails.Name = "lvGroupThumbnails";
-            this.lvGroupThumbnails.Size = new Size(210, 285);
+            this.lvGroupThumbnails.Size = new Size(210, 260);
             this.lvGroupThumbnails.TabIndex = 5;
             this.lvGroupThumbnails.View = View.LargeIcon;
             this.lvGroupThumbnails.MultiSelect = true;
@@ -1381,7 +1407,7 @@ namespace L1FlyMapViewer
             this.toolbarPanel.Controls.Add(this.btnToolAddS32);
             this.toolbarPanel.Controls.Add(this.btnToolClearLayer7);
             this.toolbarPanel.Controls.Add(this.btnToolClearCell);
-            this.toolbarPanel.Controls.Add(this.btnToolCheckL5Invalid);
+            this.toolbarPanel.Controls.Add(this.btnMapValidate);
             this.toolbarPanel.Dock = DockStyle.Left;
             this.toolbarPanel.Location = new Point(0, 0);
             this.toolbarPanel.Name = "toolbarPanel";
@@ -1394,11 +1420,13 @@ namespace L1FlyMapViewer
             this.toolbarPanel2.BorderStyle = BorderStyle.FixedSingle;
             this.toolbarPanel2.Controls.Add(this.btnToolCheckL1);
             this.toolbarPanel2.Controls.Add(this.btnToolCheckL2);
+            this.toolbarPanel2.Controls.Add(this.btnToolCheckL3);
             this.toolbarPanel2.Controls.Add(this.btnToolCheckL4);
             this.toolbarPanel2.Controls.Add(this.btnToolCheckL5);
             this.toolbarPanel2.Controls.Add(this.btnToolCheckL6);
             this.toolbarPanel2.Controls.Add(this.btnToolCheckL7);
             this.toolbarPanel2.Controls.Add(this.btnToolCheckL8);
+            this.toolbarPanel2.Controls.Add(this.btnEnableVisibleL8);
             this.toolbarPanel2.Dock = DockStyle.Left;
             this.toolbarPanel2.Location = new Point(40, 0);
             this.toolbarPanel2.Name = "toolbarPanel2";
@@ -1548,19 +1576,19 @@ namespace L1FlyMapViewer
             this.btnToolClearCell.Click += new System.EventHandler(this.btnToolClearCell_Click);
 
             //
-            // btnToolCheckL5Invalid
+            // btnMapValidate
             //
-            this.btnToolCheckL5Invalid.Location = new Point(2, 481);
-            this.btnToolCheckL5Invalid.Name = "btnToolCheckL5Invalid";
-            this.btnToolCheckL5Invalid.Size = new Size(34, 34);
-            this.btnToolCheckL5Invalid.TabIndex = 13;
-            this.btnToolCheckL5Invalid.Text = "⚠";
-            this.btnToolCheckL5Invalid.ForeColor = Color.Red;
-            this.btnToolCheckL5Invalid.Font = new Font(this.btnToolCheckL5Invalid.Font.FontFamily, 14, FontStyle.Bold);
-            this.btnToolCheckL5Invalid.UseVisualStyleBackColor = true;
-            this.btnToolCheckL5Invalid.Visible = false;  // 預設隱藏，有異常時才顯示
-            this.toolTip1.SetToolTip(this.btnToolCheckL5Invalid, "檢查 Layer5 無效的 ObjectIndex");
-            this.btnToolCheckL5Invalid.Click += new System.EventHandler(this.btnToolCheckL5Invalid_Click);
+            this.btnMapValidate.Location = new Point(2, 481);
+            this.btnMapValidate.Name = "btnMapValidate";
+            this.btnMapValidate.Size = new Size(34, 34);
+            this.btnMapValidate.TabIndex = 13;
+            this.btnMapValidate.Text = "⚠";
+            this.btnMapValidate.ForeColor = Color.Red;
+            this.btnMapValidate.Font = new Font(this.btnMapValidate.Font.FontFamily, 14, FontStyle.Bold);
+            this.btnMapValidate.UseVisualStyleBackColor = true;
+            this.btnMapValidate.Visible = false;  // 預設隱藏，有異常時才顯示
+            this.toolTip1.SetToolTip(this.btnMapValidate, "地圖驗證 (L5/Tile/L8 異常檢查)");
+            this.btnMapValidate.Click += new System.EventHandler(this.btnMapValidate_Click);
 
             //
             // btnToolCheckL1
@@ -1581,15 +1609,27 @@ namespace L1FlyMapViewer
             this.btnToolCheckL2.Name = "btnToolCheckL2";
             this.btnToolCheckL2.Size = new Size(34, 34);
             this.btnToolCheckL2.TabIndex = 11;
-            this.btnToolCheckL2.Text = "清L2";
+            this.btnToolCheckL2.Text = "查L2";
             this.btnToolCheckL2.UseVisualStyleBackColor = true;
             this.toolTip1.SetToolTip(this.btnToolCheckL2, "查看與清除第二層資料");
             this.btnToolCheckL2.Click += new System.EventHandler(this.btnToolCheckL2_Click);
 
             //
+            // btnToolCheckL3
+            //
+            this.btnToolCheckL3.Location = new Point(2, 78);
+            this.btnToolCheckL3.Name = "btnToolCheckL3";
+            this.btnToolCheckL3.Size = new Size(34, 34);
+            this.btnToolCheckL3.TabIndex = 19;
+            this.btnToolCheckL3.Text = "查L3";
+            this.btnToolCheckL3.UseVisualStyleBackColor = true;
+            this.toolTip1.SetToolTip(this.btnToolCheckL3, "查看第三層（屬性）資料");
+            this.btnToolCheckL3.Click += new System.EventHandler(this.btnToolCheckL3_Click);
+
+            //
             // btnToolCheckL4
             //
-            this.btnToolCheckL4.Location = new Point(2, 78);
+            this.btnToolCheckL4.Location = new Point(2, 116);
             this.btnToolCheckL4.Name = "btnToolCheckL4";
             this.btnToolCheckL4.Size = new Size(34, 34);
             this.btnToolCheckL4.TabIndex = 11;
@@ -1601,7 +1641,7 @@ namespace L1FlyMapViewer
             //
             // btnToolCheckL5
             //
-            this.btnToolCheckL5.Location = new Point(2, 116);
+            this.btnToolCheckL5.Location = new Point(2, 154);
             this.btnToolCheckL5.Name = "btnToolCheckL5";
             this.btnToolCheckL5.Size = new Size(34, 34);
             this.btnToolCheckL5.TabIndex = 11;
@@ -1613,7 +1653,7 @@ namespace L1FlyMapViewer
             //
             // btnToolCheckL6
             //
-            this.btnToolCheckL6.Location = new Point(2, 154);
+            this.btnToolCheckL6.Location = new Point(2, 192);
             this.btnToolCheckL6.Name = "btnToolCheckL6";
             this.btnToolCheckL6.Size = new Size(34, 34);
             this.btnToolCheckL6.TabIndex = 12;
@@ -1625,7 +1665,7 @@ namespace L1FlyMapViewer
             //
             // btnToolCheckL7
             //
-            this.btnToolCheckL7.Location = new Point(2, 192);
+            this.btnToolCheckL7.Location = new Point(2, 230);
             this.btnToolCheckL7.Name = "btnToolCheckL7";
             this.btnToolCheckL7.Size = new Size(34, 34);
             this.btnToolCheckL7.TabIndex = 13;
@@ -1637,7 +1677,7 @@ namespace L1FlyMapViewer
             //
             // btnToolCheckL8
             //
-            this.btnToolCheckL8.Location = new Point(2, 230);
+            this.btnToolCheckL8.Location = new Point(2, 268);
             this.btnToolCheckL8.Name = "btnToolCheckL8";
             this.btnToolCheckL8.Size = new Size(34, 34);
             this.btnToolCheckL8.TabIndex = 14;
@@ -1645,6 +1685,18 @@ namespace L1FlyMapViewer
             this.btnToolCheckL8.UseVisualStyleBackColor = true;
             this.toolTip1.SetToolTip(this.btnToolCheckL8, "查看哪些S32有第八層（特效）資料");
             this.btnToolCheckL8.Click += new System.EventHandler(this.btnToolCheckL8_Click);
+
+            //
+            // btnEnableVisibleL8
+            //
+            this.btnEnableVisibleL8.Location = new Point(2, 304);
+            this.btnEnableVisibleL8.Name = "btnEnableVisibleL8";
+            this.btnEnableVisibleL8.Size = new Size(34, 34);
+            this.btnEnableVisibleL8.TabIndex = 15;
+            this.btnEnableVisibleL8.Text = "啟L8";
+            this.btnEnableVisibleL8.UseVisualStyleBackColor = true;
+            this.toolTip1.SetToolTip(this.btnEnableVisibleL8, "啟用畫面中所有可見的 L8 特效");
+            this.btnEnableVisibleL8.Click += new System.EventHandler(this.btnEnableVisibleL8_Click);
 
             //
             // MapForm
@@ -1674,15 +1726,11 @@ namespace L1FlyMapViewer
             this.leftPanel.PerformLayout();
             ((ISupportInitialize)this.miniMapPictureBox).EndInit();
             this.tabControl1.ResumeLayout(false);
-            this.tabMapPreview.ResumeLayout(false);
             this.tabS32Editor.ResumeLayout(false);
             this.s32EditorPanel.ResumeLayout(false);
             this.s32LayerControlPanel.ResumeLayout(false);
             this.s32LayerControlPanel.PerformLayout();
             this.s32MapPanel.ResumeLayout(false);
-            this.s32MapPanel.PerformLayout();
-            ((ISupportInitialize)this.s32PictureBox).EndInit();
-            this.panel1.ResumeLayout(false);
             ((ISupportInitialize)this.pictureBox4).EndInit();
             ((ISupportInitialize)this.pictureBox3).EndInit();
             ((ISupportInitialize)this.pictureBox2).EndInit();
