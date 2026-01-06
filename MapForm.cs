@@ -5958,6 +5958,9 @@ namespace L1FlyMapViewer
                 int layer3X = cell.LocalX / 2;
                 if (layer3X >= 64) layer3X = 63;
 
+                // 確保座標在有效範圍內
+                if (cell.LocalY < 0 || cell.LocalY >= 64) continue;
+
                 // 確保屬性存在
                 if (cell.S32Data.Layer3[cell.LocalY, layer3X] == null)
                 {
@@ -8546,118 +8549,8 @@ namespace L1FlyMapViewer
                 byte[] tilData = tilArray[indexId];
                 if (tilData == null) return;
 
-                fixed (byte* til_ptr_fixed = tilData)
-                {
-                    byte* til_ptr = til_ptr_fixed;
-                    byte type = *(til_ptr++);
-
-                    if ((type & 0x02) == 0 && (type & 0x01) != 0)
-                    {
-                        for (int ty = 0; ty < 24; ty++)
-                        {
-                            int n = (ty <= 11) ? (ty + 1) * 2 : (23 - ty) * 2;
-                            int tx = 0;
-                            for (int p = 0; p < n; p++)
-                            {
-                                ushort color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));
-                                int startX = pixelX + tx;
-                                int startY = pixelY + ty;
-                                if (startX >= 0 && startX < maxWidth && startY >= 0 && startY < maxHeight)
-                                {
-                                    int v = startY * rowpix + (startX * 2);
-                                    *(ptr + v) = (byte)(color & 0x00FF);
-                                    *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
-                                }
-                                tx++;
-                            }
-                        }
-                    }
-                    else if ((type & 0x02) == 0 && (type & 0x01) == 0)
-                    {
-                        for (int ty = 0; ty < 24; ty++)
-                        {
-                            int n = (ty <= 11) ? (ty + 1) * 2 : (23 - ty) * 2;
-                            int tx = 24 - n;
-                            for (int p = 0; p < n; p++)
-                            {
-                                ushort color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));
-                                int startX = pixelX + tx;
-                                int startY = pixelY + ty;
-                                if (startX >= 0 && startX < maxWidth && startY >= 0 && startY < maxHeight)
-                                {
-                                    int v = startY * rowpix + (startX * 2);
-                                    *(ptr + v) = (byte)(color & 0x00FF);
-                                    *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
-                                }
-                                tx++;
-                            }
-                        }
-                    }
-                    else if (type == 34 || type == 35)
-                    {
-                        // 壓縮格式 - 需要與背景混合
-                        byte x_offset = *(til_ptr++);
-                        byte y_offset = *(til_ptr++);
-                        byte xxLen = *(til_ptr++);
-                        byte yLen = *(til_ptr++);
-
-                        for (int ty = 0; ty < yLen; ty++)
-                        {
-                            int tx = x_offset;
-                            byte xSegmentCount = *(til_ptr++);
-                            for (int nx = 0; nx < xSegmentCount; nx++)
-                            {
-                                tx += *(til_ptr++) / 2;
-                                int xLen = *(til_ptr++);
-                                for (int p = 0; p < xLen; p++)
-                                {
-                                    ushort color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));
-                                    int startX = pixelX + tx;
-                                    int startY = pixelY + ty + y_offset;
-                                    if (startX >= 0 && startX < maxWidth && startY >= 0 && startY < maxHeight)
-                                    {
-                                        int v = startY * rowpix + (startX * 2);
-                                        *(ptr + v) = (byte)(color & 0x00FF);
-                                        *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
-                                    }
-                                    tx++;
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // 其他壓縮格式
-                        byte x_offset = *(til_ptr++);
-                        byte y_offset = *(til_ptr++);
-                        byte xxLen = *(til_ptr++);
-                        byte yLen = *(til_ptr++);
-
-                        for (int ty = 0; ty < yLen; ty++)
-                        {
-                            int tx = x_offset;
-                            byte xSegmentCount = *(til_ptr++);
-                            for (int nx = 0; nx < xSegmentCount; nx++)
-                            {
-                                tx += *(til_ptr++) / 2;
-                                int xLen = *(til_ptr++);
-                                for (int p = 0; p < xLen; p++)
-                                {
-                                    ushort color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));
-                                    int startX = pixelX + tx;
-                                    int startY = pixelY + ty + y_offset;
-                                    if (startX >= 0 && startX < maxWidth && startY >= 0 && startY < maxHeight)
-                                    {
-                                        int v = startY * rowpix + (startX * 2);
-                                        *(ptr + v) = (byte)(color & 0x00FF);
-                                        *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
-                                    }
-                                    tx++;
-                                }
-                            }
-                        }
-                    }
-                }
+                // 使用 Lin.Helper.Core.L1Til 渲染，支援 type 6/7 半透明效果
+                Lin.Helper.Core.Tile.L1Til.RenderBlockDirect(tilData, pixelX, pixelY, ptr, rowpix, maxWidth, maxHeight, applyTypeAlpha: true);
             }
             catch
             {
@@ -10255,6 +10148,9 @@ namespace L1FlyMapViewer
                 // 計算第三層座標（第三層是 64x64，第一層是 64x128）
                 int layer3X = cell.LocalX / 2;
                 if (layer3X >= 64) layer3X = 63;
+
+                // 確保座標在有效範圍內
+                if (cell.LocalY < 0 || cell.LocalY >= 64) continue;
 
                 // 設定通行性屬性
                 if (cell.S32Data.Layer3[cell.LocalY, layer3X] == null)
@@ -12259,12 +12155,12 @@ namespace L1FlyMapViewer
                 if (deleteLayer1)
                 {
                     int layer1X = cell.LocalX;  // cell.LocalX 已經是 Layer3 * 2
-                    if (layer1X >= 0 && layer1X < 128)
+                    if (cell.LocalY >= 0 && cell.LocalY < 64 && layer1X >= 0 && layer1X < 128)
                     {
                         var cell1 = cell.S32Data.Layer1[cell.LocalY, layer1X];
                         if (cell1 != null && cell1.TileId > 0) layer1Count++;
                     }
-                    if (layer1X + 1 >= 0 && layer1X + 1 < 128)
+                    if (cell.LocalY >= 0 && cell.LocalY < 64 && layer1X + 1 >= 0 && layer1X + 1 < 128)
                     {
                         var cell2 = cell.S32Data.Layer1[cell.LocalY, layer1X + 1];
                         if (cell2 != null && cell2.TileId > 0) layer1Count++;
@@ -12274,7 +12170,7 @@ namespace L1FlyMapViewer
                 // Layer3 資料統計
                 if (deleteLayer3)
                 {
-                    if (layer3X >= 0 && layer3X < 64)
+                    if (cell.LocalY >= 0 && cell.LocalY < 64 && layer3X >= 0 && layer3X < 64)
                     {
                         var attr = cell.S32Data.Layer3[cell.LocalY, layer3X];
                         if (attr != null && (attr.Attribute1 != 0 || attr.Attribute2 != 0)) layer3Count++;
@@ -12489,11 +12385,11 @@ namespace L1FlyMapViewer
                     if (deleteLayer1)
                     {
                         int layer1X = cell.LocalX;
-                        if (layer1X >= 0 && layer1X < 128)
+                        if (cell.LocalY >= 0 && cell.LocalY < 64 && layer1X >= 0 && layer1X < 128)
                         {
                             cell.S32Data.Layer1[cell.LocalY, layer1X] = new TileCell { X = layer1X, Y = cell.LocalY, TileId = 0, IndexId = 0 };
                         }
-                        if (layer1X + 1 >= 0 && layer1X + 1 < 128)
+                        if (cell.LocalY >= 0 && cell.LocalY < 64 && layer1X + 1 >= 0 && layer1X + 1 < 128)
                         {
                             cell.S32Data.Layer1[cell.LocalY, layer1X + 1] = new TileCell { X = layer1X + 1, Y = cell.LocalY, TileId = 0, IndexId = 0 };
                         }
@@ -12502,7 +12398,7 @@ namespace L1FlyMapViewer
                     // 刪除 Layer3 資料（清空為預設值）
                     if (deleteLayer3)
                     {
-                        if (layer3X >= 0 && layer3X < 64)
+                        if (cell.LocalY >= 0 && cell.LocalY < 64 && layer3X >= 0 && layer3X < 64)
                         {
                             cell.S32Data.Layer3[cell.LocalY, layer3X] = new MapAttribute { Attribute1 = 0, Attribute2 = 0 };
                         }
@@ -13339,14 +13235,30 @@ namespace L1FlyMapViewer
                 previewInfo.Text = "選取項目以預覽";
                 previewPanel.Controls.Add(previewInfo);
 
+                // 按鈕面板（放在頂部）
+                Panel buttonPanel = new Panel();
+                buttonPanel.Dock = DockStyle.Top;
+                buttonPanel.Height = 30;
+
+                Button btnEdit = new Button();
+                btnEdit.Text = "編輯";
+                btnEdit.Location = new Point(5, 2);
+                btnEdit.Size = new Size(70, 25);
+                btnEdit.BackColor = Color.SteelBlue;
+                btnEdit.ForeColor = Color.White;
+                btnEdit.Enabled = false;
+                buttonPanel.Controls.Add(btnEdit);
+
                 Button btnDelete = new Button();
                 btnDelete.Text = "刪除";
-                btnDelete.Dock = DockStyle.Top;
-                btnDelete.Height = 25;
+                btnDelete.Location = new Point(80, 2);
+                btnDelete.Size = new Size(70, 25);
                 btnDelete.BackColor = Color.IndianRed;
                 btnDelete.ForeColor = Color.White;
                 btnDelete.Enabled = false;
-                previewPanel.Controls.Add(btnDelete);
+                buttonPanel.Controls.Add(btnDelete);
+
+                previewPanel.Controls.Add(buttonPanel);
 
                 splitContainer.Panel2.Controls.Add(previewPanel);
 
@@ -13358,16 +13270,27 @@ namespace L1FlyMapViewer
                         var selItem = listView.SelectedItems[0];
                         var (s32Data, obj) = ((S32Data, ObjectTile))selItem.Tag;
                         previewPb.Image = LoadTileEnlarged(obj.TileId, obj.IndexId, 120);
-                        previewInfo.Text = $"Tile:{obj.TileId} Idx:{obj.IndexId}\nL:{obj.Layer} G:{obj.GroupId}";
+                        previewInfo.Text = $"Tile:{obj.TileId} Idx:{obj.IndexId}\nL:{obj.Layer} G:{obj.GroupId} X:{obj.X} Y:{obj.Y}";
                         btnDelete.Enabled = true;
+                        btnEdit.Enabled = true;
                         btnDelete.Tag = (s32Data, obj, selItem);
+                        btnEdit.Tag = (s32Data, obj, selItem);
                     }
                     else
                     {
                         previewPb.Image = null;
                         previewInfo.Text = "選取項目以預覽";
                         btnDelete.Enabled = false;
+                        btnEdit.Enabled = false;
                     }
+                };
+
+                // 編輯按鈕
+                btnEdit.Click += (s, e) =>
+                {
+                    if (btnEdit.Tag == null) return;
+                    var (s32Data, obj, selItem) = ((S32Data, ObjectTile, ListViewItem))btnEdit.Tag;
+                    EditLayer4Object(s32Data, obj, selItem, listView, previewPb, previewInfo);
                 };
 
                 // 刪除按鈕
@@ -13387,6 +13310,7 @@ namespace L1FlyMapViewer
                         previewPb.Image = null;
                         previewInfo.Text = "已刪除";
                         btnDelete.Enabled = false;
+                        btnEdit.Enabled = false;
                         this.toolStripStatusLabel1.Text = $"已刪除物件 ({s32Name})";
                     }
                 };
@@ -13400,6 +13324,14 @@ namespace L1FlyMapViewer
                         var (s32Data, obj) = ((S32Data, ObjectTile))selItem.Tag;
 
                         var menu = new ContextMenuStrip();
+
+                        var editItem = new ToolStripMenuItem("編輯此物件");
+                        editItem.Click += (s2, e2) =>
+                        {
+                            EditLayer4Object(s32Data, obj, selItem, listView, previewPb, previewInfo);
+                        };
+                        menu.Items.Add(editItem);
+
                         var deleteItem = new ToolStripMenuItem("刪除此物件");
                         deleteItem.Click += (s2, e2) =>
                         {
@@ -13419,6 +13351,17 @@ namespace L1FlyMapViewer
                         };
                         menu.Items.Add(deleteItem);
                         menu.Show(listView, e.Location);
+                    }
+                };
+
+                // 雙擊編輯
+                listView.MouseDoubleClick += (s, e) =>
+                {
+                    if (listView.SelectedItems.Count > 0)
+                    {
+                        var selItem = listView.SelectedItems[0];
+                        var (s32Data, obj) = ((S32Data, ObjectTile))selItem.Tag;
+                        EditLayer4Object(s32Data, obj, selItem, listView, previewPb, previewInfo);
                     }
                 };
 
@@ -13443,6 +13386,78 @@ namespace L1FlyMapViewer
             }
 
             return panel;
+        }
+
+        // 編輯 L4 物件
+        private void EditLayer4Object(S32Data s32Data, ObjectTile obj, ListViewItem selItem, ListView listView, PictureBox previewPb, Label previewInfo)
+        {
+            using (var dialog = new L1MapViewer.Forms.L4EditDialog(obj, s32Data, _document.S32Files.Values))
+            {
+                if (dialog.ShowDialog() == DialogResult.OK)
+                {
+                    // 檢查是否需要移動到其他 S32
+                    var targetS32 = dialog.SelectedS32;
+                    bool s32Changed = dialog.S32Changed && targetS32 != null && targetS32 != s32Data;
+
+                    if (s32Changed)
+                    {
+                        // 從原 S32 移除
+                        s32Data.Layer4.Remove(obj);
+                        Layer4Index_Remove(s32Data, obj);
+                        s32Data.IsModified = true;
+
+                        // 更新物件屬性
+                        obj.GroupId = dialog.GroupId;
+                        obj.X = dialog.NewX;
+                        obj.Y = dialog.NewY;
+                        obj.Layer = dialog.Layer;
+                        obj.IndexId = dialog.IndexId;
+                        obj.TileId = dialog.TileId;
+
+                        // 添加到新 S32
+                        targetS32.Layer4.Add(obj);
+                        Layer4Index_Add(targetS32, obj);
+                        targetS32.IsModified = true;
+
+                        // 更新 ListView 項目
+                        string newS32Name = System.IO.Path.GetFileName(targetS32.FilePath);
+                        selItem.SubItems[1].Text = newS32Name;
+                        selItem.Tag = (targetS32, obj);
+
+                        this.toolStripStatusLabel1.Text = $"已將物件移動到 {newS32Name}";
+                    }
+                    else
+                    {
+                        // 只更新屬性
+                        obj.GroupId = dialog.GroupId;
+                        obj.X = dialog.NewX;
+                        obj.Y = dialog.NewY;
+                        obj.Layer = dialog.Layer;
+                        obj.IndexId = dialog.IndexId;
+                        obj.TileId = dialog.TileId;
+
+                        // 更新空間索引（座標可能變了）
+                        Layer4Index_Remove(s32Data, obj);
+                        Layer4Index_Add(s32Data, obj);
+                        s32Data.IsModified = true;
+
+                        this.toolStripStatusLabel1.Text = "已更新物件屬性";
+                    }
+
+                    // 更新 ListView 顯示
+                    selItem.SubItems[2].Text = obj.Layer.ToString();
+                    selItem.SubItems[3].Text = obj.GroupId.ToString();
+                    selItem.SubItems[4].Text = obj.TileId.ToString();
+                    selItem.SubItems[5].Text = obj.IndexId.ToString();
+
+                    // 更新預覽
+                    previewPb.Image = LoadTileEnlarged(obj.TileId, obj.IndexId, 120);
+                    previewInfo.Text = $"Tile:{obj.TileId} Idx:{obj.IndexId}\nL:{obj.Layer} G:{obj.GroupId} X:{obj.X} Y:{obj.Y}";
+
+                    // 重新渲染地圖
+                    RenderS32Map();
+                }
+            }
         }
 
         // 建立 Layer4 物件面板（輔助方法）

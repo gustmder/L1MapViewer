@@ -165,9 +165,10 @@ namespace L1MapViewer.Helper
             bounds.BitmapWidth = scaledWidth;
             bounds.BitmapHeight = scaledHeight;
 
-            // 決定渲染模式：超過 20 個 S32 時使用簡化渲染
+            // 決定渲染模式：超過 100 個 S32 時使用簡化渲染（取樣）
+            // 100 個以下使用完整渲染（全域 Layer 排序）
             int s32Count = checkedFiles.Count;
-            bool useSimplifiedRendering = s32Count > 20;
+            bool useSimplifiedRendering = s32Count > 100;
             stats.IsSimplified = useSimplifiedRendering;
 
             // 建立小地圖 Bitmap
