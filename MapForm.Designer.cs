@@ -15,6 +15,8 @@ namespace L1FlyMapViewer
         private ToolStripMenuItem exportToolStripMenuItem;
         private ToolStripMenuItem exportL1JToolStripMenuItem;
         private ToolStripMenuItem exportDIRToolStripMenuItem;
+        private ToolStripMenuItem exportAllL1JToolStripMenuItem;
+        private ToolStripMenuItem exportAllDIRToolStripMenuItem;
         private ToolStripMenuItem importMaterialToolStripMenuItem;
         private ToolStripMenuItem importFs32ToNewMapToolStripMenuItem;
         private ToolStripMenuItem discordToolStripMenuItem;
@@ -166,6 +168,8 @@ namespace L1FlyMapViewer
             this.exportToolStripMenuItem = new ToolStripMenuItem();
             this.exportL1JToolStripMenuItem = new ToolStripMenuItem();
             this.exportDIRToolStripMenuItem = new ToolStripMenuItem();
+            this.exportAllL1JToolStripMenuItem = new ToolStripMenuItem();
+            this.exportAllDIRToolStripMenuItem = new ToolStripMenuItem();
             this.importMaterialToolStripMenuItem = new ToolStripMenuItem();
             this.importFs32ToNewMapToolStripMenuItem = new ToolStripMenuItem();
             this.discordToolStripMenuItem = new ToolStripMenuItem();
@@ -365,7 +369,10 @@ namespace L1FlyMapViewer
             //
             this.exportToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] {
                 this.exportL1JToolStripMenuItem,
-                this.exportDIRToolStripMenuItem
+                this.exportDIRToolStripMenuItem,
+                new ToolStripSeparator(),
+                this.exportAllL1JToolStripMenuItem,
+                this.exportAllDIRToolStripMenuItem
             });
             this.exportToolStripMenuItem.Name = "exportToolStripMenuItem";
             this.exportToolStripMenuItem.Size = new Size(130, 20);
@@ -386,6 +393,22 @@ namespace L1FlyMapViewer
             this.exportDIRToolStripMenuItem.Size = new Size(100, 22);
             this.exportDIRToolStripMenuItem.Text = "DIR 格式";
             this.exportDIRToolStripMenuItem.Click += new System.EventHandler(this.exportDIRToolStripMenuItem_Click);
+
+            //
+            // exportAllL1JToolStripMenuItem
+            //
+            this.exportAllL1JToolStripMenuItem.Name = "exportAllL1JToolStripMenuItem";
+            this.exportAllL1JToolStripMenuItem.Size = new Size(180, 22);
+            this.exportAllL1JToolStripMenuItem.Text = "輸出所有地圖 (L1J)";
+            this.exportAllL1JToolStripMenuItem.Click += new System.EventHandler(this.exportAllL1JToolStripMenuItem_Click);
+
+            //
+            // exportAllDIRToolStripMenuItem
+            //
+            this.exportAllDIRToolStripMenuItem.Name = "exportAllDIRToolStripMenuItem";
+            this.exportAllDIRToolStripMenuItem.Size = new Size(180, 22);
+            this.exportAllDIRToolStripMenuItem.Text = "輸出所有地圖 (DIR)";
+            this.exportAllDIRToolStripMenuItem.Click += new System.EventHandler(this.exportAllDIRToolStripMenuItem_Click);
 
             //
             // discordToolStripMenuItem

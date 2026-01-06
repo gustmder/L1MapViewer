@@ -2640,6 +2640,304 @@ namespace L1FlyMapViewer
             return result;
         }
 
+        // 匯出所有地圖通行資料（L1J 格式）
+        private void exportAllL1JToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            ExportAllMapsPassability(isL1JFormat: true);
+        }
+
+        // 匯出所有地圖通行資料（DIR 格式）
+        private void exportAllDIRToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            ExportAllMapsPassability(isL1JFormat: false);
+        }
+
+        // 匯出所有地圖通行資料
+        private void ExportAllMapsPassability(bool isL1JFormat)
+        {
+            // 檢查是否已載入客戶端
+            if (Share.MapDataList == null || Share.MapDataList.Count == 0)
+            {
+                MessageBox.Show("請先開啟天堂客戶端！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            string formatName = isL1JFormat ? "L1J" : "DIR";
+
+            // 選擇輸出資料夾
+            using (var folderDialog = new FolderBrowserDialog())
+            {
+                folderDialog.Description = $"選擇輸出資料夾 ({formatName} 格式)";
+                folderDialog.ShowNewFolderButton = true;
+
+                if (folderDialog.ShowDialog() != DialogResult.OK)
+                    return;
+
+                string outputFolder = folderDialog.SelectedPath;
+
+                // 取得所有地圖 ID 並排序
+                var mapIds = Share.MapDataList.Keys
+                    .Where(id => int.TryParse(id, out _))
+                    .OrderBy(id => int.Parse(id))
+                    .ToList();
+
+                if (mapIds.Count == 0)
+                {
+                    MessageBox.Show("沒有找到任何地圖！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // 確認匯出
+                var result = MessageBox.Show(
+                    $"將匯出 {mapIds.Count} 張地圖的通行資料\n格式: {formatName}\n輸出至: {outputFolder}\n\n是否繼續？",
+                    "確認匯出",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+
+                if (result != DialogResult.Yes)
+                    return;
+
+                // 開始匯出
+                Utils.ShowProgressBar(true, this);
+                int successCount = 0;
+                int failCount = 0;
+                var failedMaps = new List<string>();
+
+                for (int i = 0; i < mapIds.Count; i++)
+                {
+                    string mapId = mapIds[i];
+                    this.toolStripStatusLabel1.Text = $"正在匯出 {mapId} ({i + 1}/{mapIds.Count})...";
+                    toolStripProgressBar1.Value = (int)((i + 1) * 100.0 / mapIds.Count);
+                    Application.DoEvents();
+
+                    try
+                    {
+                        // 載入地圖的 S32 檔案
+                        var mapData = Share.MapDataList[mapId];
+                        var s32Files = new Dictionary<string, S32Data>();
+
+                        Console.WriteLine($"[ExportAllMaps] 處理地圖 {mapId}, 檔案數: {mapData.FullFileNameList.Count}");
+
+                        // 收集已處理的區塊座標（用於 S32 優先）
+                        var processedBlocks = new HashSet<(int, int)>();
+
+                        // 優先處理 S32 檔案
+                        foreach (var entry in mapData.FullFileNameList)
+                        {
+                            string filePath = entry.Key;
+                            if (!File.Exists(filePath)) continue;
+                            if (!entry.Value.isS32) continue;
+
+                            try
+                            {
+                                var s32Data = S32Parser.ParseFile(filePath);
+                                if (s32Data != null)
+                                {
+                                    // 從 L1MapSeg 設定 SegInfo
+                                    var segInfo = entry.Value;
+                                    s32Data.SegInfo = new Struct.L1MapSeg(segInfo.nBlockX, segInfo.nBlockY, true);
+                                    s32Files[filePath] = s32Data;
+                                    processedBlocks.Add((entry.Value.nBlockX, entry.Value.nBlockY));
+                                }
+                            }
+                            catch
+                            {
+                                // 解析失敗，跳過此檔案
+                            }
+                        }
+
+                        // 處理 SEG 檔案（只處理沒有對應 S32 的區塊）
+                        foreach (var entry in mapData.FullFileNameList)
+                        {
+                            string filePath = entry.Key;
+                            if (!File.Exists(filePath)) continue;
+                            if (entry.Value.isS32) continue;  // 跳過 S32（已處理）
+
+                            // 檢查是否已有同位置的 S32
+                            if (processedBlocks.Contains((entry.Value.nBlockX, entry.Value.nBlockY)))
+                                continue;
+
+                            try
+                            {
+                                var s32Data = S32Parser.ParseFile(filePath);
+                                if (s32Data != null)
+                                {
+                                    // 從 L1MapSeg 設定 SegInfo
+                                    var segInfo = entry.Value;
+                                    s32Data.SegInfo = new Struct.L1MapSeg(segInfo.nBlockX, segInfo.nBlockY, false);
+                                    s32Files[filePath] = s32Data;
+                                }
+                            }
+                            catch
+                            {
+                                // 解析失敗，跳過此檔案
+                            }
+                        }
+
+                        if (s32Files.Count == 0)
+                        {
+                            failedMaps.Add($"{mapId} (無地圖檔案)");
+                            failCount++;
+                            continue;
+                        }
+
+                        // 匯出通行資料
+                        string outputPath = Path.Combine(outputFolder, $"{mapId}.txt");
+                        ExportMapDataFromS32Files(outputPath, s32Files, isL1JFormat);
+                        successCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[ExportAllMaps] 地圖 {mapId} 匯出失敗: {ex.Message}");
+                        Console.WriteLine($"[ExportAllMaps] StackTrace: {ex.StackTrace}");
+                        failedMaps.Add($"{mapId} ({ex.Message})");
+                        failCount++;
+                    }
+                }
+
+                Utils.ShowProgressBar(false, this);
+                this.toolStripStatusLabel1.Text = $"匯出完成：成功 {successCount}，失敗 {failCount}";
+
+                string message = $"匯出完成！\n\n成功: {successCount} 張地圖\n失敗: {failCount} 張地圖";
+                if (failedMaps.Count > 0 && failedMaps.Count <= 10)
+                {
+                    message += "\n\n失敗的地圖:\n" + string.Join("\n", failedMaps);
+                }
+                else if (failedMaps.Count > 10)
+                {
+                    message += $"\n\n失敗的地圖 (前10個):\n" + string.Join("\n", failedMaps.Take(10)) + $"\n...還有 {failedMaps.Count - 10} 個";
+                }
+
+                MessageBox.Show(message, "匯出結果", MessageBoxButtons.OK,
+                    failCount > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+            }
+        }
+
+        // 從 S32 檔案集合匯出通行資料（不依賴 _document）
+        private void ExportMapDataFromS32Files(string filePath, Dictionary<string, S32Data> s32Files, bool isL1JFormat)
+        {
+            // 計算維度
+            int minX = int.MaxValue, maxX = int.MinValue;
+            int minY = int.MaxValue, maxY = int.MinValue;
+
+            foreach (var s32Data in s32Files.Values)
+            {
+                if (s32Data?.SegInfo == null) continue;
+
+                int blockStartX = s32Data.SegInfo.nLinBeginX;
+                int blockStartY = s32Data.SegInfo.nLinBeginY;
+
+                minX = Math.Min(minX, blockStartX);
+                maxX = Math.Max(maxX, blockStartX + 63);
+                minY = Math.Min(minY, blockStartY);
+                maxY = Math.Max(maxY, blockStartY + 63);
+            }
+
+            // 檢查是否有有效資料
+            if (minX == int.MaxValue || maxX == int.MinValue)
+            {
+                throw new Exception("無有效的 S32 資料");
+            }
+
+            int xLength = maxX - minX + 1;
+            int yLength = maxY - minY + 1;
+            int xBegin = minX;
+            int yBegin = minY;
+
+            // 建立 tileList 陣列
+            int[,] tileList_t1 = new int[xLength, yLength];
+            int[,] tileList_t3 = new int[xLength, yLength];
+
+            // 初始化為不可通行
+            for (int x = 0; x < xLength; x++)
+            {
+                for (int y = 0; y < yLength; y++)
+                {
+                    tileList_t1[x, y] = 1;
+                    tileList_t3[x, y] = 1;
+                }
+            }
+
+            // 從 S32 資料填充 tileList
+            foreach (var s32Data in s32Files.Values)
+            {
+                if (s32Data?.SegInfo == null || s32Data.Layer3 == null) continue;
+
+                int offsetX = s32Data.SegInfo.nLinBeginX - xBegin;
+                int offsetY = s32Data.SegInfo.nLinBeginY - yBegin;
+
+                for (int ly = 0; ly < 64; ly++)
+                {
+                    for (int lx = 0; lx < 64; lx++)
+                    {
+                        var attr = s32Data.Layer3[ly, lx];
+                        if (attr == null) continue;
+
+                        int gx = offsetX + lx;
+                        int gy = offsetY + ly;
+
+                        if (gx >= 0 && gx < xLength && gy >= 0 && gy < yLength)
+                        {
+                            int attr1Value = PassabilityService.ReplaceException(attr.Attribute1);
+                            int attr2Value = PassabilityService.ReplaceException(attr.Attribute2);
+                            tileList_t1[gx, gy] = attr1Value;
+                            tileList_t3[gx, gy] = attr2Value;
+                        }
+                    }
+                }
+            }
+
+            // 計算 8 方向通行性
+            int[,] tileList = new int[xLength, yLength];
+
+            for (int x = 0; x < xLength; x++)
+            {
+                for (int y = 0; y < yLength; y++)
+                {
+                    if (x + 1 < xLength && y + 1 < yLength && x - 1 >= 0 && y - 1 >= 0)
+                    {
+                        if ((tileList_t1[x, y + 1] & 1) == 0)
+                            tileList[x, y] += 1;
+                        if ((tileList_t1[x, y] & 1) == 0)
+                            tileList[x, y] += 2;
+                        if ((tileList_t3[x - 1, y] & 1) == 0)
+                            tileList[x, y] += 4;
+                        if ((tileList_t3[x, y] & 1) == 0)
+                            tileList[x, y] += 8;
+
+                        if (PassabilityService.IsPassable_D1(tileList_t1, tileList_t3, x - 1, y + 1, xLength, yLength))
+                            tileList[x, y] += 16;
+                        if (PassabilityService.IsPassable_D3(tileList_t1, tileList_t3, x - 1, y - 1, xLength, yLength))
+                            tileList[x, y] += 32;
+                        if (PassabilityService.IsPassable_D5(tileList_t1, tileList_t3, x + 1, y - 1, xLength, yLength))
+                            tileList[x, y] += 64;
+                        if (PassabilityService.IsPassable_D7(tileList_t1, tileList_t3, x + 1, y + 1, xLength, yLength))
+                            tileList[x, y] += 128;
+
+                        tileList[x, y] += PassabilityService.GetZone(tileList_t1[x, y]);
+                    }
+                }
+            }
+
+            // 根據格式選擇輸出資料
+            int[,] outputData = isL1JFormat ? FormatL1J(tileList, xLength, yLength) : tileList;
+
+            // 寫入檔案
+            using (StreamWriter writer = new StreamWriter(filePath, false, new System.Text.UTF8Encoding(false)))
+            {
+                for (int y = 0; y < yLength; y++)
+                {
+                    StringBuilder line = new StringBuilder();
+                    for (int x = 0; x < xLength; x++)
+                    {
+                        if (x > 0) line.Append(",");
+                        line.Append(outputData[x, y]);
+                    }
+                    writer.WriteLine(line.ToString());
+                }
+            }
+        }
+
         public void LoadMap(string selectedPath)
         {
             LogPerf("[LOADMAP] Start");
