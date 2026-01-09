@@ -11527,7 +11527,7 @@ namespace L1FlyMapViewer
 
         // [JumpToLayer1Coordinate 已移至 MapForm.Coordinates.cs]
 
-        // 產生選取區域縮圖
+        // 產生選取區域縮圖 - 直接渲染 tiles，不依賴 viewport
         private Bitmap GenerateSelectionThumbnail(List<SelectedCell> cells, int maxSize)
         {
             if (cells == null || cells.Count == 0)
@@ -11535,65 +11535,136 @@ namespace L1FlyMapViewer
 
             try
             {
-                // 計算選取範圍的世界座標邊界
-                int minWorldX = int.MaxValue, minWorldY = int.MaxValue;
-                int maxWorldX = int.MinValue, maxWorldY = int.MinValue;
+                // 收集所有要繪製的 tiles (Layer1 + Layer4)
+                var tilesToDraw = new List<(int px, int py, int tileId, int indexId, int layer)>();
+
+                // 計算像素邊界
+                int pixelMinX = int.MaxValue, pixelMaxX = int.MinValue;
+                int pixelMinY = int.MaxValue, pixelMaxY = int.MinValue;
 
                 foreach (var cell in cells)
                 {
-                    int worldX = cell.S32Data.SegInfo.nLinBeginX * 2 + cell.LocalX;
-                    int worldY = cell.S32Data.SegInfo.nLinBeginY + cell.LocalY;
-                    // 轉換為像素座標
-                    int pixelX = worldX * 24;
-                    int pixelY = worldY * 24;
+                    var s32Data = cell.S32Data;
+                    int segStartX = s32Data.SegInfo.nLinBeginX * 2;
+                    int segStartY = s32Data.SegInfo.nLinBeginY;
 
-                    if (pixelX < minWorldX) minWorldX = pixelX;
-                    if (pixelY < minWorldY) minWorldY = pixelY;
-                    if (pixelX + 48 > maxWorldX) maxWorldX = pixelX + 48;
-                    if (pixelY + 24 > maxWorldY) maxWorldY = pixelY + 24;
-                }
-
-                int width = maxWorldX - minWorldX;
-                int height = maxWorldY - minWorldY;
-
-                if (width <= 0 || height <= 0)
-                    return null;
-
-                // 計算縮放比例
-                float scale = Math.Min((float)maxSize / width, (float)maxSize / height);
-                scale = Math.Min(scale, 1.0f);
-
-                int thumbWidth = (int)(width * scale);
-                int thumbHeight = (int)(height * scale);
-
-                if (thumbWidth <= 0) thumbWidth = 1;
-                if (thumbHeight <= 0) thumbHeight = 1;
-
-                // 從現有的 viewport bitmap 截取
-                var thumbnail = new Bitmap(thumbWidth, thumbHeight);
-                using (var g = Graphics.FromImage(thumbnail))
-                {
-                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
-                    g.Clear(Color.Transparent);
-
-                    // 如果有 viewport bitmap，從中截取
-                    lock (_renderCache.ViewportBitmapLock)
+                    // 處理 Layer1 (偶數和奇數 X)
+                    for (int dx = 0; dx <= 1; dx++)
                     {
-                        if (_renderCache.ViewportBitmap != null)
+                        int l1x = cell.LocalX + dx;
+                        if (l1x < 128 && cell.LocalY < 64)
                         {
-                            // 計算源區域在 viewport bitmap 中的位置
-                            int srcX = minWorldX - _viewState.RenderOriginX;
-                            int srcY = minWorldY - _viewState.RenderOriginY;
+                            var tileCell = s32Data.Layer1[cell.LocalY, l1x];
+                            if (tileCell != null && tileCell.TileId > 0)
+                            {
+                                // 計算像素座標（與渲染器相同的公式）
+                                int halfX = l1x / 2;
+                                int baseX = -24 * halfX;
+                                int baseY = 63 * 12 - 12 * halfX;
+                                int px = baseX + l1x * 24 + cell.LocalY * 24;
+                                int py = baseY + cell.LocalY * 12;
 
-                            var srcRect = new Rectangle(srcX, srcY, width, height);
-                            var destRect = new Rectangle(0, 0, thumbWidth, thumbHeight);
+                                tilesToDraw.Add((px, py, tileCell.TileId, tileCell.IndexId, 0));
 
-                            g.DrawImage(_renderCache.ViewportBitmap, destRect, srcRect, GraphicsUnit.Pixel);
+                                pixelMinX = Math.Min(pixelMinX, px);
+                                pixelMaxX = Math.Max(pixelMaxX, px + 48);
+                                pixelMinY = Math.Min(pixelMinY, py);
+                                pixelMaxY = Math.Max(pixelMaxY, py + 48);
+                            }
                         }
+                    }
+
+                    // 處理 Layer4 (obj.X 是 Layer1 座標 0-127，需要 /2 得到遊戲座標)
+                    int localGameX = cell.LocalX / 2;
+                    foreach (var obj in s32Data.Layer4.Where(o => (o.X / 2) == localGameX && o.Y == cell.LocalY))
+                    {
+                        int halfX = obj.X / 2;
+                        int baseX = -24 * halfX;
+                        int baseY = 63 * 12 - 12 * halfX;
+                        int px = baseX + obj.X * 24 + obj.Y * 24;
+                        int py = baseY + obj.Y * 12;
+
+                        tilesToDraw.Add((px, py, obj.TileId, obj.IndexId, obj.Layer));
+
+                        pixelMinX = Math.Min(pixelMinX, px);
+                        pixelMaxX = Math.Max(pixelMaxX, px + 48);
+                        pixelMinY = Math.Min(pixelMinY, py);
+                        pixelMaxY = Math.Max(pixelMaxY, py + 48);
                     }
                 }
 
-                return thumbnail;
+                if (tilesToDraw.Count == 0)
+                    return null;
+
+                // 計算實際大小
+                int margin = 4;
+                int actualWidth = pixelMaxX - pixelMinX + margin * 2;
+                int actualHeight = pixelMaxY - pixelMinY + margin * 2;
+
+                if (actualWidth <= 0 || actualHeight <= 0)
+                    return null;
+
+                // 限制暫存圖大小
+                int maxTempSize = 512;
+                float preScale = 1.0f;
+                if (actualWidth > maxTempSize || actualHeight > maxTempSize)
+                {
+                    preScale = Math.Min((float)maxTempSize / actualWidth, (float)maxTempSize / actualHeight);
+                }
+
+                int tempWidth = Math.Max((int)(actualWidth * preScale), 1);
+                int tempHeight = Math.Max((int)(actualHeight * preScale), 1);
+
+                // 建立暫存圖並渲染
+                Bitmap tempBitmap = new Bitmap(tempWidth, tempHeight, PixelFormat.Format16bppRgb555);
+                Rectangle rect = new Rectangle(0, 0, tempBitmap.Width, tempBitmap.Height);
+                BitmapData bmpData = tempBitmap.LockBits(rect, ImageLockMode.ReadWrite, tempBitmap.PixelFormat);
+                int rowpix = bmpData.Stride;
+
+                unsafe
+                {
+                    byte* ptr = (byte*)bmpData.Scan0;
+
+                    // 填充白色背景
+                    byte[] whiteLine = new byte[rowpix];
+                    for (int x = 0; x < tempWidth; x++)
+                    {
+                        whiteLine[x * 2] = 0xFF;
+                        whiteLine[x * 2 + 1] = 0x7F;
+                    }
+                    for (int y = 0; y < tempHeight; y++)
+                    {
+                        System.Runtime.InteropServices.Marshal.Copy(whiteLine, 0, (IntPtr)(ptr + y * rowpix), rowpix);
+                    }
+
+                    // 按 layer 排序後繪製
+                    var sortedTiles = tilesToDraw.OrderBy(t => t.layer).ToArray();
+                    foreach (var tile in sortedTiles)
+                    {
+                        int pixelX = (int)((tile.px - pixelMinX + margin) * preScale);
+                        int pixelY = (int)((tile.py - pixelMinY + margin) * preScale);
+                        DrawTilToBufferDirect(pixelX, pixelY, tile.tileId, tile.indexId, rowpix, ptr, tempWidth, tempHeight);
+                    }
+                }
+
+                tempBitmap.UnlockBits(bmpData);
+
+                // 縮放到目標大小
+                float finalScale = Math.Min((float)maxSize / tempWidth, (float)maxSize / tempHeight);
+                finalScale = Math.Min(finalScale, 1.0f);
+                int thumbWidth = Math.Max((int)(tempWidth * finalScale), 1);
+                int thumbHeight = Math.Max((int)(tempHeight * finalScale), 1);
+
+                Bitmap result = new Bitmap(thumbWidth, thumbHeight, PixelFormat.Format32bppArgb);
+                using (Graphics g = Graphics.FromImage(result))
+                {
+                    g.Clear(Color.White);
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
+                    g.DrawImage(tempBitmap, 0, 0, thumbWidth, thumbHeight);
+                }
+
+                tempBitmap.Dispose();
+                return result;
             }
             catch
             {
