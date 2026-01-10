@@ -1,0 +1,45 @@
+name: Discord Notifications
+
+on:
+  pull_request:
+    types: [opened, reopened]
+  issues:
+    types: [opened, reopened]
+
+env:
+  PROJECT_NAME: L1MapViewer
+
+jobs:
+  notify-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Discord PR Notification
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_DEV }}
+          nodetail: true
+          title: "🔀 新的 Pull Request"
+          description: |
+            **${{ github.event.pull_request.title }}**
+
+            👤 作者: ${{ github.event.pull_request.user.login }}
+            🔗 [查看 PR #${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }})
+          color: 0x238636
+
+  notify-issue:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Discord Issue Notification
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_DEV }}
+          nodetail: true
+          title: "📋 新的 Issue"
+          description: |
+            **${{ github.event.issue.title }}**
+
+            👤 作者: ${{ github.event.issue.user.login }}
+            🔗 [查看 Issue #${{ github.event.issue.number }}](${{ github.event.issue.html_url }})
+          color: 0xd73a49

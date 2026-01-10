@@ -79,3 +79,17 @@ jobs:
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Discord Release Notification
+      if: success()
+      uses: sarisia/actions-status-discord@v1
+      with:
+        webhook: ${{ secrets.DISCORD_WEBHOOK_RELEASE }}
+        nodetail: true
+        title: "🎉 新版本發布: ${{ steps.get_version.outputs.TAG }}"
+        description: |
+          **${{ env.PROJECT_NAME }}** 已發布新版本！
+
+          📦 [下載連結](https://github.com/${{ github.repository }}/releases/tag/${{ steps.get_version.outputs.TAG }})
+          📝 [變更紀錄](https://github.com/${{ github.repository }}/commits/${{ steps.get_version.outputs.TAG }})
+        color: 0x00ff00
