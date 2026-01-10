@@ -105,7 +105,7 @@ namespace L1MapViewer.Helper
             bounds = new MiniMapBounds();
             var totalSw = Stopwatch.StartNew();
 
-            // 先計算所有區塊的世界座標邊界
+            // 先計算所有區塊的世界座標邊界（使用所有 S32，不只是勾選的）
             int worldMinX = int.MaxValue, worldMinY = int.MaxValue;
             int worldMaxX = int.MinValue, worldMaxY = int.MinValue;
             var sortedFilePaths = Utils.SortDesc(s32Files.Keys);
@@ -114,7 +114,7 @@ namespace L1MapViewer.Helper
             {
                 string filePath = filePathObj as string;
                 if (filePath == null || !s32Files.ContainsKey(filePath)) continue;
-                if (!checkedFiles.Contains(filePath)) continue;
+                // 邊界計算包含所有 S32（不檢查 checkedFiles）
 
                 var s32Data = s32Files[filePath];
                 int[] loc = s32Data.SegInfo.GetLoc(1.0);
@@ -357,6 +357,10 @@ namespace L1MapViewer.Helper
                     drawSw.Stop();
                     totalDrawImageMs = drawSw.ElapsedMilliseconds;
                 }
+
+                // 繪製未勾選區塊的虛線邊框
+                DrawUncheckedBlockBorders(g, s32Files, checkedFiles, sortedFilePaths,
+                    worldMinX, worldMinY, scale, scaledWidth, scaledHeight);
             }
 
             totalSw.Stop();
@@ -366,6 +370,69 @@ namespace L1MapViewer.Helper
             stats.BlockCount = blockCount;
 
             return miniBitmap;
+        }
+
+        /// <summary>
+        /// 繪製未勾選區塊的虛線邊框（菱形，比照 S32 區塊形狀）
+        /// </summary>
+        private void DrawUncheckedBlockBorders(
+            Graphics g,
+            Dictionary<string, S32Data> s32Files,
+            HashSet<string> checkedFiles,
+            System.Collections.ICollection sortedFilePaths,
+            int worldMinX,
+            int worldMinY,
+            float scale,
+            int scaledWidth,
+            int scaledHeight)
+        {
+            using (var pen = new Pen(Color.FromArgb(180, 128, 128, 128), 1f))
+            {
+                pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
+                pen.DashPattern = new float[] { 4, 4 };
+
+                foreach (object filePathObj in sortedFilePaths)
+                {
+                    string filePath = filePathObj as string;
+                    if (filePath == null || !s32Files.ContainsKey(filePath)) continue;
+
+                    // 只繪製未勾選的區塊
+                    if (checkedFiles.Contains(filePath)) continue;
+
+                    var s32Data = s32Files[filePath];
+                    int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                    int blockX = loc[0] - worldMinX;
+                    int blockY = loc[1] - worldMinY;
+
+                    // 計算縮放後的位置和大小
+                    float destX = blockX * scale;
+                    float destY = blockY * scale;
+                    float destW = BlockWidth * scale;
+                    float destH = BlockHeight * scale;
+
+                    // 確保在可見範圍內
+                    if (destX + destW < 0 || destY + destH < 0 || destX > scaledWidth || destY > scaledHeight)
+                        continue;
+
+                    // 繪製菱形邊框（S32 區塊是菱形的 isometric 投影）
+                    // 菱形四個角點：上、右、下、左
+                    float centerX = destX + destW / 2;
+                    float centerY = destY + destH / 2;
+                    float halfW = destW / 2;
+                    float halfH = destH / 2;
+
+                    PointF top = new PointF(centerX, destY);           // 上角
+                    PointF right = new PointF(destX + destW, centerY); // 右角
+                    PointF bottom = new PointF(centerX, destY + destH); // 下角
+                    PointF left = new PointF(destX, centerY);          // 左角
+
+                    // 繪製菱形四條邊
+                    g.DrawLine(pen, top, right);
+                    g.DrawLine(pen, right, bottom);
+                    g.DrawLine(pen, bottom, left);
+                    g.DrawLine(pen, left, top);
+                }
+            }
         }
 
         /// <summary>

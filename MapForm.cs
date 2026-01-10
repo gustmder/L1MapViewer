@@ -4339,6 +4339,15 @@ namespace L1FlyMapViewer
             deleteS32Item.Click += (s, args) => DeleteS32File(item);
             menu.Items.Add(deleteS32Item);
 
+            // 刪除已勾選的所有區塊
+            if (checkedCount > 0)
+            {
+                ToolStripMenuItem deleteCheckedItem = new ToolStripMenuItem($"⚠ 刪除已勾選的 {checkedCount} 個區塊...");
+                deleteCheckedItem.ForeColor = Color.Red;
+                deleteCheckedItem.Click += (s, args) => DeleteCheckedS32Files();
+                menu.Items.Add(deleteCheckedItem);
+            }
+
             menu.Show(lstS32Files, e.Location);
         }
 
@@ -4496,6 +4505,122 @@ namespace L1FlyMapViewer
                     "刪除完成",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"刪除檔案時發生錯誤：\n{ex.Message}",
+                    "錯誤",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+
+        // 刪除已勾選的所有 S32 檔案（危險操作）
+        private void DeleteCheckedS32Files()
+        {
+            // 收集已勾選的項目
+            var checkedItems = new List<S32FileItem>();
+            for (int i = 0; i < lstS32Files.Items.Count; i++)
+            {
+                if (lstS32Files.GetItemChecked(i) && lstS32Files.Items[i] is S32FileItem item)
+                {
+                    checkedItems.Add(item);
+                }
+            }
+
+            if (checkedItems.Count == 0)
+            {
+                MessageBox.Show("沒有已勾選的 S32 檔案", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 建立檔案名稱清單（最多顯示 10 個）
+            string fileListPreview = "";
+            int showCount = Math.Min(checkedItems.Count, 10);
+            for (int i = 0; i < showCount; i++)
+            {
+                fileListPreview += $"• {Path.GetFileName(checkedItems[i].FilePath)}\n";
+            }
+            if (checkedItems.Count > 10)
+            {
+                fileListPreview += $"... 還有 {checkedItems.Count - 10} 個\n";
+            }
+
+            // 第一次確認
+            var result1 = MessageBox.Show(
+                $"⚠ 警告：這是危險操作！\n\n" +
+                $"確定要刪除以下 {checkedItems.Count} 個區塊嗎？\n\n" +
+                $"{fileListPreview}\n" +
+                $"這將從地圖中移除這些區塊，並刪除磁碟上的檔案。\n\n" +
+                $"此操作無法復原！",
+                "⚠ 危險操作確認",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+
+            if (result1 != DialogResult.Yes)
+                return;
+
+            // 第二次確認
+            var result2 = MessageBox.Show(
+                $"⚠ 最後確認！\n\n" +
+                $"真的要刪除這 {checkedItems.Count} 個區塊嗎？\n\n" +
+                $"請輸入 [是] 繼續執行。",
+                "⚠ 最終確認",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Stop,
+                MessageBoxDefaultButton.Button2);
+
+            if (result2 != DialogResult.Yes)
+                return;
+
+            try
+            {
+                int deletedCount = 0;
+                var errors = new List<string>();
+
+                foreach (var item in checkedItems)
+                {
+                    try
+                    {
+                        // 從記憶體中移除
+                        _document.S32Files.Remove(item.FilePath);
+                        _checkedS32Files.Remove(item.FilePath);
+
+                        // 刪除磁碟上的檔案
+                        if (File.Exists(item.FilePath))
+                        {
+                            File.Delete(item.FilePath);
+                        }
+
+                        deletedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add($"{Path.GetFileName(item.FilePath)}: {ex.Message}");
+                    }
+                }
+
+                // 重新載入地圖
+                ReloadCurrentMap();
+
+                // 顯示結果
+                string resultMessage = $"已刪除 {deletedCount} 個區塊。";
+                if (errors.Count > 0)
+                {
+                    resultMessage += $"\n\n以下 {errors.Count} 個檔案刪除失敗：\n" + string.Join("\n", errors.Take(5));
+                    if (errors.Count > 5)
+                    {
+                        resultMessage += $"\n... 還有 {errors.Count - 5} 個錯誤";
+                    }
+                }
+
+                MessageBox.Show(
+                    resultMessage,
+                    "刪除完成",
+                    MessageBoxButtons.OK,
+                    errors.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
@@ -5610,7 +5735,9 @@ namespace L1FlyMapViewer
                 {
                     this.BeginInvoke((MethodInvoker)delegate
                     {
+                        SyncCheckedS32FilesToDocument();
                         RenderS32Map();
+                        UpdateMiniMap();
                     });
                 }
             }
@@ -5628,7 +5755,9 @@ namespace L1FlyMapViewer
                 lstS32Files.SetItemChecked(i, true);
             }
             _isBatchCheckUpdate = false;
+            SyncCheckedS32FilesToDocument();
             RenderS32Map();
+            UpdateMiniMap();
         }
 
         // 全不選 S32 檔案
@@ -5640,7 +5769,9 @@ namespace L1FlyMapViewer
                 lstS32Files.SetItemChecked(i, false);
             }
             _isBatchCheckUpdate = false;
+            SyncCheckedS32FilesToDocument();
             RenderS32Map();
+            UpdateMiniMap();
         }
 
         // 純粹的 S32 檔案解析方法（不涉及 UI）
