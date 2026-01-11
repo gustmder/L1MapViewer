@@ -23016,8 +23016,8 @@ namespace L1FlyMapViewer
 
             // 建立 TabControl
             TabControl tabControl = new TabControl();
-            tabControl.SetLocation(new Point(10, 115));
-            tabControl.Size = new Size(810, 330);
+            tabControl.SetLocation(new Point(10, 125));
+            tabControl.Size = new Size(810, 320);
 
             TabPage tabAll = new TabPage(string.Format(LocalizationManager.L("L8_TabAll"), s32WithL8All.Count));
             TabPage tabSelected = new TabPage(string.Format(LocalizationManager.L("L8_TabSelected"), s32WithL8Selected.Count));
@@ -23179,8 +23179,8 @@ namespace L1FlyMapViewer
             // 預覽區域 (右側)
             GroupBox gbPreview = new GroupBox();
             gbPreview.Text = LocalizationManager.L("L8_Preview");
-            gbPreview.SetLocation(new Point(640, 115));
-            gbPreview.Size = new Size(180, 330);
+            gbPreview.SetLocation(new Point(640, 125));
+            gbPreview.Size = new Size(180, 320);
             resultForm.GetControls().Add(gbPreview);
 
             PictureBox pbPreview = new PictureBox();
@@ -23244,7 +23244,7 @@ namespace L1FlyMapViewer
             };
 
             // 調整 TabControl 大小以容納預覽區
-            tabControl.Size = new Size(620, 330);
+            tabControl.Size = new Size(620, 320);
             resultForm.GetControls().Add(tabControl);
 
             // 目前作用中的 ListView（用於編輯操作）
@@ -23263,7 +23263,7 @@ namespace L1FlyMapViewer
             GroupBox gbExtended = new GroupBox();
             gbExtended.Text = LocalizationManager.L("L8_ExtendedSettings");
             gbExtended.SetLocation(new Point(10, 35));
-            gbExtended.Size = new Size(810, 75);
+            gbExtended.Size = new Size(810, 85);
 
             Label lblExtendedInfo = new Label();
             lblExtendedInfo.Text = LocalizationManager.L("L8_ExtendedInfo");
@@ -23614,7 +23614,7 @@ namespace L1FlyMapViewer
             GroupBox gbEdit = new GroupBox();
             gbEdit.Text = LocalizationManager.L("L8_EditSection");
             gbEdit.SetLocation(new Point(10, 455));
-            gbEdit.Size = new Size(810, 80);
+            gbEdit.Size = new Size(810, 75);
 
             Label lblSprId = new Label { Text = "SprId:", Size = new Size(45, 20) };
             lblSprId.SetLocation(new Point(10, 28));
@@ -23781,8 +23781,8 @@ namespace L1FlyMapViewer
             // 批次取代區域
             GroupBox gbBatchReplace = new GroupBox();
             gbBatchReplace.Text = LocalizationManager.L("L8_BatchReplace");
-            gbBatchReplace.SetLocation(new Point(10, 540));
-            gbBatchReplace.Size = new Size(500, 50);
+            gbBatchReplace.SetLocation(new Point(10, 535));
+            gbBatchReplace.Size = new Size(500, 55);
 
             Label lblFromSpr = new Label { Text = LocalizationManager.L("L8_FromSprId"), Size = new Size(60, 20) };
             lblFromSpr.SetLocation(new Point(10, 20));
@@ -23898,7 +23898,7 @@ namespace L1FlyMapViewer
             resultForm.GetControls().Add(gbBatchReplace);
 
             // 調整表單高度以容納批次取代區域
-            resultForm.Size = new Size(850, 730);
+            resultForm.Size = new Size(850, 720);
 
             // 選取項目時填入編輯區（為兩個 ListView 都註冊事件）
             void OnListViewSelectionChanged(object sender, EventArgs args)
@@ -23919,8 +23919,8 @@ namespace L1FlyMapViewer
 
             Button btnSelectAll = new Button();
             btnSelectAll.Text = LocalizationManager.L("L8_SelectAll");
-            btnSelectAll.SetLocation(new Point(10, 600));
-            btnSelectAll.Size = new Size(80, 30);
+            btnSelectAll.SetLocation(new Point(10, 595));
+            btnSelectAll.Size = new Size(80, 28);
             btnSelectAll.Click += (s, args) =>
             {
                 ListView currentLv = tabControl.SelectedIndex == 0 ? lvAll : lvSelected;
@@ -23931,8 +23931,8 @@ namespace L1FlyMapViewer
 
             Button btnDeselectAll = new Button();
             btnDeselectAll.Text = LocalizationManager.L("L8_DeselectAll");
-            btnDeselectAll.SetLocation(new Point(100, 600));
-            btnDeselectAll.Size = new Size(80, 30);
+            btnDeselectAll.SetLocation(new Point(100, 595));
+            btnDeselectAll.Size = new Size(80, 28);
             btnDeselectAll.Click += (s, args) =>
             {
                 ListView currentLv = tabControl.SelectedIndex == 0 ? lvAll : lvSelected;
@@ -23943,8 +23943,8 @@ namespace L1FlyMapViewer
 
             Button btnClearSelected = new Button();
             btnClearSelected.Text = LocalizationManager.L("L8_DeleteChecked");
-            btnClearSelected.SetLocation(new Point(10, 640));
-            btnClearSelected.Size = new Size(120, 35);
+            btnClearSelected.SetLocation(new Point(10, 630));
+            btnClearSelected.Size = new Size(120, 32);
             btnClearSelected.BackgroundColor = WinFormsColors.LightCoral;
             btnClearSelected.Enabled = s32WithL8.Count > 0;
             btnClearSelected.Click += (s, args) =>
@@ -23999,8 +23999,8 @@ namespace L1FlyMapViewer
 
             Button btnClearAll = new Button();
             btnClearAll.Text = LocalizationManager.L("L8_DeleteAll");
-            btnClearAll.SetLocation(new Point(140, 640));
-            btnClearAll.Size = new Size(120, 35);
+            btnClearAll.SetLocation(new Point(140, 630));
+            btnClearAll.Size = new Size(120, 32);
             btnClearAll.BackgroundColor = WinFormsColors.Salmon;
             btnClearAll.Enabled = s32WithL8.Count > 0;
             btnClearAll.Click += (s, args) =>
@@ -24034,8 +24034,8 @@ namespace L1FlyMapViewer
 
             Button btnClose = new Button();
             btnClose.Text = LocalizationManager.L("L8_Close");
-            btnClose.SetLocation(new Point(730, 640));
-            btnClose.Size = new Size(90, 35);
+            btnClose.SetLocation(new Point(730, 630));
+            btnClose.Size = new Size(90, 32);
             btnClose.Click += (s, args) => resultForm.Close();
             resultForm.GetControls().Add(btnClose);
 
