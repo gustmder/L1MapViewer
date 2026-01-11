@@ -4571,6 +4571,10 @@ public static class FontExtensions
 
     public static Eto.Drawing.Font CreateFont(Eto.Drawing.Font baseFont, Eto.Drawing.FontStyle style)
     {
+        if (baseFont == null)
+        {
+            return new Eto.Drawing.Font(Eto.Drawing.SystemFonts.Default().Family, 9, style);
+        }
         return new Eto.Drawing.Font(baseFont.Family, baseFont.Size, style);
     }
 }

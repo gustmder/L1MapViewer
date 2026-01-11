@@ -21,6 +21,7 @@ using L1MapViewer.Reader;
 using Lin.Helper.Core.Sprite;
 using Lin.Helper.Core.Pak;
 using L1MapViewer.Compatibility;
+using flyworld.eto.component;
 
 namespace L1FlyMapViewer
 {
@@ -556,6 +557,88 @@ namespace L1FlyMapViewer
         }
 
         /// <summary>
+        /// 圖層面板的 ColoredCheckBox 列表
+        /// </summary>
+        private List<ColoredCheckBox> _layerColoredCheckBoxes;
+
+        /// <summary>
+        /// 創建自繪圖層面板
+        /// </summary>
+        private Eto.Forms.Panel CreateCustomLayerPanel()
+        {
+            // 創建 ColoredCheckBox 並綁定到原有的 CheckBox
+            _layerColoredCheckBoxes = new List<ColoredCheckBox>();
+
+            var layerConfigs = new[]
+            {
+                (text: "L1 地板", color: Eto.Drawing.Colors.White, chk: chkFloatLayer1),
+                (text: "L2", color: Eto.Drawing.Colors.LightGrey, chk: chkFloatLayer2),
+                (text: "L4 物件", color: Eto.Drawing.Colors.White, chk: chkFloatLayer4),
+                (text: "L5 透明", color: Eto.Drawing.Color.FromArgb(100, 180, 255), chk: chkFloatLayer5),
+                (text: "通行", color: Eto.Drawing.Colors.LightGreen, chk: chkFloatPassable),
+                (text: "格線", color: Eto.Drawing.Colors.LightBlue, chk: chkFloatGrid),
+                (text: "S32邊界", color: Eto.Drawing.Colors.Orange, chk: chkFloatS32Boundary),
+                (text: "安全區", color: Eto.Drawing.Color.FromArgb(100, 180, 255), chk: chkFloatSafeZones),
+                (text: "戰鬥區", color: Eto.Drawing.Color.FromArgb(255, 100, 100), chk: chkFloatCombatZones),
+                (text: "L8 特效", color: Eto.Drawing.Color.FromArgb(255, 180, 100), chk: chkFloatLayer8),
+            };
+
+            var stackLayout = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Vertical,
+                Spacing = 5,
+                Padding = new Eto.Drawing.Padding(8, 8, 8, 10)
+            };
+
+            // 標題
+            var titleLabel = new Eto.Forms.Label
+            {
+                Text = "▣ 圖層",
+                TextColor = Eto.Drawing.Colors.White,
+                Font = new Eto.Drawing.Font(Eto.Drawing.SystemFont.Bold, 10)
+            };
+            stackLayout.Items.Add(titleLabel);
+
+            // 添加每個 ColoredCheckBox
+            foreach (var config in layerConfigs)
+            {
+                var coloredChk = new ColoredCheckBox
+                {
+                    Text = config.text,
+                    TextColor = config.color,
+                    Checked = config.chk.Checked == true
+                };
+
+                // 雙向綁定：ColoredCheckBox -> 原 CheckBox
+                coloredChk.CheckedChanged += (s, e) =>
+                {
+                    config.chk.Checked = coloredChk.Checked;
+                };
+
+                // 原 CheckBox -> ColoredCheckBox (如果其他地方修改了原 CheckBox)
+                config.chk.CheckedChanged += (s, e) =>
+                {
+                    if (coloredChk.Checked != (config.chk.Checked == true))
+                    {
+                        coloredChk.Checked = config.chk.Checked == true;
+                    }
+                };
+
+                _layerColoredCheckBoxes.Add(coloredChk);
+                stackLayout.Items.Add(coloredChk);
+            }
+
+            // 外層 Panel 提供背景色 (黑色)
+            var panel = new Eto.Forms.Panel
+            {
+                Content = stackLayout,
+                BackgroundColor = Eto.Drawing.Colors.Black
+            };
+
+            return panel;
+        }
+
+        /// <summary>
         /// 使用 Eto.Forms 原生布局重建主介面
         /// </summary>
         private void BuildEtoLayout()
@@ -654,35 +737,8 @@ namespace L1FlyMapViewer
             toolbarLayout.Items.Add(toolRow2);
 
             // 地圖顯示區域 (包含 MapViewerControl 和浮動圖層面板)
-            // 使用原生 Eto.Forms 重建圖層面板
-            var etoLayerPanel = new Eto.Forms.StackLayout
-            {
-                Orientation = Eto.Forms.Orientation.Vertical,
-                Spacing = 2,
-                Padding = new Eto.Drawing.Padding(5),
-                BackgroundColor = Eto.Drawing.Color.FromArgb(200, 40, 40, 40)
-            };
-
-            // 圖層標題
-            var layerHeader = new Eto.Forms.Label
-            {
-                Text = "圖層",
-                TextColor = Eto.Drawing.Colors.Yellow,
-                Font = new Eto.Drawing.Font(Eto.Drawing.SystemFont.Bold, 10)
-            };
-            etoLayerPanel.Items.Add(layerHeader);
-
-            // 添加圖層 CheckBox（使用原有的 chkFloatLayer 控件，它們已經有事件綁定）
-            etoLayerPanel.Items.Add(chkFloatLayer1);
-            etoLayerPanel.Items.Add(chkFloatLayer2);
-            etoLayerPanel.Items.Add(chkFloatLayer4);
-            etoLayerPanel.Items.Add(chkFloatLayer5);
-            etoLayerPanel.Items.Add(chkFloatPassable);
-            etoLayerPanel.Items.Add(chkFloatGrid);
-            etoLayerPanel.Items.Add(chkFloatS32Boundary);
-            etoLayerPanel.Items.Add(chkFloatSafeZones);
-            etoLayerPanel.Items.Add(chkFloatCombatZones);
-            etoLayerPanel.Items.Add(chkFloatLayer8);
+            // 使用 Drawable 自繪圖層面板以確保顏色正確顯示
+            var etoLayerPanel = CreateCustomLayerPanel();
 
             // 使用 PixelLayout 來支援圖層面板的絕對定位
             var mapPixelLayout = new Eto.Forms.PixelLayout();
@@ -716,30 +772,57 @@ namespace L1FlyMapViewer
             };
 
             // === 右側面板 (工具按鈕 + Tile 列表) ===
-            // 工具按鈕列
-            var toolBtnLayout = new Eto.Forms.StackLayout
+            // 工具按鈕列 (第一欄 - 編輯工具)
+            var toolBtnCol1 = new Eto.Forms.StackLayout
             {
                 Orientation = Eto.Forms.Orientation.Vertical,
                 HorizontalContentAlignment = Eto.Forms.HorizontalAlignment.Stretch,
                 Spacing = 2,
-                Padding = new Eto.Drawing.Padding(3)
+                Padding = new Eto.Drawing.Padding(2)
             };
-            toolBtnLayout.Items.Add(btnToolCopy);
-            toolBtnLayout.Items.Add(btnToolPaste);
-            toolBtnLayout.Items.Add(btnToolUndo);
-            toolBtnLayout.Items.Add(btnToolRedo);
-            toolBtnLayout.Items.Add(btnToolCheckL1);
-            toolBtnLayout.Items.Add(btnToolCheckL2);
-            toolBtnLayout.Items.Add(btnToolCheckL3);
-            toolBtnLayout.Items.Add(btnToolCheckL4);
-            toolBtnLayout.Items.Add(btnToolCheckL5);
-            toolBtnLayout.Items.Add(btnToolCheckL6);
-            toolBtnLayout.Items.Add(btnToolCheckL7);
-            toolBtnLayout.Items.Add(btnToolCheckL8);
-            toolBtnLayout.Items.Add(btnEnableVisibleL8);
-            toolBtnLayout.Items.Add(btnViewClipboard);
-            toolBtnLayout.Items.Add(btnToolTestTil);
-            toolBtnLayout.Items.Add(btnToolClearTestTil);
+            toolBtnCol1.Items.Add(btnToolCopy);
+            toolBtnCol1.Items.Add(btnToolPaste);
+            toolBtnCol1.Items.Add(btnToolDelete);
+            toolBtnCol1.Items.Add(btnToolUndo);
+            toolBtnCol1.Items.Add(btnToolRedo);
+            toolBtnCol1.Items.Add(btnToolSave);
+            toolBtnCol1.Items.Add(btnToolCellInfo);
+            toolBtnCol1.Items.Add(btnToolReplaceTile);
+            toolBtnCol1.Items.Add(btnToolAddS32);
+            toolBtnCol1.Items.Add(btnToolClearLayer7);
+            toolBtnCol1.Items.Add(btnToolClearCell);
+            toolBtnCol1.Items.Add(btnMapValidate);
+
+            // 工具按鈕列 (第二欄 - 查看各層)
+            var toolBtnCol2 = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Vertical,
+                HorizontalContentAlignment = Eto.Forms.HorizontalAlignment.Stretch,
+                Spacing = 2,
+                Padding = new Eto.Drawing.Padding(2)
+            };
+            toolBtnCol2.Items.Add(btnToolCheckL1);
+            toolBtnCol2.Items.Add(btnToolCheckL2);
+            toolBtnCol2.Items.Add(btnToolCheckL3);
+            toolBtnCol2.Items.Add(btnToolCheckL4);
+            toolBtnCol2.Items.Add(btnToolCheckL5);
+            toolBtnCol2.Items.Add(btnToolCheckL6);
+            toolBtnCol2.Items.Add(btnToolCheckL7);
+            toolBtnCol2.Items.Add(btnToolCheckL8);
+            toolBtnCol2.Items.Add(btnEnableVisibleL8);
+            toolBtnCol2.Items.Add(btnViewClipboard);
+            toolBtnCol2.Items.Add(btnToolTestTil);
+            toolBtnCol2.Items.Add(btnToolClearTestTil);
+
+            // 兩欄工具按鈕水平排列
+            var toolBtnLayout = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Horizontal,
+                VerticalContentAlignment = Eto.Forms.VerticalAlignment.Top,
+                Spacing = 0
+            };
+            toolBtnLayout.Items.Add(toolBtnCol1);
+            toolBtnLayout.Items.Add(toolBtnCol2);
 
             // Tile 列表區域
             var tileListLayout = new Eto.Forms.StackLayout
@@ -756,13 +839,30 @@ namespace L1FlyMapViewer
             tileListLayout.Items.Add(new Eto.Forms.StackLayoutItem(lvMaterials, true));
             tileListLayout.Items.Add(new Eto.Forms.StackLayoutItem(btnMoreMaterials, false));
 
+            // 群組縮圖區
+            tileListLayout.Items.Add(new Eto.Forms.StackLayoutItem(lblGroupThumbnails, false));
+
+            // 模式選擇 + 搜尋框 (並排)
+            var groupControlRow = new Eto.Forms.TableLayout
+            {
+                Spacing = new Eto.Drawing.Size(3, 0),
+                Rows = { new Eto.Forms.TableRow(
+                    new Eto.Forms.TableCell(cmbGroupMode, false),
+                    new Eto.Forms.TableCell(txtGroupSearch, true)
+                )}
+            };
+            tileListLayout.Items.Add(new Eto.Forms.StackLayoutItem(groupControlRow, false));
+
+            // 群組縮圖列表 (可伸縮)
+            tileListLayout.Items.Add(new Eto.Forms.StackLayoutItem(lvGroupThumbnails, true));
+
             // 右側整體布局 (工具按鈕 + Tile 列表)
             var rightLayout = new Eto.Forms.Splitter
             {
                 Orientation = Eto.Forms.Orientation.Horizontal,
                 FixedPanel = Eto.Forms.SplitterFixedPanel.Panel1,
-                Panel1MinimumSize = 40,
-                Position = 45,
+                Panel1MinimumSize = 80,
+                Position = 85,
                 Panel1 = toolBtnLayout,
                 Panel2 = tileListLayout
             };
@@ -10533,9 +10633,16 @@ namespace L1FlyMapViewer
                     return;
                 }
 
-                // 右鍵點擊已存在區塊：顯示操作選單
+                // 右鍵點擊：如果有選取格子則顯示選取區域選單，否則顯示區塊操作選單
                 if (e.Buttons == Eto.Forms.MouseButtons.Alternate)
                 {
+                    // 優先顯示選取區域的右鍵選單
+                    if (_interaction.IsLayer4CopyMode && _editState.SelectedCells.Count > 0)
+                    {
+                        ShowSelectionContextMenu(e.Location.ToPoint());
+                        return;
+                    }
+                    // 沒有選取時顯示區塊操作選單
                     Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
                     ShowExistingBlockContextMenu(e.Location.ToPoint(), new Point(worldX, worldY), currentMap, s32Data);
                     return;
