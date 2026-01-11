@@ -15647,18 +15647,29 @@ namespace L1FlyMapViewer
                 optionForm.SetMaximizeBox(false);
                 optionForm.SetMinimizeBox(false);
 
-                var chkExportTil = new CheckBox { Text = "匯出 .til 原始檔案", Location = new Point(20, 15), Size = new Size(260, 24), Checked = true };
-                var chkExportPng = new CheckBox { Text = "匯出 .png 預覽圖片", Location = new Point(20, 45), Size = new Size(260, 24), Checked = false };
-                var chkDownscale = new CheckBox { Text = $"R版縮小至 24x24 ({remasterCount} 個)", Location = new Point(20, 75), Size = new Size(260, 24), Checked = false, Enabled = hasRemasterTiles };
+                var chkExportTil = new CheckBox { Text = "匯出 .til 原始檔案", Size = new Size(260, 24), Checked = true };
+                chkExportTil.SetLocation(new Point(20, 15));
+                var chkExportPng = new CheckBox { Text = "匯出 .png 預覽圖片", Size = new Size(260, 24), Checked = false };
+                chkExportPng.SetLocation(new Point(20, 45));
+                var chkDownscale = new CheckBox { Text = $"R版縮小至 24x24 ({remasterCount} 個)", Size = new Size(260, 24), Checked = false, Enabled = hasRemasterTiles };
+                chkDownscale.SetLocation(new Point(20, 75));
 
                 int infoY = hasRemasterTiles ? 105 : 75;
                 int btnY = hasRemasterTiles ? 140 : 110;
-                var lblInfo = new Label { Text = $"共 {distinctTileIds.Count} 個 til 檔案", Location = new Point(20, infoY), Size = new Size(260, 20), ForeColor = Colors.Gray };
+                var lblInfo = new Label { Text = $"共 {distinctTileIds.Count} 個 til 檔案", Size = new Size(260, 20), ForeColor = Colors.Gray };
+                lblInfo.SetLocation(new Point(20, infoY));
 
-                var btnOK = new Button { Text = "匯出", Location = new Point(100, btnY), Size = new Size(80, 28), DialogResult = DialogResult.Ok };
-                var btnCancel = new Button { Text = "取消", Location = new Point(190, btnY), Size = new Size(80, 28), DialogResult = DialogResult.Cancel };
+                var btnOK = new Button { Text = "匯出", Size = new Size(80, 28), DialogResult = DialogResult.Ok };
+                btnOK.SetLocation(new Point(100, btnY));
+                var btnCancel = new Button { Text = "取消", Size = new Size(80, 28), DialogResult = DialogResult.Cancel };
+                btnCancel.SetLocation(new Point(190, btnY));
 
-                optionForm.Controls.AddRange(new Control[] { chkExportTil, chkExportPng, chkDownscale, lblInfo, btnOK, btnCancel });
+                optionForm.GetControls().Add(chkExportTil);
+                optionForm.GetControls().Add(chkExportPng);
+                optionForm.GetControls().Add(chkDownscale);
+                optionForm.GetControls().Add(lblInfo);
+                optionForm.GetControls().Add(btnOK);
+                optionForm.GetControls().Add(btnCancel);
                 optionForm.AcceptButton = btnOK;
                 optionForm.CancelButton = btnCancel;
 
@@ -15822,20 +15833,22 @@ namespace L1FlyMapViewer
                 var lblInfo = new Label
                 {
                     Text = $"選中 {oldTileIds.Count} 個 TileId:\n{string.Join(", ", oldTileIds.Take(10))}{(oldTileIds.Count > 10 ? " ..." : "")}",
-                    Location = new Point(15, 15),
                     Size = new Size(320, 40)
                 };
+                lblInfo.SetLocation(new Point(15, 15));
 
-                var lblStart = new Label { Text = "起始編號:", Location = new Point(15, 65), Size = new Size(80, 20) };
-                var txtStart = new TextBox { Text = oldTileIds.Min().ToString(), Location = new Point(100, 62), Size = new Size(100, 24) };
+                var lblStart = new Label { Text = "起始編號:", Size = new Size(80, 20) };
+                lblStart.SetLocation(new Point(15, 65));
+                var txtStart = new TextBox { Text = oldTileIds.Min().ToString(), Size = new Size(100, 24) };
+                txtStart.SetLocation(new Point(100, 62));
 
                 var lblPreview = new Label
                 {
                     Text = "",
-                    Location = new Point(15, 95),
                     Size = new Size(320, 40),
                     ForeColor = Colors.Gray
                 };
+                lblPreview.SetLocation(new Point(15, 95));
 
                 // 預覽重編結果
                 Action updatePreview = () =>
@@ -15860,10 +15873,17 @@ namespace L1FlyMapViewer
                 txtStart.TextChanged += (s, ev) => updatePreview();
                 updatePreview();
 
-                var btnOK = new Button { Text = "確定", Location = new Point(160, 140), Size = new Size(80, 28), DialogResult = DialogResult.Ok };
-                var btnCancel = new Button { Text = "取消", Location = new Point(250, 140), Size = new Size(80, 28), DialogResult = DialogResult.Cancel };
+                var btnOK = new Button { Text = "確定", Size = new Size(80, 28), DialogResult = DialogResult.Ok };
+                btnOK.SetLocation(new Point(160, 140));
+                var btnCancel = new Button { Text = "取消", Size = new Size(80, 28), DialogResult = DialogResult.Cancel };
+                btnCancel.SetLocation(new Point(250, 140));
 
-                inputForm.Controls.AddRange(new Control[] { lblInfo, lblStart, txtStart, lblPreview, btnOK, btnCancel });
+                inputForm.GetControls().Add(lblInfo);
+                inputForm.GetControls().Add(lblStart);
+                inputForm.GetControls().Add(txtStart);
+                inputForm.GetControls().Add(lblPreview);
+                inputForm.GetControls().Add(btnOK);
+                inputForm.GetControls().Add(btnCancel);
                 inputForm.AcceptButton = btnOK;
                 inputForm.CancelButton = btnCancel;
 
@@ -18239,12 +18259,19 @@ namespace L1FlyMapViewer
                 form.SetMaximizeBox(false);
                 form.SetMinimizeBox(false);
 
-                var label = new Label { Text = prompt, Left = 10, Top = 15, Width = 310 };
-                var textBox = new TextBox { Text = defaultValue, Left = 10, Top = 40, Width = 310 };
-                var okButton = new Button { Text = "確定", Left = 150, Top = 75, Width = 80, DialogResult = DialogResult.Ok };
-                var cancelButton = new Button { Text = "取消", Left = 240, Top = 75, Width = 80, DialogResult = DialogResult.Cancel };
+                var label = new Label { Text = prompt, Width = 310 };
+                label.SetLocation(new Point(10, 15));
+                var textBox = new TextBox { Text = defaultValue, Width = 310 };
+                textBox.SetLocation(new Point(10, 40));
+                var okButton = new Button { Text = "確定", Width = 80, DialogResult = DialogResult.Ok };
+                okButton.SetLocation(new Point(150, 75));
+                var cancelButton = new Button { Text = "取消", Width = 80, DialogResult = DialogResult.Cancel };
+                cancelButton.SetLocation(new Point(240, 75));
 
-                form.Controls.AddRange(new Control[] { label, textBox, okButton, cancelButton });
+                form.GetControls().Add(label);
+                form.GetControls().Add(textBox);
+                form.GetControls().Add(okButton);
+                form.GetControls().Add(cancelButton);
                 form.AcceptButton = okButton;
                 form.CancelButton = cancelButton;
 
@@ -21270,44 +21297,48 @@ namespace L1FlyMapViewer
                     Label lblPrompt = new Label
                     {
                         Text = prompt,
-                        Location = new Point(15, 15),
                         Size = new Size(310, 40)
                     };
+                    lblPrompt.SetLocation(new Point(15, 15));
 
                     Label lblCurrentMax = new Label
                     {
                         Text = $"（目前最大群組 ID: {maxGroupId}）",
-                        Location = new Point(15, 55),
                         Size = new Size(200, 20),
                         ForeColor = Colors.Gray
                     };
+                    lblCurrentMax.SetLocation(new Point(15, 55));
 
                     TextBox txtNewId = new TextBox
                     {
-                        Location = new Point(15, 80),
                         Size = new Size(150, 24),
                         Text = (maxGroupId + 1).ToString()
                     };
+                    txtNewId.SetLocation(new Point(15, 80));
 
                     Button btnOk = new Button
                     {
                         Text = "確定",
-                        Location = new Point(170, 100),
                         Size = new Size(75, 28),
                         DialogResult = DialogResult.Ok
                     };
+                    btnOk.SetLocation(new Point(170, 100));
 
                     Button btnCancel = new Button
                     {
                         Text = "取消",
-                        Location = new Point(255, 100),
                         Size = new Size(75, 28),
                         DialogResult = DialogResult.Cancel
                     };
+                    btnCancel.SetLocation(new Point(255, 100));
 
                     inputForm.AcceptButton = btnOk;
                     inputForm.CancelButton = btnCancel;
-                    inputForm.Controls.AddRange(new Control[] { lblPrompt, lblCurrentMax, txtNewId, btnOk, btnCancel });
+                    inputForm.GetControls().Add(lblPrompt);
+                    inputForm.GetControls().Add(lblCurrentMax);
+                    inputForm.GetControls().Add(txtNewId);
+                    inputForm.GetControls().Add(btnOk);
+                    inputForm.GetControls().Add(btnCancel);
 
                     if (inputForm.ShowDialog(this) != DialogResult.Ok)
                         return;
@@ -21564,25 +21595,48 @@ namespace L1FlyMapViewer
                         editForm.SetMinimizeBox(false);
                         editForm.SetStartPosition(FormStartPosition.CenterParent);
 
-                        var lblX = new Label { Text = "X (L1):", Location = new Point(20, 25), Size = new Size(60, 20) };
-                        var txtX = new TextBox { Text = obj.X.ToString(), Location = new Point(90, 22), Size = new Size(160, 22) };
+                        var lblX = new Label { Text = "X (L1):", Size = new Size(60, 20) };
+                        lblX.SetLocation(new Point(20, 25));
+                        var txtX = new TextBox { Text = obj.X.ToString(), Size = new Size(160, 22) };
+                        txtX.SetLocation(new Point(90, 22));
 
-                        var lblY = new Label { Text = "Y (L1):", Location = new Point(20, 60), Size = new Size(60, 20) };
-                        var txtY = new TextBox { Text = obj.Y.ToString(), Location = new Point(90, 57), Size = new Size(160, 22) };
+                        var lblY = new Label { Text = "Y (L1):", Size = new Size(60, 20) };
+                        lblY.SetLocation(new Point(20, 60));
+                        var txtY = new TextBox { Text = obj.Y.ToString(), Size = new Size(160, 22) };
+                        txtY.SetLocation(new Point(90, 57));
 
-                        var lblLayer = new Label { Text = "Layer:", Location = new Point(20, 95), Size = new Size(60, 20) };
-                        var txtLayer = new TextBox { Text = obj.Layer.ToString(), Location = new Point(90, 92), Size = new Size(160, 22) };
+                        var lblLayer = new Label { Text = "Layer:", Size = new Size(60, 20) };
+                        lblLayer.SetLocation(new Point(20, 95));
+                        var txtLayer = new TextBox { Text = obj.Layer.ToString(), Size = new Size(160, 22) };
+                        txtLayer.SetLocation(new Point(90, 92));
 
-                        var lblIndexId = new Label { Text = "IndexId:", Location = new Point(20, 130), Size = new Size(60, 20) };
-                        var txtIndexId = new TextBox { Text = obj.IndexId.ToString(), Location = new Point(90, 127), Size = new Size(160, 22) };
+                        var lblIndexId = new Label { Text = "IndexId:", Size = new Size(60, 20) };
+                        lblIndexId.SetLocation(new Point(20, 130));
+                        var txtIndexId = new TextBox { Text = obj.IndexId.ToString(), Size = new Size(160, 22) };
+                        txtIndexId.SetLocation(new Point(90, 127));
 
-                        var lblTileId = new Label { Text = "TileId:", Location = new Point(20, 165), Size = new Size(60, 20) };
-                        var txtTileId = new TextBox { Text = obj.TileId.ToString(), Location = new Point(90, 162), Size = new Size(160, 22) };
+                        var lblTileId = new Label { Text = "TileId:", Size = new Size(60, 20) };
+                        lblTileId.SetLocation(new Point(20, 165));
+                        var txtTileId = new TextBox { Text = obj.TileId.ToString(), Size = new Size(160, 22) };
+                        txtTileId.SetLocation(new Point(90, 162));
 
-                        var btnOK = new Button { Text = "確定", Location = new Point(90, 205), Size = new Size(75, 28), DialogResult = DialogResult.Ok };
-                        var btnCancel = new Button { Text = "取消", Location = new Point(175, 205), Size = new Size(75, 28), DialogResult = DialogResult.Cancel };
+                        var btnOK = new Button { Text = "確定", Size = new Size(75, 28), DialogResult = DialogResult.Ok };
+                        btnOK.SetLocation(new Point(90, 205));
+                        var btnCancel = new Button { Text = "取消", Size = new Size(75, 28), DialogResult = DialogResult.Cancel };
+                        btnCancel.SetLocation(new Point(175, 205));
 
-                        editForm.Controls.AddRange(new Control[] { lblX, txtX, lblY, txtY, lblLayer, txtLayer, lblIndexId, txtIndexId, lblTileId, txtTileId, btnOK, btnCancel });
+                        editForm.GetControls().Add(lblX);
+                        editForm.GetControls().Add(txtX);
+                        editForm.GetControls().Add(lblY);
+                        editForm.GetControls().Add(txtY);
+                        editForm.GetControls().Add(lblLayer);
+                        editForm.GetControls().Add(txtLayer);
+                        editForm.GetControls().Add(lblIndexId);
+                        editForm.GetControls().Add(txtIndexId);
+                        editForm.GetControls().Add(lblTileId);
+                        editForm.GetControls().Add(txtTileId);
+                        editForm.GetControls().Add(btnOK);
+                        editForm.GetControls().Add(btnCancel);
                         editForm.AcceptButton = btnOK;
                         editForm.CancelButton = btnCancel;
 
@@ -21687,9 +21741,9 @@ namespace L1FlyMapViewer
                 var btnSelectAll = new Button
                 {
                     Text = "全選",
-                    Location = new Point(10, 12),
                     Size = new Size(75, 26)
                 };
+                btnSelectAll.SetLocation(new Point(10, 12));
                 btnSelectAll.Click += (s, ev) =>
                 {
                     foreach (ListViewItem item in listView.Items)
@@ -21699,9 +21753,9 @@ namespace L1FlyMapViewer
                 var btnSelectNone = new Button
                 {
                     Text = "取消全選",
-                    Location = new Point(95, 12),
                     Size = new Size(75, 26)
                 };
+                btnSelectNone.SetLocation(new Point(95, 12));
                 btnSelectNone.Click += (s, ev) =>
                 {
                     foreach (ListViewItem item in listView.Items)
@@ -21711,10 +21765,10 @@ namespace L1FlyMapViewer
                 var btnDeleteSelected = new Button
                 {
                     Text = "刪除勾選項目",
-                    Location = new Point(200, 12),
                     Size = new Size(100, 26),
                     BackColor = Color.FromArgb(255, 200, 200)
                 };
+                btnDeleteSelected.SetLocation(new Point(200, 12));
                 btnDeleteSelected.Click += (s, ev) =>
                 {
                     var checkedItems = listView.CheckedItems.Cast<ListViewItem>().ToList();
@@ -21802,9 +21856,9 @@ namespace L1FlyMapViewer
                 var btnExportCsv = new Button
                 {
                     Text = "匯出 CSV",
-                    Location = new Point(320, 12),
                     Size = new Size(85, 26)
                 };
+                btnExportCsv.SetLocation(new Point(320, 12));
                 btnExportCsv.Click += (s, ev) =>
                 {
                     using (var saveDialog = new SaveFileDialog())
@@ -21858,12 +21912,16 @@ namespace L1FlyMapViewer
                 var btnClose = new Button
                 {
                     Text = "關閉",
-                    Location = new Point(580, 12),
                     Size = new Size(75, 26)
                 };
+                btnClose.SetLocation(new Point(580, 12));
                 btnClose.Click += (s, ev) => form.Close();
 
-                bottomPanel.Controls.AddRange(new Control[] { btnSelectAll, btnSelectNone, btnDeleteSelected, btnExportCsv, btnClose });
+                bottomPanel.GetControls().Add(btnSelectAll);
+                bottomPanel.GetControls().Add(btnSelectNone);
+                bottomPanel.GetControls().Add(btnDeleteSelected);
+                bottomPanel.GetControls().Add(btnExportCsv);
+                bottomPanel.GetControls().Add(btnClose);
 
                 form.GetControls().Add(listView);
                 form.GetControls().Add(bottomPanel);
@@ -21943,10 +22001,15 @@ namespace L1FlyMapViewer
             gbLayer.Size = new Size(375, 50);
             replaceForm.GetControls().Add(gbLayer);
 
-            RadioButton rbLayer1 = new RadioButton { Text = "Layer1 (地板)", Location = new Point(15, 20), Size = new Size(110, 20), Checked = true };
-            RadioButton rbLayer2 = new RadioButton { Text = "Layer2 (索引)", Location = new Point(135, 20), Size = new Size(110, 20) };
-            RadioButton rbLayer4 = new RadioButton { Text = "Layer4 (物件)", Location = new Point(255, 20), Size = new Size(110, 20) };
-            gbLayer.Controls.AddRange(new Control[] { rbLayer1, rbLayer2, rbLayer4 });
+            RadioButton rbLayer1 = new RadioButton { Text = "Layer1 (地板)", Size = new Size(110, 20), Checked = true };
+            rbLayer1.SetLocation(new Point(15, 20));
+            RadioButton rbLayer2 = new RadioButton { Text = "Layer2 (索引)", Size = new Size(110, 20) };
+            rbLayer2.SetLocation(new Point(135, 20));
+            RadioButton rbLayer4 = new RadioButton { Text = "Layer4 (物件)", Size = new Size(110, 20) };
+            rbLayer4.SetLocation(new Point(255, 20));
+            gbLayer.GetControls().Add(rbLayer1);
+            gbLayer.GetControls().Add(rbLayer2);
+            gbLayer.GetControls().Add(rbLayer4);
 
             // 來源設定
             GroupBox gbSource = new GroupBox();
@@ -21955,12 +22018,21 @@ namespace L1FlyMapViewer
             gbSource.Size = new Size(375, 80);
             replaceForm.GetControls().Add(gbSource);
 
-            Label lblSrcTileId = new Label { Text = "TileId:", Location = new Point(15, 25), Size = new Size(55, 20) };
-            TextBox txtSrcTileId = new TextBox { Location = new Point(75, 22), Size = new Size(100, 22) };
-            Label lblSrcIndexId = new Label { Text = "IndexId:", Location = new Point(190, 25), Size = new Size(55, 20) };
-            TextBox txtSrcIndexId = new TextBox { Location = new Point(250, 22), Size = new Size(100, 22) };
-            CheckBox chkMatchIndexId = new CheckBox { Text = "比對 IndexId", Location = new Point(15, 50), Size = new Size(120, 20), Checked = true };
-            gbSource.Controls.AddRange(new Control[] { lblSrcTileId, txtSrcTileId, lblSrcIndexId, txtSrcIndexId, chkMatchIndexId });
+            Label lblSrcTileId = new Label { Text = "TileId:", Size = new Size(55, 20) };
+            lblSrcTileId.SetLocation(new Point(15, 25));
+            TextBox txtSrcTileId = new TextBox { Size = new Size(100, 22) };
+            txtSrcTileId.SetLocation(new Point(75, 22));
+            Label lblSrcIndexId = new Label { Text = "IndexId:", Size = new Size(55, 20) };
+            lblSrcIndexId.SetLocation(new Point(190, 25));
+            TextBox txtSrcIndexId = new TextBox { Size = new Size(100, 22) };
+            txtSrcIndexId.SetLocation(new Point(250, 22));
+            CheckBox chkMatchIndexId = new CheckBox { Text = "比對 IndexId", Size = new Size(120, 20), Checked = true };
+            chkMatchIndexId.SetLocation(new Point(15, 50));
+            gbSource.GetControls().Add(lblSrcTileId);
+            gbSource.GetControls().Add(txtSrcTileId);
+            gbSource.GetControls().Add(lblSrcIndexId);
+            gbSource.GetControls().Add(txtSrcIndexId);
+            gbSource.GetControls().Add(chkMatchIndexId);
 
             // 目標設定
             GroupBox gbTarget = new GroupBox();
@@ -21969,22 +22041,37 @@ namespace L1FlyMapViewer
             gbTarget.Size = new Size(375, 80);
             replaceForm.GetControls().Add(gbTarget);
 
-            Label lblDstTileId = new Label { Text = "TileId:", Location = new Point(15, 25), Size = new Size(55, 20) };
-            TextBox txtDstTileId = new TextBox { Location = new Point(75, 22), Size = new Size(100, 22) };
-            Label lblDstIndexId = new Label { Text = "IndexId:", Location = new Point(190, 25), Size = new Size(55, 20) };
-            TextBox txtDstIndexId = new TextBox { Location = new Point(250, 22), Size = new Size(100, 22) };
-            CheckBox chkReplaceIndexId = new CheckBox { Text = "替換 IndexId", Location = new Point(15, 50), Size = new Size(120, 20), Checked = true };
-            gbTarget.Controls.AddRange(new Control[] { lblDstTileId, txtDstTileId, lblDstIndexId, txtDstIndexId, chkReplaceIndexId });
+            Label lblDstTileId = new Label { Text = "TileId:", Size = new Size(55, 20) };
+            lblDstTileId.SetLocation(new Point(15, 25));
+            TextBox txtDstTileId = new TextBox { Size = new Size(100, 22) };
+            txtDstTileId.SetLocation(new Point(75, 22));
+            Label lblDstIndexId = new Label { Text = "IndexId:", Size = new Size(55, 20) };
+            lblDstIndexId.SetLocation(new Point(190, 25));
+            TextBox txtDstIndexId = new TextBox { Size = new Size(100, 22) };
+            txtDstIndexId.SetLocation(new Point(250, 22));
+            CheckBox chkReplaceIndexId = new CheckBox { Text = "替換 IndexId", Size = new Size(120, 20), Checked = true };
+            chkReplaceIndexId.SetLocation(new Point(15, 50));
+            gbTarget.GetControls().Add(lblDstTileId);
+            gbTarget.GetControls().Add(txtDstTileId);
+            gbTarget.GetControls().Add(lblDstIndexId);
+            gbTarget.GetControls().Add(txtDstIndexId);
+            gbTarget.GetControls().Add(chkReplaceIndexId);
 
             // 按鈕
-            Button btnPreview = new Button { Text = "預覽", Location = new Point(70, 245), Size = new Size(80, 30) };
-            Button btnExecute = new Button { Text = "執行替換", Location = new Point(160, 245), Size = new Size(80, 30) };
-            Button btnCancel = new Button { Text = "取消", Location = new Point(250, 245), Size = new Size(80, 30) };
+            Button btnPreview = new Button { Text = "預覽", Size = new Size(80, 30) };
+            btnPreview.SetLocation(new Point(70, 245));
+            Button btnExecute = new Button { Text = "執行替換", Size = new Size(80, 30) };
+            btnExecute.SetLocation(new Point(160, 245));
+            Button btnCancel = new Button { Text = "取消", Size = new Size(80, 30) };
+            btnCancel.SetLocation(new Point(250, 245));
             btnCancel.Click += (s, args) => replaceForm.Close();
-            replaceForm.Controls.AddRange(new Control[] { btnPreview, btnExecute, btnCancel });
+            replaceForm.GetControls().Add(btnPreview);
+            replaceForm.GetControls().Add(btnExecute);
+            replaceForm.GetControls().Add(btnCancel);
 
             // 結果標籤
-            Label lblResult = new Label { Text = "", Location = new Point(15, 285), Size = new Size(375, 20), ForeColor = Colors.Blue };
+            Label lblResult = new Label { Text = "", Size = new Size(375, 20), ForeColor = Colors.Blue };
+            lblResult.SetLocation(new Point(15, 285));
             replaceForm.GetControls().Add(lblResult);
 
             // 預覽功能
@@ -23529,14 +23616,22 @@ namespace L1FlyMapViewer
             gbEdit.SetLocation(new Point(10, 455));
             gbEdit.Size = new Size(810, 80);
 
-            Label lblSprId = new Label { Text = "SprId:", Location = new Point(10, 28), Size = new Size(45, 20) };
-            TextBox txtSprId = new TextBox { Location = new Point(60, 25), Size = new Size(80, 23) };
-            Label lblX = new Label { Text = "X:", Location = new Point(155, 28), Size = new Size(20, 20) };
-            TextBox txtX = new TextBox { Location = new Point(175, 25), Size = new Size(80, 23) };
-            Label lblY = new Label { Text = "Y:", Location = new Point(270, 28), Size = new Size(20, 20) };
-            TextBox txtY = new TextBox { Location = new Point(290, 25), Size = new Size(80, 23) };
-            Label lblExtData = new Label { Text = "ExtData:", Location = new Point(385, 28), Size = new Size(55, 20) };
-            TextBox txtExtData = new TextBox { Location = new Point(445, 25), Size = new Size(80, 23) };
+            Label lblSprId = new Label { Text = "SprId:", Size = new Size(45, 20) };
+            lblSprId.SetLocation(new Point(10, 28));
+            TextBox txtSprId = new TextBox { Size = new Size(80, 23) };
+            txtSprId.SetLocation(new Point(60, 25));
+            Label lblX = new Label { Text = "X:", Size = new Size(20, 20) };
+            lblX.SetLocation(new Point(155, 28));
+            TextBox txtX = new TextBox { Size = new Size(80, 23) };
+            txtX.SetLocation(new Point(175, 25));
+            Label lblY = new Label { Text = "Y:", Size = new Size(20, 20) };
+            lblY.SetLocation(new Point(270, 28));
+            TextBox txtY = new TextBox { Size = new Size(80, 23) };
+            txtY.SetLocation(new Point(290, 25));
+            Label lblExtData = new Label { Text = "ExtData:", Size = new Size(55, 20) };
+            lblExtData.SetLocation(new Point(385, 28));
+            TextBox txtExtData = new TextBox { Size = new Size(80, 23) };
+            txtExtData.SetLocation(new Point(445, 25));
 
             Button btnApplyEdit = new Button();
             btnApplyEdit.Text = LocalizationManager.L("L8_ApplyEdit");
@@ -23613,13 +23708,18 @@ namespace L1FlyMapViewer
                 selectForm.SetFormBorderStyle(FormBorderStyle.FixedDialog);
                 selectForm.SetStartPosition(FormStartPosition.CenterParent);
 
-                Label lblSelect = new Label { Text = LocalizationManager.L("L8_SelectS32ForNewItem"), Location = new Point(10, 15), Size = new Size(260, 20) };
-                ComboBox cmbS32 = new ComboBox { Location = new Point(10, 40), Size = new Size(260, 23), DropDownStyle = ComboBoxStyle.DropDownList };
+                Label lblSelect = new Label { Text = LocalizationManager.L("L8_SelectS32ForNewItem"), Size = new Size(260, 20) };
+                lblSelect.SetLocation(new Point(10, 15));
+                ComboBox cmbS32 = new ComboBox { Size = new Size(260, 23), DropDownStyle = ComboBoxStyle.DropDownList };
+                cmbS32.SetLocation(new Point(10, 40));
                 cmbS32.Items.AddRange(s32Files);
                 if (cmbS32.Items.Count > 0) cmbS32.SelectedIndex = 0;
 
-                Button btnOK = new Button { Text = LocalizationManager.L("Common_OK"), Location = new Point(100, 75), Size = new Size(80, 28), DialogResult = DialogResult.Ok };
-                selectForm.Controls.AddRange(new Control[] { lblSelect, cmbS32, btnOK });
+                Button btnOK = new Button { Text = LocalizationManager.L("Common_OK"), Size = new Size(80, 28), DialogResult = DialogResult.Ok };
+                btnOK.SetLocation(new Point(100, 75));
+                selectForm.GetControls().Add(lblSelect);
+                selectForm.GetControls().Add(cmbS32);
+                selectForm.GetControls().Add(btnOK);
                 selectForm.AcceptButton = btnOK;
 
                 if (selectForm.ShowDialog(this) == DialogResult.Ok && cmbS32.SelectedIndex >= 0)
@@ -23666,7 +23766,16 @@ namespace L1FlyMapViewer
                 }
             };
 
-            gbEdit.Controls.AddRange(new Control[] { lblSprId, txtSprId, lblX, txtX, lblY, txtY, lblExtData, txtExtData, btnApplyEdit, btnAddNew });
+            gbEdit.GetControls().Add(lblSprId);
+            gbEdit.GetControls().Add(txtSprId);
+            gbEdit.GetControls().Add(lblX);
+            gbEdit.GetControls().Add(txtX);
+            gbEdit.GetControls().Add(lblY);
+            gbEdit.GetControls().Add(txtY);
+            gbEdit.GetControls().Add(lblExtData);
+            gbEdit.GetControls().Add(txtExtData);
+            gbEdit.GetControls().Add(btnApplyEdit);
+            gbEdit.GetControls().Add(btnAddNew);
             resultForm.GetControls().Add(gbEdit);
 
             // 批次取代區域
@@ -23675,10 +23784,14 @@ namespace L1FlyMapViewer
             gbBatchReplace.SetLocation(new Point(10, 540));
             gbBatchReplace.Size = new Size(500, 50);
 
-            Label lblFromSpr = new Label { Text = LocalizationManager.L("L8_FromSprId"), Location = new Point(10, 20), Size = new Size(60, 20) };
-            TextBox txtFromSprId = new TextBox { Location = new Point(75, 17), Size = new Size(70, 23) };
-            Label lblToSpr = new Label { Text = LocalizationManager.L("L8_ToSprId"), Location = new Point(155, 20), Size = new Size(40, 20) };
-            TextBox txtToSprId = new TextBox { Location = new Point(195, 17), Size = new Size(70, 23) };
+            Label lblFromSpr = new Label { Text = LocalizationManager.L("L8_FromSprId"), Size = new Size(60, 20) };
+            lblFromSpr.SetLocation(new Point(10, 20));
+            TextBox txtFromSprId = new TextBox { Size = new Size(70, 23) };
+            txtFromSprId.SetLocation(new Point(75, 17));
+            Label lblToSpr = new Label { Text = LocalizationManager.L("L8_ToSprId"), Size = new Size(40, 20) };
+            lblToSpr.SetLocation(new Point(155, 20));
+            TextBox txtToSprId = new TextBox { Size = new Size(70, 23) };
+            txtToSprId.SetLocation(new Point(195, 17));
 
             Button btnBatchReplace = new Button();
             btnBatchReplace.Text = LocalizationManager.L("L8_BatchReplaceBtn");
@@ -23773,9 +23886,15 @@ namespace L1FlyMapViewer
                     MessageBoxIcon.Information);
             };
 
-            Label lblBatchHint = new Label { Text = LocalizationManager.L("L8_AffectsAllS32"), Location = new Point(370, 20), Size = new Size(120, 20), ForeColor = Colors.Gray };
+            Label lblBatchHint = new Label { Text = LocalizationManager.L("L8_AffectsAllS32"), Size = new Size(120, 20), ForeColor = Colors.Gray };
+            lblBatchHint.SetLocation(new Point(370, 20));
 
-            gbBatchReplace.Controls.AddRange(new Control[] { lblFromSpr, txtFromSprId, lblToSpr, txtToSprId, btnBatchReplace, lblBatchHint });
+            gbBatchReplace.GetControls().Add(lblFromSpr);
+            gbBatchReplace.GetControls().Add(txtFromSprId);
+            gbBatchReplace.GetControls().Add(lblToSpr);
+            gbBatchReplace.GetControls().Add(txtToSprId);
+            gbBatchReplace.GetControls().Add(btnBatchReplace);
+            gbBatchReplace.GetControls().Add(lblBatchHint);
             resultForm.GetControls().Add(gbBatchReplace);
 
             // 調整表單高度以容納批次取代區域
@@ -24708,16 +24827,19 @@ namespace L1FlyMapViewer
             pnlButtons.SetAnchor(AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right);
             resultForm.GetControls().Add(pnlButtons);
 
-            Button btnSelectAll = new Button { Text = "全選", Location = new Point(0, 0), Size = new Size(80, 30) };
+            Button btnSelectAll = new Button { Text = "全選", Size = new Size(80, 30) };
+            btnSelectAll.SetLocation(new Point(0, 0));
             btnSelectAll.Click += (s, args) => { for (int i = 0; i < clbItems.Items.Count; i++) clbItems.SetItemChecked(i, true); };
             pnlButtons.GetControls().Add(btnSelectAll);
 
-            Button btnDeselectAll = new Button { Text = "取消全選", Location = new Point(90, 0), Size = new Size(80, 30) };
+            Button btnDeselectAll = new Button { Text = "取消全選", Size = new Size(80, 30) };
+            btnDeselectAll.SetLocation(new Point(90, 0));
             btnDeselectAll.Click += (s, args) => { for (int i = 0; i < clbItems.Items.Count; i++) clbItems.SetItemChecked(i, false); };
             pnlButtons.GetControls().Add(btnDeselectAll);
 
             // 按 S32 選擇
-            Button btnSelectByS32 = new Button { Text = "按S32選", Location = new Point(180, 0), Size = new Size(80, 30) };
+            Button btnSelectByS32 = new Button { Text = "按S32選", Size = new Size(80, 30) };
+            btnSelectByS32.SetLocation(new Point(180, 0));
             btnSelectByS32.Click += (s, args) =>
             {
                 // 顯示 S32 選擇對話框
@@ -24735,7 +24857,8 @@ namespace L1FlyMapViewer
                     foreach (var name in s32Names) clbS32.Items.Add(name);
                     selectForm.GetControls().Add(clbS32);
 
-                    Button btnOk = new Button { Text = "確定", Location = new Point(100, 320), Size = new Size(80, 30) };
+                    Button btnOk = new Button { Text = "確定", Size = new Size(80, 30) };
+                    btnOk.SetLocation(new Point(100, 320));
                     btnOk.Click += (s2, args2) =>
                     {
                         var selectedS32 = new HashSet<string>();
@@ -24755,7 +24878,8 @@ namespace L1FlyMapViewer
             };
             pnlButtons.GetControls().Add(btnSelectByS32);
 
-            Button btnClearSelected = new Button { Text = "清除勾選", Location = new Point(0, 40), Size = new Size(100, 35), BackColor = WinFormsColors.LightCoral };
+            Button btnClearSelected = new Button { Text = "清除勾選", Size = new Size(100, 35), BackColor = WinFormsColors.LightCoral };
+            btnClearSelected.SetLocation(new Point(0, 40));
             btnClearSelected.Click += (s, args) =>
             {
                 if (clbItems.CheckedIndices.Count == 0)
@@ -24799,7 +24923,8 @@ namespace L1FlyMapViewer
             };
             pnlButtons.GetControls().Add(btnClearSelected);
 
-            Button btnClearAll = new Button { Text = "清除全部", Location = new Point(110, 40), Size = new Size(100, 35), BackColor = WinFormsColors.Salmon };
+            Button btnClearAll = new Button { Text = "清除全部", Size = new Size(100, 35), BackColor = WinFormsColors.Salmon };
+            btnClearAll.SetLocation(new Point(110, 40));
             btnClearAll.Click += (s, args) =>
             {
                 if (WinFormsMessageBox.Show($"確定要清除所有 {totalItems} 個 Layer2 項目嗎？\n\n這將清除所有 S32 檔案中的 Layer2 資料！",
@@ -24824,7 +24949,8 @@ namespace L1FlyMapViewer
             };
             pnlButtons.GetControls().Add(btnClearAll);
 
-            Button btnClose = new Button { Text = "關閉", Location = new Point(pnlButtons.Width - 90, 40), Size = new Size(80, 35), Anchor = AnchorStyles.Right };
+            Button btnClose = new Button { Text = "關閉", Size = new Size(80, 35), Anchor = AnchorStyles.Right };
+            btnClose.SetLocation(new Point(pnlButtons.Width - 90, 40));
             btnClose.Click += (s, args) => resultForm.Close();
             pnlButtons.GetControls().Add(btnClose);
 
@@ -25138,18 +25264,30 @@ namespace L1FlyMapViewer
             gbEdit.SetLocation(new Point(10, 425));
             gbEdit.Size = new Size(860, 80);
 
-            Label lblGroupId = new Label { Text = "GroupId:", Location = new Point(10, 25), Size = new Size(55, 20) };
-            TextBox txtGroupId = new TextBox { Location = new Point(70, 22), Size = new Size(60, 23) };
-            Label lblX = new Label { Text = "X:", Location = new Point(140, 25), Size = new Size(20, 20) };
-            TextBox txtX = new TextBox { Location = new Point(160, 22), Size = new Size(50, 23) };
-            Label lblY = new Label { Text = "Y:", Location = new Point(220, 25), Size = new Size(20, 20) };
-            TextBox txtY = new TextBox { Location = new Point(240, 22), Size = new Size(50, 23) };
-            Label lblLayer = new Label { Text = "Layer:", Location = new Point(300, 25), Size = new Size(40, 20) };
-            TextBox txtLayer = new TextBox { Location = new Point(345, 22), Size = new Size(50, 23) };
-            Label lblIndexId = new Label { Text = "IndexId:", Location = new Point(405, 25), Size = new Size(50, 20) };
-            TextBox txtIndexId = new TextBox { Location = new Point(460, 22), Size = new Size(60, 23) };
-            Label lblTileId = new Label { Text = "TileId:", Location = new Point(530, 25), Size = new Size(40, 20) };
-            TextBox txtTileId = new TextBox { Location = new Point(575, 22), Size = new Size(70, 23) };
+            Label lblGroupId = new Label { Text = "GroupId:", Size = new Size(55, 20) };
+            lblGroupId.SetLocation(new Point(10, 25));
+            TextBox txtGroupId = new TextBox { Size = new Size(60, 23) };
+            txtGroupId.SetLocation(new Point(70, 22));
+            Label lblX = new Label { Text = "X:", Size = new Size(20, 20) };
+            lblX.SetLocation(new Point(140, 25));
+            TextBox txtX = new TextBox { Size = new Size(50, 23) };
+            txtX.SetLocation(new Point(160, 22));
+            Label lblY = new Label { Text = "Y:", Size = new Size(20, 20) };
+            lblY.SetLocation(new Point(220, 25));
+            TextBox txtY = new TextBox { Size = new Size(50, 23) };
+            txtY.SetLocation(new Point(240, 22));
+            Label lblLayer = new Label { Text = "Layer:", Size = new Size(40, 20) };
+            lblLayer.SetLocation(new Point(300, 25));
+            TextBox txtLayer = new TextBox { Size = new Size(50, 23) };
+            txtLayer.SetLocation(new Point(345, 22));
+            Label lblIndexId = new Label { Text = "IndexId:", Size = new Size(50, 20) };
+            lblIndexId.SetLocation(new Point(405, 25));
+            TextBox txtIndexId = new TextBox { Size = new Size(60, 23) };
+            txtIndexId.SetLocation(new Point(460, 22));
+            Label lblTileId = new Label { Text = "TileId:", Size = new Size(40, 20) };
+            lblTileId.SetLocation(new Point(530, 25));
+            TextBox txtTileId = new TextBox { Size = new Size(70, 23) };
+            txtTileId.SetLocation(new Point(575, 22));
 
             Button btnApplyEdit = new Button();
             btnApplyEdit.Text = "套用修改";
@@ -25311,7 +25449,20 @@ namespace L1FlyMapViewer
                 }
             };
 
-            gbEdit.Controls.AddRange(new Control[] { lblGroupId, txtGroupId, lblX, txtX, lblY, txtY, lblLayer, txtLayer, lblIndexId, txtIndexId, lblTileId, txtTileId, btnApplyEdit, btnAddNew });
+            gbEdit.GetControls().Add(lblGroupId);
+            gbEdit.GetControls().Add(txtGroupId);
+            gbEdit.GetControls().Add(lblX);
+            gbEdit.GetControls().Add(txtX);
+            gbEdit.GetControls().Add(lblY);
+            gbEdit.GetControls().Add(txtY);
+            gbEdit.GetControls().Add(lblLayer);
+            gbEdit.GetControls().Add(txtLayer);
+            gbEdit.GetControls().Add(lblIndexId);
+            gbEdit.GetControls().Add(txtIndexId);
+            gbEdit.GetControls().Add(lblTileId);
+            gbEdit.GetControls().Add(txtTileId);
+            gbEdit.GetControls().Add(btnApplyEdit);
+            gbEdit.GetControls().Add(btnAddNew);
             resultForm.GetControls().Add(gbEdit);
 
             // 選取項目時填入編輯區
@@ -27042,16 +27193,26 @@ namespace L1FlyMapViewer
             gbEdit.SetLocation(new Point(10, 395));
             gbEdit.Size = new Size(760, 80);
 
-            Label lblName = new Label { Text = "名稱:", Location = new Point(10, 25), Size = new Size(40, 20) };
-            TextBox txtName = new TextBox { Location = new Point(55, 22), Size = new Size(120, 23) };
-            Label lblX = new Label { Text = "X:", Location = new Point(185, 25), Size = new Size(20, 20) };
-            TextBox txtX = new TextBox { Location = new Point(205, 22), Size = new Size(50, 23) };
-            Label lblY = new Label { Text = "Y:", Location = new Point(265, 25), Size = new Size(20, 20) };
-            TextBox txtY = new TextBox { Location = new Point(285, 22), Size = new Size(50, 23) };
-            Label lblTarget = new Label { Text = "目標地圖:", Location = new Point(345, 25), Size = new Size(60, 20) };
-            TextBox txtTarget = new TextBox { Location = new Point(410, 22), Size = new Size(60, 23) };
-            Label lblPortal = new Label { Text = "PortalId:", Location = new Point(480, 25), Size = new Size(55, 20) };
-            TextBox txtPortal = new TextBox { Location = new Point(540, 22), Size = new Size(60, 23) };
+            Label lblName = new Label { Text = "名稱:", Size = new Size(40, 20) };
+            lblName.SetLocation(new Point(10, 25));
+            TextBox txtName = new TextBox { Size = new Size(120, 23) };
+            txtName.SetLocation(new Point(55, 22));
+            Label lblX = new Label { Text = "X:", Size = new Size(20, 20) };
+            lblX.SetLocation(new Point(185, 25));
+            TextBox txtX = new TextBox { Size = new Size(50, 23) };
+            txtX.SetLocation(new Point(205, 22));
+            Label lblY = new Label { Text = "Y:", Size = new Size(20, 20) };
+            lblY.SetLocation(new Point(265, 25));
+            TextBox txtY = new TextBox { Size = new Size(50, 23) };
+            txtY.SetLocation(new Point(285, 22));
+            Label lblTarget = new Label { Text = "目標地圖:", Size = new Size(60, 20) };
+            lblTarget.SetLocation(new Point(345, 25));
+            TextBox txtTarget = new TextBox { Size = new Size(60, 23) };
+            txtTarget.SetLocation(new Point(410, 22));
+            Label lblPortal = new Label { Text = "PortalId:", Size = new Size(55, 20) };
+            lblPortal.SetLocation(new Point(480, 25));
+            TextBox txtPortal = new TextBox { Size = new Size(60, 23) };
+            txtPortal.SetLocation(new Point(540, 22));
 
             Button btnApplyEdit = new Button();
             btnApplyEdit.Text = "套用修改";
@@ -27202,7 +27363,18 @@ namespace L1FlyMapViewer
                 }
             };
 
-            gbEdit.Controls.AddRange(new Control[] { lblName, txtName, lblX, txtX, lblY, txtY, lblTarget, txtTarget, lblPortal, txtPortal, btnApplyEdit, btnAddNew });
+            gbEdit.GetControls().Add(lblName);
+            gbEdit.GetControls().Add(txtName);
+            gbEdit.GetControls().Add(lblX);
+            gbEdit.GetControls().Add(txtX);
+            gbEdit.GetControls().Add(lblY);
+            gbEdit.GetControls().Add(txtY);
+            gbEdit.GetControls().Add(lblTarget);
+            gbEdit.GetControls().Add(txtTarget);
+            gbEdit.GetControls().Add(lblPortal);
+            gbEdit.GetControls().Add(txtPortal);
+            gbEdit.GetControls().Add(btnApplyEdit);
+            gbEdit.GetControls().Add(btnAddNew);
             resultForm.GetControls().Add(gbEdit);
 
             // 選取項目時填入編輯區
