@@ -1070,8 +1070,69 @@ public class WinFormsListView : Eto.Forms.GridView
     public bool LabelEdit { get; set; }
     public System.Collections.IComparer ListViewItemSorter { get; set; }
     public bool VirtualMode { get; set; }
-    public int VirtualListSize { get; set; }
+
+    private int _virtualListSize;
+    public int VirtualListSize
+    {
+        get => _virtualListSize;
+        set
+        {
+            _virtualListSize = value;
+            if (VirtualMode && value > 0)
+            {
+                // 延遲填充，等 RetrieveVirtualItem 事件被綁定
+                Eto.Forms.Application.Instance.AsyncInvoke(() => PopulateVirtualItems());
+            }
+        }
+    }
+
     public event EventHandler<RetrieveVirtualItemEventArgs> RetrieveVirtualItem;
+
+    private void PopulateVirtualItems()
+    {
+        if (RetrieveVirtualItem == null || _virtualListSize == 0) return;
+
+        // 確保欄位已建立
+        EnsureColumnsCreated();
+
+        var dataList = new List<object>();
+        for (int i = 0; i < _virtualListSize; i++)
+        {
+            var args = new RetrieveVirtualItemEventArgs(i);
+            RetrieveVirtualItem.Invoke(this, args);
+            if (args.Item != null)
+            {
+                dataList.Add(args.Item);
+            }
+        }
+        DataStore = dataList;
+    }
+
+    private void EnsureColumnsCreated()
+    {
+        if (base.Columns.Count > 0) return;
+
+        foreach (var col in Columns)
+        {
+            var gridCol = new Eto.Forms.GridColumn
+            {
+                HeaderText = col.Text,
+                Width = col.Width > 0 ? col.Width : 100,
+                DataCell = new Eto.Forms.TextBoxCell { Binding = Eto.Forms.Binding.Property<ListViewItem, string>(item => item.GetSubItemText(Columns.IndexOf(col))) }
+            };
+            base.Columns.Add(gridCol);
+        }
+    }
+
+    /// <summary>
+    /// 從 Items 集合更新 GridView 的 DataStore（由 ListViewItemCollection 呼叫）
+    /// </summary>
+    public void RefreshFromItems()
+    {
+        if (_items == null || _items.Count == 0) return;
+        EnsureColumnsCreated();
+        DataStore = new List<ListViewItem>(_items);
+    }
 
     // GridLines - accepts bool for WinForms compatibility
     public new bool GridLines
@@ -1759,6 +1820,18 @@ public class ListViewItem
 
     // EnsureVisible - stub method for WinForms compatibility
     public void EnsureVisible() { /* No-op in Eto */ }
+
+    /// <summary>
+    /// 取得指定欄位索引的文字（用於 GridView 綁定）
+    /// </summary>
+    public string GetSubItemText(int columnIndex)
+    {
+        if (columnIndex == 0) return Text ?? "";
+        int subIndex = columnIndex - 1;
+        if (subIndex >= 0 && subIndex < SubItems.Count)
+            return SubItems[subIndex].Text ?? "";
+        return "";
+    }
 
     public ListViewItem() { }
     public ListViewItem(string text) { Text = text; }
@@ -4743,27 +4816,42 @@ public enum ColumnHeaderStyle
 /// </summary>
 public class ListViewItemCollection : System.Collections.Generic.List<ListViewItem>
 {
-    private readonly Eto.Forms.GridView _gridView;
+    private readonly WinFormsListView _listView;
+    private bool _pendingUpdate;
 
     public ListViewItemCollection(Eto.Forms.GridView gridView)
     {
-        _gridView = gridView;
+        _listView = gridView as WinFormsListView;
     }
 
     public new void Clear()
     {
         base.Clear();
-        _gridView.DataStore = null;
+        if (_listView != null)
+            _listView.DataStore = null;
     }
 
     public new void Add(ListViewItem item)
     {
         base.Add(item);
+        ScheduleUpdate();
     }
 
     public void AddRange(ListViewItem[] items)
     {
         base.AddRange(items);
+        ScheduleUpdate();
+    }
+
+    private void ScheduleUpdate()
+    {
+        if (_pendingUpdate || _listView == null) return;
+        _pendingUpdate = true;
+        Eto.Forms.Application.Instance.AsyncInvoke(() =>
+        {
+            _pendingUpdate = false;
+            _listView.RefreshFromItems();
+        });
     }
 }
 
