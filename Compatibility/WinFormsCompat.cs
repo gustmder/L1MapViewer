@@ -2917,38 +2917,161 @@ public class ControlCollection : System.Collections.ObjectModel.Collection<Eto.F
 
     private void UpdateContainer()
     {
-        // 根據控件數量建立適當的內容
-        Eto.Forms.Control contentToSet = null;
-
-        if (Count == 1)
+        if (Count == 0)
         {
+            SetContainerContent(null);
+            return;
+        }
+
+        // 檢查是否有任何控件使用 Dock 樣式
+        bool hasDocking = false;
+        foreach (var control in this)
+        {
+            var dock = control.GetDock();
+            if (dock != DockStyle.None)
+            {
+                hasDocking = true;
+                break;
+            }
+        }
+
+        Eto.Forms.Control contentToSet;
+
+        if (Count == 1 && !hasDocking)
+        {
+            // 單一控件，直接設定
             contentToSet = this[0];
         }
-        else if (Count > 1)
+        else if (hasDocking)
+        {
+            // 使用 TableLayout 來模擬 WinForms 的 Dock 行為
+            contentToSet = CreateDockedLayout();
+        }
+        else
         {
             // 使用 PixelLayout 以支援絕對定位 (Location 屬性)
             var layout = new Eto.Forms.PixelLayout();
             foreach (var control in this)
             {
-                // 取得控件的 Location (如果有設定)
                 var loc = control.GetLocation();
                 layout.Add(control, loc);
             }
             contentToSet = layout;
         }
 
-        // 設定到適當的容器類型
+        SetContainerContent(contentToSet);
+    }
+
+    private Eto.Forms.Control CreateDockedLayout()
+    {
+        // 收集各種 Dock 類型的控件
+        var topControls = new List<Eto.Forms.Control>();
+        var bottomControls = new List<Eto.Forms.Control>();
+        var leftControls = new List<Eto.Forms.Control>();
+        var rightControls = new List<Eto.Forms.Control>();
+        Eto.Forms.Control fillControl = null;
+        var noneControls = new List<Eto.Forms.Control>();
+
+        foreach (var control in this)
+        {
+            var dock = control.GetDock();
+            switch (dock)
+            {
+                case DockStyle.Top:
+                    topControls.Add(control);
+                    break;
+                case DockStyle.Bottom:
+                    bottomControls.Add(control);
+                    break;
+                case DockStyle.Left:
+                    leftControls.Add(control);
+                    break;
+                case DockStyle.Right:
+                    rightControls.Add(control);
+                    break;
+                case DockStyle.Fill:
+                    fillControl = control;
+                    break;
+                default:
+                    noneControls.Add(control);
+                    break;
+            }
+        }
+
+        // 建立 TableLayout 來模擬 Dock 行為
+        var table = new Eto.Forms.TableLayout();
+        table.Spacing = new Eto.Drawing.Size(0, 0);
+
+        // 添加 Top 控件（每個佔一行）
+        foreach (var control in topControls)
+        {
+            table.Rows.Add(new Eto.Forms.TableRow(new Eto.Forms.TableCell(control, true)) { ScaleHeight = false });
+        }
+
+        // 中間區域（Left + Fill + Right）
+        if (leftControls.Count > 0 || fillControl != null || rightControls.Count > 0 || noneControls.Count > 0)
+        {
+            var middleRow = new Eto.Forms.TableRow { ScaleHeight = true };
+
+            // Left 控件
+            foreach (var control in leftControls)
+            {
+                middleRow.Cells.Add(new Eto.Forms.TableCell(control, false));
+            }
+
+            // Fill 控件或 None 控件
+            if (fillControl != null)
+            {
+                middleRow.Cells.Add(new Eto.Forms.TableCell(fillControl, true));
+            }
+            else if (noneControls.Count > 0)
+            {
+                // 如果沒有 Fill 但有 None 控件，用 PixelLayout 放置
+                var pixelLayout = new Eto.Forms.PixelLayout();
+                foreach (var control in noneControls)
+                {
+                    var loc = control.GetLocation();
+                    pixelLayout.Add(control, loc);
+                }
+                middleRow.Cells.Add(new Eto.Forms.TableCell(pixelLayout, true));
+            }
+            else
+            {
+                // 添加一個空的擴展單元格
+                middleRow.Cells.Add(new Eto.Forms.TableCell(null, true));
+            }
+
+            // Right 控件
+            foreach (var control in rightControls)
+            {
+                middleRow.Cells.Add(new Eto.Forms.TableCell(control, false));
+            }
+
+            table.Rows.Add(middleRow);
+        }
+
+        // 添加 Bottom 控件（反向，因為最後添加的在最下面）
+        for (int i = bottomControls.Count - 1; i >= 0; i--)
+        {
+            table.Rows.Add(new Eto.Forms.TableRow(new Eto.Forms.TableCell(bottomControls[i], true)) { ScaleHeight = false });
+        }
+
+        return table;
+    }
+
+    private void SetContainerContent(Eto.Forms.Control content)
+    {
         if (_container is Eto.Forms.Panel panel)
         {
-            panel.Content = contentToSet;
+            panel.Content = content;
         }
         else if (_container is Eto.Forms.TabPage tabPage)
         {
-            tabPage.Content = contentToSet;
+            tabPage.Content = content;
         }
         else if (_container is Eto.Forms.Window window)
         {
-            window.Content = contentToSet;
+            window.Content = content;
         }
     }
 }
@@ -2989,9 +3112,24 @@ public static class ContainerExtensions
         return new ControlCollection(null);
     }
 
-    // Dock stub (Eto doesn't have direct docking)
-    public static void SetDock(this Eto.Forms.Control control, DockStyle dock) { }
-    public static DockStyle GetDock(this Eto.Forms.Control control) => DockStyle.None;
+    // Dock style storage
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Eto.Forms.Control, DockStyleHolder> _dockStyles
+        = new System.Runtime.CompilerServices.ConditionalWeakTable<Eto.Forms.Control, DockStyleHolder>();
+
+    private class DockStyleHolder { public DockStyle Dock; }
+
+    public static void SetDock(this Eto.Forms.Control control, DockStyle dock)
+    {
+        var holder = _dockStyles.GetOrCreateValue(control);
+        holder.Dock = dock;
+    }
+
+    public static DockStyle GetDock(this Eto.Forms.Control control)
+    {
+        if (_dockStyles.TryGetValue(control, out var holder))
+            return holder.Dock;
+        return DockStyle.None;
+    }
 
     // Anchor stub
     public static void SetAnchor(this Eto.Forms.Control control, AnchorStyles anchor) { }
