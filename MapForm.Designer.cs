@@ -59,14 +59,14 @@ namespace L1FlyMapViewer
         private Panel rightPanel;
         private Label lblTileList;
         private TextBox txtTileSearch;
-        private ListView lvTiles;
+        private L1MapViewer.Controls.IconTextListControl lvTiles;
         private Label lblMaterials;
-        private ListView lvMaterials;
+        private L1MapViewer.Controls.IconTextListControl lvMaterials;
         private Button btnMoreMaterials;
         private Label lblGroupThumbnails;
         private TextBox txtGroupSearch;
         private ComboBox cmbGroupMode;
-        private ListView lvGroupThumbnails;
+        private L1MapViewer.Controls.IconTextListControl lvGroupThumbnails;
 
         // 工具列面板（右側功能區）
         private Panel toolbarContainer;
@@ -133,7 +133,8 @@ namespace L1FlyMapViewer
         private CheckBox chkFloatLayer5;
         private CheckBox chkFloatSafeZones;
         private CheckBox chkFloatCombatZones;
-        private CheckBox chkFloatLayer8;
+        private CheckBox chkFloatLayer8Spr;
+        private CheckBox chkFloatLayer8Marker;
         private CheckBox chkShowPassable;
         private CheckBox chkShowLayer5;
         private CheckBox chkShowGrid;
@@ -215,14 +216,14 @@ namespace L1FlyMapViewer
             this.rightPanel = new Panel();
             this.lblTileList = new Label();
             this.txtTileSearch = new TextBox();
-            this.lvTiles = new ListView();
+            this.lvTiles = new L1MapViewer.Controls.IconTextListControl();
             this.lblMaterials = new Label();
-            this.lvMaterials = new ListView();
+            this.lvMaterials = new L1MapViewer.Controls.IconTextListControl();
             this.btnMoreMaterials = new Button();
             this.lblGroupThumbnails = new Label();
             this.txtGroupSearch = new TextBox();
             this.cmbGroupMode = new ComboBox();
-            this.lvGroupThumbnails = new ListView();
+            this.lvGroupThumbnails = new L1MapViewer.Controls.IconTextListControl();
 
             // 工具列面板
             this.toolbarContainer = new Panel();
@@ -306,7 +307,8 @@ namespace L1FlyMapViewer
             this.chkFloatLayer5 = new CheckBox();
             this.chkFloatSafeZones = new CheckBox();
             this.chkFloatCombatZones = new CheckBox();
-            this.chkFloatLayer8 = new CheckBox();
+            this.chkFloatLayer8Spr = new CheckBox();
+            this.chkFloatLayer8Marker = new CheckBox();
             this.chkShowLayer5 = new CheckBox();
 
             this.menuStrip1.SuspendLayout();
@@ -703,7 +705,7 @@ namespace L1FlyMapViewer
             this.lstS32Files.SetName("lstS32Files");
             this.lstS32Files.Size = new Size(254, 305);
             this.lstS32Files.TabIndex = 3;
-            this.lstS32Files.CheckOnClick = false;
+            this.lstS32Files.CheckOnClick = true;
             this.lstS32Files.DrawMode = DrawMode.OwnerDrawFixed;
             this.lstS32Files.SelectedIndexChanged += new System.EventHandler(this.lstS32Files_SelectedIndexChanged);
             this.lstS32Files.ItemCheck += new ItemCheckEventHandler(this.lstS32Files_ItemCheck);
@@ -1151,11 +1153,12 @@ namespace L1FlyMapViewer
             this.layerPopupPanel.GetControls().Add(this.chkFloatS32Boundary);
             this.layerPopupPanel.GetControls().Add(this.chkFloatSafeZones);
             this.layerPopupPanel.GetControls().Add(this.chkFloatCombatZones);
-            this.layerPopupPanel.GetControls().Add(this.chkFloatLayer8);
+            this.layerPopupPanel.GetControls().Add(this.chkFloatLayer8Spr);
+            this.layerPopupPanel.GetControls().Add(this.chkFloatLayer8Marker);
             this.layerPopupPanel.SetLocation(new Point(0, 24));
             this.layerPopupPanel.SetName("layerPopupPanel");
             this.layerPopupPanel.Padding = new Padding(5);
-            this.layerPopupPanel.Size = new Size(110, 270);
+            this.layerPopupPanel.Size = new Size(110, 290);
             this.layerPopupPanel.TabIndex = 1;
             this.layerPopupPanel.Visible = true;
 
@@ -1282,18 +1285,32 @@ namespace L1FlyMapViewer
             this.chkFloatCombatZones.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
 
             //
-            // chkFloatLayer8
+            // chkFloatLayer8Spr
             //
-            this.chkFloatLayer8.SetAutoSize(true);
-            this.chkFloatLayer8.TextColor = Color.FromArgb(255, 180, 100);
-            this.chkFloatLayer8.SetLocation(new Point(8, 203));
-            this.chkFloatLayer8.SetName("chkFloatLayer8");
-            this.chkFloatLayer8.Size = new Size(80, 19);
-            this.chkFloatLayer8.TabIndex = 9;
-            this.chkFloatLayer8.Text = "L8 特效";
-            this.chkFloatLayer8.SetUseVisualStyleBackColor(true);
-            this.chkFloatLayer8.Checked = true;
-            this.chkFloatLayer8.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
+            this.chkFloatLayer8Spr.SetAutoSize(true);
+            this.chkFloatLayer8Spr.TextColor = Color.FromArgb(255, 180, 100);
+            this.chkFloatLayer8Spr.SetLocation(new Point(8, 203));
+            this.chkFloatLayer8Spr.SetName("chkFloatLayer8Spr");
+            this.chkFloatLayer8Spr.Size = new Size(80, 19);
+            this.chkFloatLayer8Spr.TabIndex = 9;
+            this.chkFloatLayer8Spr.Text = LocalizationManager.L("Layer_L8Spr");
+            this.chkFloatLayer8Spr.SetUseVisualStyleBackColor(true);
+            this.chkFloatLayer8Spr.Checked = true;
+            this.chkFloatLayer8Spr.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
+
+            //
+            // chkFloatLayer8Marker
+            //
+            this.chkFloatLayer8Marker.SetAutoSize(true);
+            this.chkFloatLayer8Marker.TextColor = Color.FromArgb(255, 180, 100);
+            this.chkFloatLayer8Marker.SetLocation(new Point(8, 223));
+            this.chkFloatLayer8Marker.SetName("chkFloatLayer8Marker");
+            this.chkFloatLayer8Marker.Size = new Size(80, 19);
+            this.chkFloatLayer8Marker.TabIndex = 10;
+            this.chkFloatLayer8Marker.Text = LocalizationManager.L("Layer_L8Marker");
+            this.chkFloatLayer8Marker.SetUseVisualStyleBackColor(true);
+            this.chkFloatLayer8Marker.Checked = true;
+            this.chkFloatLayer8Marker.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
 
             //
             // rightPanel
@@ -1342,13 +1359,9 @@ namespace L1FlyMapViewer
             //
             // lvTiles
             //
-            this.lvTiles.SetLocation(new Point(5, 55));
-            this.lvTiles.SetName("lvTiles");
             this.lvTiles.Size = new Size(210, 125);
-            this.lvTiles.TabIndex = 1;
-            this.lvTiles.View = View.LargeIcon;
-            this.lvTiles.DoubleClick += new System.EventHandler(this.lvTiles_DoubleClick);
-            this.lvTiles.MouseUp += new MouseEventHandler(this.lvTiles_MouseUp);
+            this.lvTiles.ItemDoubleClick += new System.EventHandler(this.lvTiles_DoubleClick);
+            this.lvTiles.MouseUp += new System.EventHandler<Eto.Forms.MouseEventArgs>(this.lvTiles_MouseUp_Eto);
 
             //
             // lblMaterials
@@ -1363,18 +1376,11 @@ namespace L1FlyMapViewer
             //
             // lvMaterials
             //
-            this.lvMaterials.SetLocation(new Point(5, 210));
-            this.lvMaterials.SetName("lvMaterials");
             this.lvMaterials.Size = new Size(210, 95);
-            this.lvMaterials.TabIndex = 3;
-            this.lvMaterials.View = View.LargeIcon;
             this.lvMaterials.MultiSelect = false;
             this.lvMaterials.AllowDrop = true;
-            this.lvMaterials.MouseDoubleClick += new MouseEventHandler(this.lvMaterials_MouseDoubleClick);
-            this.lvMaterials.MouseUp += new MouseEventHandler(this.lvMaterials_MouseUp);
-            this.lvMaterials.DragEnter += new DragEventHandler(this.lvMaterials_DragEnter);
-            this.lvMaterials.DragOver += new DragEventHandler(this.lvMaterials_DragOver);
-            this.lvMaterials.DragDrop += new DragEventHandler(this.lvMaterials_DragDrop);
+            this.lvMaterials.ItemDoubleClick += new System.EventHandler(this.lvMaterials_DoubleClick_Eto);
+            this.lvMaterials.MouseUp += new System.EventHandler<Eto.Forms.MouseEventArgs>(this.lvMaterials_MouseUp_Eto);
 
             //
             // btnMoreMaterials
@@ -1422,16 +1428,12 @@ namespace L1FlyMapViewer
             //
             // lvGroupThumbnails
             //
-            this.lvGroupThumbnails.SetLocation(new Point(5, 385));
-            this.lvGroupThumbnails.SetName("lvGroupThumbnails");
             this.lvGroupThumbnails.Size = new Size(210, 260);
-            this.lvGroupThumbnails.TabIndex = 5;
-            this.lvGroupThumbnails.View = View.LargeIcon;
             this.lvGroupThumbnails.MultiSelect = true;
-            this.lvGroupThumbnails.MouseClick += new MouseEventHandler(this.lvGroupThumbnails_MouseClick);
-            this.lvGroupThumbnails.DoubleClick += new System.EventHandler(this.lvGroupThumbnails_DoubleClick);
-            this.lvGroupThumbnails.MouseUp += new MouseEventHandler(this.lvGroupThumbnails_MouseUp);
-            this.lvGroupThumbnails.SelectedIndexChanged += new System.EventHandler(this.lvGroupThumbnails_SelectedIndexChanged);
+            this.lvGroupThumbnails.MouseDown += new System.EventHandler<Eto.Forms.MouseEventArgs>(this.lvGroupThumbnails_MouseClick_Eto);
+            this.lvGroupThumbnails.ItemDoubleClick += new System.EventHandler(this.lvGroupThumbnails_DoubleClick);
+            this.lvGroupThumbnails.MouseUp += new System.EventHandler<Eto.Forms.MouseEventArgs>(this.lvGroupThumbnails_MouseUp_Eto);
+            this.lvGroupThumbnails.SelectionChanged += new System.EventHandler(this.lvGroupThumbnails_SelectionChanged);
 
             //
             // toolbarPanel (第一排)

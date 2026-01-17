@@ -16,7 +16,6 @@ namespace L1MapViewer.Localization
             { "Menu_Import", "가져오기" },
             { "Menu_Import_Material", "소재 가져오기..." },
             { "Menu_Import_Fs32ToNewMap", "맵 패키지를 새 맵으로 가져오기..." },
-            { "Menu_Database", "데이터베이스 설정" },
             { "Menu_MapEditor", "맵 에디터" },
             { "Menu_Help_Discord", "Discord에서 토론하기" },
             { "Menu_Help_About", "정보" },
@@ -100,16 +99,6 @@ namespace L1MapViewer.Localization
             { "Placeholder_SearchTileId", "TileId 검색..." },
             { "Label_SearchResult", "검색 결과" },
 
-            // === Buttons - Form1 (Monster Tool) ===
-            { "Button_Connect", "연결" },
-            { "Button_AddToDatabase", "데이터베이스에 추가" },
-            { "Button_ReloadMap", "현재 맵 새로고침" },
-            { "Button_ShowAllMonsters", "모든 몬스터 위치 표시" },
-            { "Button_AddSpawn", "추가" },
-            { "Button_CopySpawn", "복사" },
-            { "Button_DeleteSpawn", "삭제" },
-            { "Button_TestConnection", "연결 테스트" },
-
             // === Labels - Common ===
             { "Label_Name", "이름" },
             { "Label_ID", "ID" },
@@ -123,29 +112,6 @@ namespace L1MapViewer.Localization
             { "Label_Layer1Coord", "Layer1 좌표" },
             { "Label_Zoom", "확대/축소" },
             { "Label_S32Files", "S32 파일" },
-
-            // === Labels - Form1 (Monster Tool) ===
-            { "Label_ExpectedAdd", "추가 예정" },
-            { "Label_CenterX", "중심 X" },
-            { "Label_CenterY", "중심 Y" },
-            { "Label_Radius", "반경" },
-            { "Label_RespawnMin", "리스폰 시간 (최소)" },
-            { "Label_RespawnMax", "리스폰 시간 (최대)" },
-            { "Label_SpawnInScreen", "화면 내 스폰" },
-            { "Label_TeleportDistance", "텔레포트 거리" },
-            { "Label_MonsterID", "몬스터 ID" },
-            { "Label_MonsterNote", "몬스터 메모" },
-            { "Label_MonsterCount", "몬스터 수" },
-
-            // === Labels - Database ===
-            { "Label_SavedConnections", "저장된 연결:" },
-            { "Label_ConnectionName", "연결 이름:" },
-            { "Label_ServerAddress", "서버 주소:" },
-            { "Label_Port", "포트:" },
-            { "Label_Database", "데이터베이스:" },
-            { "Label_Username", "사용자 이름:" },
-            { "Label_Password", "비밀번호:" },
-            { "Group_ConnectionInfo", "연결 정보" },
 
             // === Layer Names ===
             { "Layer_1", "레이어 1 (바닥)" },
@@ -173,6 +139,8 @@ namespace L1MapViewer.Localization
             { "Layer_FloatS32Border", "S32 경계" },
             { "Layer_FloatSafeZones", "안전 지역" },
             { "Layer_FloatCombatZones", "전투 지역" },
+            { "Layer_L8Spr", "L8 이미지" },
+            { "Layer_L8Marker", "L8 보조" },
 
             // === Hints ===
             { "Hint_MouseControls", "마우스 가운데 버튼으로 드래그 | Ctrl+휠로 확대/축소 | 좌클릭으로 선택" },
@@ -232,24 +200,6 @@ namespace L1MapViewer.Localization
             { "ImportNewMap_Success", "맵 패키지가 새 맵 {0}에 성공적으로 가져와졌습니다" },
             { "ImportNewMap_Failed", "가져오기 실패: {0}" },
             { "ImportNewMap_PleaseOpenClient", "먼저 리니지 클라이언트를 열어주세요" },
-
-            // === Messages - Database ===
-            { "Message_PleaseConnectDB", "먼저 데이터베이스에 연결하세요" },
-            { "Message_ConnectionSuccess", "연결 성공!" },
-            { "Message_ConnectionFailed", "연결 실패: {0}" },
-            { "Message_PleaseEnterConnName", "연결 이름을 입력하세요" },
-            { "Message_PleaseEnterServer", "서버 주소를 입력하세요" },
-            { "Message_PleaseEnterDatabase", "데이터베이스 이름을 입력하세요" },
-            { "Message_ConnectionSaved", "연결이 저장되었습니다" },
-            { "Message_ConfirmDeleteConnection", "이 연결을 삭제하시겠습니까?" },
-
-            // === Messages - Monster Tool ===
-            { "Message_PleaseEnterMonsterID", "몬스터 ID를 입력하세요" },
-            { "Message_InvalidMonsterID", "잘못된 몬스터 ID" },
-            { "Message_MonsterAddedToQueue", "대기열에 추가됨" },
-            { "Message_SpawnAdded", "스폰 포인트 추가됨" },
-            { "Message_SpawnDeleted", "스폰 포인트 삭제됨" },
-            { "Message_NoSpawnSelected", "먼저 스폰 포인트를 선택하세요" },
 
             // === Messages - MapForm ===
             { "Message_S32Saved", "S32 저장됨" },
@@ -349,9 +299,6 @@ namespace L1MapViewer.Localization
 
             // === Form Titles ===
             { "Form_MapEditor_Title", "맵 에디터" },
-            { "Form_MonsterTool_Title", "몬스터 설정 도구" },
-            { "Form_DatabaseConnection_Title", "데이터베이스 연결 관리자" },
-            { "Form_MonsterSearch_Title", "몬스터 검색" },
             { "Form_ExportOptions_Title", "내보내기 옵션" },
             { "Form_CopySettings_Title", "설정 복사" },
             { "Form_MaterialBrowser_Title", "소재 브라우저" },

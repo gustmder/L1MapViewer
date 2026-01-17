@@ -16,7 +16,6 @@ namespace L1MapViewer.Localization
             { "Menu_Import", "Import" },
             { "Menu_Import_Material", "Import Material..." },
             { "Menu_Import_Fs32ToNewMap", "Import Map Package to New Map..." },
-            { "Menu_Database", "Database Settings" },
             { "Menu_MapEditor", "Map Editor" },
             { "Menu_Help_Discord", "Discuss on Discord" },
             { "Menu_Help_About", "About" },
@@ -100,16 +99,6 @@ namespace L1MapViewer.Localization
             { "Placeholder_SearchTileId", "Search TileId..." },
             { "Label_SearchResult", "Search Results" },
 
-            // === Buttons - Form1 (Monster Tool) ===
-            { "Button_Connect", "Connect" },
-            { "Button_AddToDatabase", "Add to Database" },
-            { "Button_ReloadMap", "Reload Current Map" },
-            { "Button_ShowAllMonsters", "Show All Monster Positions" },
-            { "Button_AddSpawn", "Add" },
-            { "Button_CopySpawn", "Copy" },
-            { "Button_DeleteSpawn", "Delete" },
-            { "Button_TestConnection", "Test Connection" },
-
             // === Labels - Common ===
             { "Label_Name", "Name" },
             { "Label_ID", "ID" },
@@ -123,29 +112,6 @@ namespace L1MapViewer.Localization
             { "Label_Layer1Coord", "Layer1 Coordinates" },
             { "Label_Zoom", "Zoom" },
             { "Label_S32Files", "S32 Files" },
-
-            // === Labels - Form1 (Monster Tool) ===
-            { "Label_ExpectedAdd", "Expected Add" },
-            { "Label_CenterX", "Center X" },
-            { "Label_CenterY", "Center Y" },
-            { "Label_Radius", "Radius" },
-            { "Label_RespawnMin", "Respawn Time (Min)" },
-            { "Label_RespawnMax", "Respawn Time (Max)" },
-            { "Label_SpawnInScreen", "Spawn In Screen" },
-            { "Label_TeleportDistance", "Teleport Distance" },
-            { "Label_MonsterID", "Monster ID" },
-            { "Label_MonsterNote", "Monster Note" },
-            { "Label_MonsterCount", "Monster Count" },
-
-            // === Labels - Database ===
-            { "Label_SavedConnections", "Saved Connections:" },
-            { "Label_ConnectionName", "Connection Name:" },
-            { "Label_ServerAddress", "Server Address:" },
-            { "Label_Port", "Port:" },
-            { "Label_Database", "Database:" },
-            { "Label_Username", "Username:" },
-            { "Label_Password", "Password:" },
-            { "Group_ConnectionInfo", "Connection Info" },
 
             // === Layer Names ===
             { "Layer_1", "Layer 1 (Floor)" },
@@ -173,6 +139,8 @@ namespace L1MapViewer.Localization
             { "Layer_FloatS32Border", "S32 Border" },
             { "Layer_FloatSafeZones", "Safe Zone" },
             { "Layer_FloatCombatZones", "Combat" },
+            { "Layer_L8Spr", "L8 SPR" },
+            { "Layer_L8Marker", "L8 Marker" },
 
             // === Hints ===
             { "Hint_MouseControls", "Middle-click to drag | Ctrl+Scroll to zoom | Left-click to select" },
@@ -232,24 +200,6 @@ namespace L1MapViewer.Localization
             { "ImportNewMap_Success", "Map package successfully imported to new map {0}" },
             { "ImportNewMap_Failed", "Import failed: {0}" },
             { "ImportNewMap_PleaseOpenClient", "Please open a Lineage client first" },
-
-            // === Messages - Database ===
-            { "Message_PleaseConnectDB", "Please connect to the database first" },
-            { "Message_ConnectionSuccess", "Connection successful!" },
-            { "Message_ConnectionFailed", "Connection failed: {0}" },
-            { "Message_PleaseEnterConnName", "Please enter a connection name" },
-            { "Message_PleaseEnterServer", "Please enter a server address" },
-            { "Message_PleaseEnterDatabase", "Please enter a database name" },
-            { "Message_ConnectionSaved", "Connection saved" },
-            { "Message_ConfirmDeleteConnection", "Are you sure you want to delete this connection?" },
-
-            // === Messages - Monster Tool ===
-            { "Message_PleaseEnterMonsterID", "Please enter a Monster ID" },
-            { "Message_InvalidMonsterID", "Invalid Monster ID" },
-            { "Message_MonsterAddedToQueue", "Added to pending queue" },
-            { "Message_SpawnAdded", "Spawn point added" },
-            { "Message_SpawnDeleted", "Spawn point deleted" },
-            { "Message_NoSpawnSelected", "Please select a spawn point first" },
 
             // === Messages - MapForm ===
             { "Message_S32Saved", "S32 saved" },
@@ -349,9 +299,6 @@ namespace L1MapViewer.Localization
 
             // === Form Titles ===
             { "Form_MapEditor_Title", "Map Editor" },
-            { "Form_MonsterTool_Title", "Monster Configuration Tool" },
-            { "Form_DatabaseConnection_Title", "Database Connection Manager" },
-            { "Form_MonsterSearch_Title", "Search Monster" },
             { "Form_ExportOptions_Title", "Export Options" },
             { "Form_CopySettings_Title", "Copy Settings" },
             { "Form_MaterialBrowser_Title", "Material Browser" },

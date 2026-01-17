@@ -204,7 +204,51 @@ public class WinFormsButton : Eto.Forms.Button
     public new Eto.Drawing.Image Image { get => base.Image; set => base.Image = value; }
     public ContentAlignment ImageAlign { get; set; }
     public ContentAlignment TextAlign { get; set; }
-    public Eto.Forms.DialogResult DialogResult { get; set; }
+
+    private DialogResultCompat _dialogResult = DialogResultCompat.None;
+
+    /// <summary>
+    /// Gets or sets the dialog result that will be returned when this button is clicked.
+    /// When set to a value other than None, clicking this button will close the parent form.
+    /// </summary>
+    public new DialogResultCompat DialogResult
+    {
+        get => _dialogResult;
+        set => _dialogResult = value;
+    }
+
+    public WinFormsButton()
+    {
+        // Subscribe to click event to handle DialogResult
+        base.Click += OnButtonClick;
+    }
+
+    private void OnButtonClick(object sender, EventArgs e)
+    {
+        if (_dialogResult != DialogResultCompat.None)
+        {
+            // Find parent WinFormsForm and set its DialogResult
+            var parent = FindParentForm(this);
+            if (parent != null)
+            {
+                parent.DialogResult = _dialogResult;
+            }
+        }
+    }
+
+    private WinFormsForm FindParentForm(Eto.Forms.Control control)
+    {
+        var current = control?.Parent;
+        while (current != null)
+        {
+            if (current is WinFormsForm form)
+                return form;
+            current = current.Parent;
+        }
+        // Also check if the control's parent chain leads to a Window
+        var window = control?.FindParent<Eto.Forms.Window>();
+        return window as WinFormsForm;
+    }
 
     // Position properties
     public int Left { get => Location.X; set => Location = new Point(value, Location.Y); }
@@ -436,16 +480,66 @@ public class WinFormsForm : Eto.Forms.Form
     public event FormClosedEventHandler FormClosed { add => Closed += (s, e) => value(s, new FormClosedEventArgs(CloseReason.UserClosing)); remove { } }
     public new event EventHandler Resize { add => SizeChanged += (s, e) => value(s, EventArgs.Empty); remove { } }
 
-    // Dialog methods - Form doesn't have ShowModal, use Show instead
+    // Dialog result for modal behavior
+    private DialogResultCompat _dialogResult = DialogResultCompat.None;
+    private bool _isModal = false;
+    private bool _modalClosed = false;
+
+    /// <summary>
+    /// Gets or sets the dialog result. Setting this to a value other than None will close the modal form.
+    /// </summary>
+    public DialogResultCompat DialogResult
+    {
+        get => _dialogResult;
+        set
+        {
+            _dialogResult = value;
+            if (_isModal && value != DialogResultCompat.None)
+            {
+                _modalClosed = true;
+                Close();
+            }
+        }
+    }
+
+    // Dialog methods - implement modal behavior using event loop
     public new DialogResultCompat ShowDialog()
     {
-        Show();
-        return DialogResultCompat.OK;
+        return ShowDialog(null);
     }
+
     public DialogResultCompat ShowDialog(Eto.Forms.Control owner)
     {
+        _isModal = true;
+        _modalClosed = false;
+        _dialogResult = DialogResultCompat.None;
+
+        // Subscribe to close event to break out of modal loop
+        EventHandler<EventArgs> closedHandler = null;
+        closedHandler = (s, e) =>
+        {
+            _modalClosed = true;
+            Closed -= closedHandler;
+        };
+        Closed += closedHandler;
+
+        // Show the form
         Show();
-        return DialogResultCompat.OK;
+
+        // Run a modal loop - process events until form is closed
+        var app = Eto.Forms.Application.Instance;
+        while (!_modalClosed && Visible)
+        {
+            app.RunIteration();
+        }
+
+        _isModal = false;
+
+        // If dialog result wasn't explicitly set, default to Cancel
+        if (_dialogResult == DialogResultCompat.None)
+            _dialogResult = DialogResultCompat.Cancel;
+
+        return _dialogResult;
     }
 
     // Show with owner
@@ -1163,6 +1257,28 @@ public class WinFormsListView : Eto.Forms.GridView
     {
         // 當選取改變時，更新 SelectedItems 和 SelectedIndices
         base.SelectionChanged += OnSelectionChangedInternal;
+
+        // 當控制項大小改變時，重新排列 Tile 視圖
+        base.SizeChanged += OnSizeChangedInternal;
+    }
+
+    private int _lastTileLayoutWidth;
+    private void OnSizeChangedInternal(object sender, EventArgs e)
+    {
+        // 只有 Tile 視圖需要在寬度改變時重新排列
+        if (View == View.Tile && _items != null && _items.Count > 0)
+        {
+            int tileWidth = 90;
+            int currentTilesPerRow = Math.Max(1, (int)(this.Width / tileWidth));
+            int previousTilesPerRow = Math.Max(1, (int)(_lastTileLayoutWidth / tileWidth));
+
+            // 只有當每行 tile 數量改變時才重新排列
+            if (currentTilesPerRow != previousTilesPerRow)
+            {
+                _lastTileLayoutWidth = (int)this.Width;
+                RefreshFromItems();
+            }
+        }
     }
 
     private void OnSelectionChangedInternal(object sender, EventArgs e)
@@ -1309,6 +1425,77 @@ public class WinFormsListView : Eto.Forms.GridView
     {
         if (base.Columns.Count > 0) return;
 
+        // Tile 視圖：圖片在上，文字在下（每個 item 一行，支援正確選擇）
+        if (View == View.Tile)
+        {
+            ShowHeader = false;
+
+            // 每個 tile 的尺寸
+            int tileWidth = 90;
+            int tileHeight = 100;
+            int imgSize = 64;
+
+            RowHeight = tileHeight;
+
+            var listViewRef = this;
+
+            var drawableCell = new Eto.Forms.DrawableCell();
+            drawableCell.Paint += (sender, e) =>
+            {
+                if (e.Item is not ListViewItem item)
+                {
+                    _logger.Warn($"[ListView-Tile] Paint: unexpected type {e.Item?.GetType().FullName}");
+                    return;
+                }
+
+                var g = e.Graphics;
+                var bounds = e.ClipRectangle;
+
+                // 繪製圖片（置中）
+                Eto.Drawing.Image img = item.Image;
+                if (img == null)
+                {
+                    var imgList = listViewRef.LargeImageList;
+                    if (imgList != null && item.ImageIndex >= 0 && item.ImageIndex < imgList.Images.Count)
+                    {
+                        img = imgList.Images[item.ImageIndex];
+                    }
+                }
+
+                float imgX = bounds.X + (bounds.Width - imgSize) / 2;
+                float imgY = bounds.Y + 4;
+
+                if (img != null)
+                {
+                    try
+                    {
+                        g.DrawImage(img, new Eto.Drawing.RectangleF(imgX, imgY, imgSize, imgSize));
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, $"[ListView-Tile] DrawImage failed for {item.Text}");
+                    }
+                }
+
+                // 繪製文字（圖片下方，置中）
+                var font = Eto.Drawing.SystemFonts.Default();
+                string text = item.Text ?? "";
+                var textSize = g.MeasureString(font, text);
+                float textX = bounds.X + (bounds.Width - textSize.Width) / 2;
+                float textY = imgY + imgSize + 4;
+                g.DrawText(font, Eto.Drawing.Colors.Black, textX, textY, text);
+            };
+
+            var combinedCol = new Eto.Forms.GridColumn
+            {
+                HeaderText = "",
+                Width = tileWidth,
+                DataCell = drawableCell
+            };
+            base.Columns.Add(combinedCol);
+            return;
+        }
+
         // LargeIcon/SmallIcon 視圖：使用單一 CustomCell 繪製圖片+文字
         if (View == View.LargeIcon || View == View.SmallIcon)
         {
@@ -1399,10 +1586,22 @@ public class WinFormsListView : Eto.Forms.GridView
         EnsureColumnsCreated();
         if (_items == null || _items.Count == 0)
         {
-            DataStore = new List<ListViewItem>();
+            DataStore = View == View.Tile
+                ? new List<object>()
+                : new List<ListViewItem>().Cast<object>().ToList();
             return;
         }
-        DataStore = new List<ListViewItem>(_items);
+
+        // Tile 視圖：每個 item 一行（保持選擇功能正常）
+        if (View == View.Tile)
+        {
+            _logger.Info($"[ListView-Tile] RefreshFromItems: {_items.Count} items, Width={this.Width}");
+            DataStore = new List<ListViewItem>(_items);
+        }
+        else
+        {
+            DataStore = new List<ListViewItem>(_items);
+        }
     }
 
     // GridLines - accepts bool for WinForms compatibility
@@ -2181,6 +2380,21 @@ public class ListViewItem
 }
 
 /// <summary>
+/// TileRowData - 用於 Tile 視圖模式，代表一行中的多個 ListViewItem
+/// </summary>
+public class TileRowData
+{
+    public List<ListViewItem> Items { get; } = new List<ListViewItem>();
+
+    public TileRowData() { }
+
+    public TileRowData(IEnumerable<ListViewItem> items)
+    {
+        Items.AddRange(items);
+    }
+}
+
+/// <summary>
 /// ImageFormat compatibility - wraps SkiaSharp format enum
 /// </summary>
 public class ImageFormat
@@ -2673,31 +2887,50 @@ public enum FlowDirection
 }
 
 /// <summary>
-/// CheckedListBox compatibility
+/// CheckedListBox compatibility - 使用自訂繪製實現 checkbox 功能
 /// </summary>
-public class CheckedListBox : Eto.Forms.ListBox
+public class CheckedListBox : Eto.Forms.Scrollable
 {
-    public bool CheckOnClick { get; set; }
+    public bool CheckOnClick { get; set; } = true;
     public DrawMode DrawMode { get; set; } = DrawMode.Normal;
     public event ItemCheckEventHandler ItemCheck;
+    public event EventHandler SelectedIndexChanged;
+    public event DrawItemEventHandler DrawItem;
 
+    private readonly Eto.Forms.Drawable _drawable;
     private readonly HashSet<int> _checkedIndices = new HashSet<int>();
-    private ObjectItemCollection _items;
+    private readonly List<object> _items = new List<object>();
+    private int _selectedIndex = -1;
+    private int _itemHeight = 18;
+    private const int CheckboxSize = 13;
+    private const int CheckboxMargin = 4;
 
-    // SelectedItem (returns the selected item from stored objects)
-    public object SelectedItem
+    // Font for drawing
+    public Eto.Drawing.Font Font { get; set; }
+
+    // SelectedIndex
+    public int SelectedIndex
     {
-        get
+        get => _selectedIndex;
+        set
         {
-            var index = SelectedIndex;
-            if (index >= 0 && _items != null && index < _items.Count)
-                return _items[index];
-            return SelectedValue;
+            if (_selectedIndex != value)
+            {
+                _selectedIndex = value;
+                _drawable.Invalidate();
+                SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
     }
 
-    // Items collection that accepts objects
-    public new ObjectItemCollection Items => _items ??= new ObjectItemCollection(this);
+    // SelectedItem
+    public object SelectedItem
+    {
+        get => _selectedIndex >= 0 && _selectedIndex < _items.Count ? _items[_selectedIndex] : null;
+    }
+
+    // Items collection
+    public CheckedListBoxItemCollection Items { get; }
 
     // CheckedIndices collection
     public CheckedIndexCollection CheckedIndices { get; }
@@ -2707,8 +2940,125 @@ public class CheckedListBox : Eto.Forms.ListBox
 
     public CheckedListBox()
     {
+        Items = new CheckedListBoxItemCollection(this);
         CheckedIndices = new CheckedIndexCollection(_checkedIndices);
         CheckedItems = new CheckedItemCollection(this, _checkedIndices);
+        Font = Eto.Drawing.SystemFonts.Default();
+
+        _drawable = new Eto.Forms.Drawable();
+        _drawable.Paint += OnPaint;
+        _drawable.MouseDown += OnMouseDown;
+
+        Content = _drawable;
+        BackgroundColor = Eto.Drawing.Colors.White;
+    }
+
+    private void UpdateContentSize()
+    {
+        try
+        {
+            int w = (int)Width;
+            int h = (int)Height;
+            if (w <= 0 || h <= 0)
+                return; // 控件尚未初始化，跳過
+
+            int width = Math.Max(1, w - 20);
+            int height = Math.Max(1, Math.Max(_items.Count * _itemHeight, h));
+            _drawable.Size = new Eto.Drawing.Size(width, height);
+        }
+        catch
+        {
+            // 忽略尺寸設定錯誤
+        }
+    }
+
+    protected override void OnSizeChanged(EventArgs e)
+    {
+        base.OnSizeChanged(e);
+        UpdateContentSize();
+        _drawable.Invalidate();
+    }
+
+    private void OnPaint(object sender, Eto.Forms.PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        int width = (int)_drawable.Width;
+
+        for (int i = 0; i < _items.Count; i++)
+        {
+            int y = i * _itemHeight;
+            bool isSelected = (i == _selectedIndex);
+            bool isChecked = _checkedIndices.Contains(i);
+
+            // 繪製背景
+            if (isSelected)
+            {
+                g.FillRectangle(Eto.Drawing.Color.FromArgb(0, 120, 215), 0, y, width, _itemHeight);
+            }
+
+            // 繪製 checkbox 框
+            int cbX = CheckboxMargin;
+            int cbY = y + (_itemHeight - CheckboxSize) / 2;
+
+            // 外框
+            g.DrawRectangle(Eto.Drawing.Colors.DarkGray, cbX, cbY, CheckboxSize - 1, CheckboxSize - 1);
+            // 內部填充
+            g.FillRectangle(Eto.Drawing.Colors.White, cbX + 1, cbY + 1, CheckboxSize - 2, CheckboxSize - 2);
+
+            // 如果勾選，畫勾勾
+            if (isChecked)
+            {
+                using (var pen = new Eto.Drawing.Pen(Eto.Drawing.Colors.Black, 2))
+                {
+                    // 畫 V 形勾勾
+                    g.DrawLine(pen, cbX + 3, cbY + 6, cbX + 5, cbY + 9);
+                    g.DrawLine(pen, cbX + 5, cbY + 9, cbX + 10, cbY + 3);
+                }
+            }
+
+            // 繪製文字
+            var textColor = isSelected ? Eto.Drawing.Colors.White : Eto.Drawing.Colors.Black;
+            int textX = CheckboxMargin + CheckboxSize + 4;
+            string text = _items[i]?.ToString() ?? "";
+            g.DrawText(Font, textColor, textX, y + 1, text);
+        }
+    }
+
+    private void OnMouseDown(object sender, Eto.Forms.MouseEventArgs e)
+    {
+        int index = (int)(e.Location.Y / _itemHeight);
+        if (index < 0 || index >= _items.Count)
+            return;
+
+        // 更新選取
+        SelectedIndex = index;
+
+        // 右鍵點擊不要切換 checkbox 狀態
+        if (e.Buttons == Eto.Forms.MouseButtons.Alternate)
+            return;
+
+        // 檢查是否點擊在 checkbox 區域
+        bool clickedCheckbox = e.Location.X < (CheckboxMargin + CheckboxSize + 4);
+
+        // 如果 CheckOnClick 或點擊 checkbox 區域，切換勾選狀態
+        if (CheckOnClick || clickedCheckbox)
+        {
+            bool currentChecked = _checkedIndices.Contains(index);
+            var newState = currentChecked ? flyworld.eto.component.CheckState.Unchecked : flyworld.eto.component.CheckState.Checked;
+            var oldState = currentChecked ? flyworld.eto.component.CheckState.Checked : flyworld.eto.component.CheckState.Unchecked;
+
+            // 觸發 ItemCheck 事件
+            var args = new flyworld.eto.component.ItemCheckEventArgs(index, newState, oldState);
+            ItemCheck?.Invoke(this, args);
+
+            // 更新勾選狀態
+            if (args.NewValue == flyworld.eto.component.CheckState.Checked)
+                _checkedIndices.Add(index);
+            else
+                _checkedIndices.Remove(index);
+
+            _drawable.Invalidate();
+        }
     }
 
     public void SetItemChecked(int index, bool value)
@@ -2717,6 +3067,7 @@ public class CheckedListBox : Eto.Forms.ListBox
             _checkedIndices.Add(index);
         else
             _checkedIndices.Remove(index);
+        _drawable.Invalidate();
     }
 
     public bool GetItemChecked(int index) => _checkedIndices.Contains(index);
@@ -2724,35 +3075,113 @@ public class CheckedListBox : Eto.Forms.ListBox
     public int IndexFromPoint(Point p) => IndexFromPoint(p.X, p.Y);
     public int IndexFromPoint(int x, int y)
     {
-        // Simplified - always return -1 (not found)
+        int index = y / _itemHeight;
+        if (index >= 0 && index < _items.Count)
+            return index;
         return -1;
     }
 
-    // SelectedIndexChanged event - wrap WinForms EventHandler to Eto EventHandler<EventArgs>
-    public new event EventHandler SelectedIndexChanged
-    {
-        add => base.SelectedIndexChanged += (s, e) => value(s, EventArgs.Empty);
-        remove { }
-    }
-
     // Mouse events
-    public new event MouseEventHandler MouseDown
-    {
-        add => base.MouseDown += (s, e) => value(s, e);
-        remove { }
-    }
     public new event MouseEventHandler MouseUp
     {
-        add => base.MouseUp += (s, e) => value(s, e);
+        add => _drawable.MouseUp += (s, e) => value(s, e);
         remove { }
     }
-
-    // DrawItem event (stub)
-    public event DrawItemEventHandler DrawItem { add { } remove { } }
 
     // BeginUpdate/EndUpdate for WinForms compatibility
     public void BeginUpdate() { }
-    public void EndUpdate() { }
+    public void EndUpdate()
+    {
+        UpdateContentSize();
+        _drawable.Invalidate();
+    }
+
+    // 內部項目集合類別
+    public class CheckedListBoxItemCollection : System.Collections.IList
+    {
+        private readonly CheckedListBox _owner;
+
+        public CheckedListBoxItemCollection(CheckedListBox owner)
+        {
+            _owner = owner;
+        }
+
+        public object this[int index]
+        {
+            get => _owner._items[index];
+            set => _owner._items[index] = value;
+        }
+
+        public int Count => _owner._items.Count;
+        public bool IsFixedSize => false;
+        public bool IsReadOnly => false;
+        public bool IsSynchronized => false;
+        public object SyncRoot => _owner._items;
+
+        public int Add(object value)
+        {
+            _owner._items.Add(value);
+            _owner.UpdateContentSize();
+            return _owner._items.Count - 1;
+        }
+
+        public void Clear()
+        {
+            _owner._items.Clear();
+            _owner._checkedIndices.Clear();
+            _owner._selectedIndex = -1;
+            _owner.UpdateContentSize();
+            _owner._drawable.Invalidate();
+        }
+
+        public bool Contains(object value) => _owner._items.Contains(value);
+        public int IndexOf(object value) => _owner._items.IndexOf(value);
+
+        public void Insert(int index, object value)
+        {
+            _owner._items.Insert(index, value);
+            _owner.UpdateContentSize();
+        }
+
+        public void Remove(object value)
+        {
+            int index = _owner._items.IndexOf(value);
+            if (index >= 0)
+                RemoveAt(index);
+        }
+
+        public void RemoveAt(int index)
+        {
+            _owner._items.RemoveAt(index);
+            _owner._checkedIndices.Remove(index);
+            // 調整索引
+            var newChecked = new HashSet<int>();
+            foreach (var i in _owner._checkedIndices)
+            {
+                if (i > index)
+                    newChecked.Add(i - 1);
+                else
+                    newChecked.Add(i);
+            }
+            _owner._checkedIndices.Clear();
+            foreach (var i in newChecked)
+                _owner._checkedIndices.Add(i);
+
+            if (_owner._selectedIndex >= _owner._items.Count)
+                _owner._selectedIndex = _owner._items.Count - 1;
+
+            _owner.UpdateContentSize();
+            _owner._drawable.Invalidate();
+        }
+
+        public void CopyTo(Array array, int index)
+        {
+            for (int i = 0; i < _owner._items.Count; i++)
+                array.SetValue(_owner._items[i], index + i);
+        }
+
+        public System.Collections.IEnumerator GetEnumerator() => _owner._items.GetEnumerator();
+    }
 }
 
 /// <summary>

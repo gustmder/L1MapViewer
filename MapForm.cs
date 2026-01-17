@@ -588,7 +588,8 @@ namespace L1FlyMapViewer
                 (text: "S32邊界", color: Eto.Drawing.Colors.Orange, chk: chkFloatS32Boundary),
                 (text: "安全區", color: Eto.Drawing.Color.FromArgb(100, 180, 255), chk: chkFloatSafeZones),
                 (text: "戰鬥區", color: Eto.Drawing.Color.FromArgb(255, 100, 100), chk: chkFloatCombatZones),
-                (text: "L8 特效", color: Eto.Drawing.Color.FromArgb(255, 180, 100), chk: chkFloatLayer8),
+                (text: LocalizationManager.L("Layer_L8Spr"), color: Eto.Drawing.Color.FromArgb(255, 180, 100), chk: chkFloatLayer8Spr),
+                (text: LocalizationManager.L("Layer_L8Marker"), color: Eto.Drawing.Color.FromArgb(255, 180, 100), chk: chkFloatLayer8Marker),
             };
 
             var stackLayout = new Eto.Forms.StackLayout
@@ -6607,10 +6608,17 @@ namespace L1FlyMapViewer
             {
                 chkShowCombatZones.Checked = chkFloatCombatZones.Checked;
             }
-            else if (sender == chkFloatLayer8)
+            else if (sender == chkFloatLayer8Spr)
             {
-                // Layer8 沒有對應的主 CheckBox，直接更新 ViewState
-                _viewState.ShowLayer8 = chkFloatLayer8.Checked == true;
+                // Layer8 SPR 顯示控制
+                _viewState.ShowLayer8Spr = chkFloatLayer8Spr.Checked == true;
+                // 重新渲染地圖
+                RenderS32Map();
+            }
+            else if (sender == chkFloatLayer8Marker)
+            {
+                // Layer8 輔助標記顯示控制
+                _viewState.ShowLayer8Marker = chkFloatLayer8Marker.Checked == true;
                 // 重新渲染地圖
                 RenderS32Map();
             }
@@ -6633,13 +6641,14 @@ namespace L1FlyMapViewer
             if (chkFloatLayer5.Checked == true) enabledCount++;
             if (chkFloatSafeZones.Checked == true) enabledCount++;
             if (chkFloatCombatZones.Checked == true) enabledCount++;
-            if (chkFloatLayer8.Checked == true) enabledCount++;
+            if (chkFloatLayer8Spr.Checked == true) enabledCount++;
+            if (chkFloatLayer8Marker.Checked == true) enabledCount++;
 
             if (enabledCount == 0)
             {
                 lblLayerIcon.TextColor = Colors.Gray;
             }
-            else if (enabledCount == 10)
+            else if (enabledCount == 11)
             {
                 lblLayerIcon.TextColor = Colors.LightGreen;
             }
@@ -9005,40 +9014,46 @@ namespace L1FlyMapViewer
 
                         bool isEnabled = _editState.EnabledLayer8Items.Contains((s32Data.FilePath, i));
 
-                        // 繪製標記（圓點）
+                        // 繪製標記（圓點）- 受 ShowLayer8Marker 控制
                         // 啟用時：灰色半透明 (opacity 0.1)，在 SPR 下面
                         // 停用時：橙色實心
                         int markerRadius = 10;
 
-                        if (isEnabled)
+                        if (_viewState.ShowLayer8Marker)
                         {
-                            // 啟用狀態：先畫灰色半透明 marker
-                            using (SolidBrush brush = new SolidBrush(Color.FromArgb(25, 128, 128, 128)))
+                            if (isEnabled)
                             {
-                                g.FillEllipse(brush, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
+                                // 啟用狀態：先畫灰色半透明 marker
+                                using (SolidBrush brush = new SolidBrush(Color.FromArgb(25, 128, 128, 128)))
+                                {
+                                    g.FillEllipse(brush, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
+                                }
+                                using (Pen pen = new Pen(Color.FromArgb(50, 255, 255, 255)))
+                                {
+                                    g.DrawEllipse(pen, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
+                                }
                             }
-                            using (Pen pen = new Pen(Color.FromArgb(50, 255, 255, 255)))
+                            else
                             {
-                                g.DrawEllipse(pen, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
-                            }
+                                // 停用狀態：橙色實心 marker
+                                using (SolidBrush brush = new SolidBrush(Colors.Orange))
+                                {
+                                    g.FillEllipse(brush, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
+                                }
+                                g.DrawEllipse(Pens.White, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
 
-                            // 繪製 SPR 動畫（在 marker 上面）
-                            DrawLayer8Sprite(g, item.SprId, x, y, s32Data.FilePath, i);
+                                // 只有停用狀態才顯示 SprId
+                                using (Font font = new Font("Arial", 8, FontStyle.Bold))
+                                {
+                                    g.DrawString(item.SprId.ToString(), font, Brushes.White, x + markerRadius + 2, y - 6);
+                                }
+                            }
                         }
-                        else
-                        {
-                            // 停用狀態：橙色實心 marker
-                            using (SolidBrush brush = new SolidBrush(Colors.Orange))
-                            {
-                                g.FillEllipse(brush, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
-                            }
-                            g.DrawEllipse(Pens.White, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
 
-                            // 只有停用狀態才顯示 SprId
-                            using (Font font = new Font("Arial", 8, FontStyle.Bold))
-                            {
-                                g.DrawString(item.SprId.ToString(), font, Brushes.White, x + markerRadius + 2, y - 6);
-                            }
+                        // 繪製 SPR 動畫 - 受 ShowLayer8Spr 控制
+                        if (_viewState.ShowLayer8Spr && isEnabled)
+                        {
+                            DrawLayer8Sprite(g, item.SprId, x, y, s32Data.FilePath, i);
                         }
                         drawnCount++;
                     }
@@ -9261,9 +9276,12 @@ namespace L1FlyMapViewer
         // 繪製格線（Viewport 版本）- 擴展範圍: X 0-255, Y 0-127
         private void DrawS32GridViewport(Bitmap bitmap, Struct.L1Map currentMap, Rectangle worldRect)
         {
+            // 建立 S32Files 的快照，避免在迭代時被修改
+            var s32FilesSnapshot = _document.S32Files.Values.ToList();
+
             // 預先收集所有 S32 的正常範圍 (遊戲座標)，用於判斷擴展區域是否被覆蓋
             var normalCoverage = new HashSet<(int gameX, int gameY)>();
-            foreach (var s32Data in _document.S32Files.Values)
+            foreach (var s32Data in s32FilesSnapshot)
             {
                 for (int y = 0; y < 64; y++)
                 {
@@ -9284,7 +9302,7 @@ namespace L1FlyMapViewer
                 using (Pen gridPen = new Pen(ColorExtensions.FromArgb(100, Colors.Red), 1))
                 using (Pen extendedGridPen = new Pen(ColorExtensions.FromArgb(60, Colors.Blue), 1))
                 {
-                    foreach (var s32Data in _document.S32Files.Values)
+                    foreach (var s32Data in s32FilesSnapshot)
                     {
                         int[] loc = s32Data.SegInfo.GetLoc(1.0);
                         int mx = loc[0];
@@ -9654,7 +9672,6 @@ namespace L1FlyMapViewer
                     try
                     {
                         lvTiles.Items.Clear();
-                        lvTiles.View = View.LargeIcon;
 
                         ImageList imageList = new ImageList();
                         imageList.ImageSize = new Size(48, 48);
@@ -9662,7 +9679,7 @@ namespace L1FlyMapViewer
                         lvTiles.LargeImageList = imageList;
 
                         // 批量準備項目
-                        var items = new List<ListViewItem>();
+                        var items = new List<IconTextListItem>();
                         int index = 0;
                         foreach (var tileKvp in aggregatedTiles.OrderBy(t => t.Key))
                         {
@@ -9672,10 +9689,10 @@ namespace L1FlyMapViewer
                                 imageList.Images.Add(tile.Thumbnail);
 
                                 // 檢查是否為 R 版
-                                bool isRemaster = _renderCache.TilRemasterCache.TryGetValue(tile.TileId, out bool r) && r;
+                                bool isRemaster = TileProvider.Instance.IsRemaster(tile.TileId);
                                 string rMark = isRemaster ? "(R)" : "";
 
-                                var item = new ListViewItem
+                                var item = new IconTextListItem
                                 {
                                     Text = $"ID:{tile.TileId}{rMark}\n×{tile.UsageCount}",
                                     ImageIndex = index,
@@ -9687,7 +9704,7 @@ namespace L1FlyMapViewer
                         }
 
                         // 批量添加
-                        lvTiles.Items.AddRange(items.ToArray());
+                        lvTiles.Items.AddRange(items);
                     }
                     finally
                     {
@@ -9710,7 +9727,6 @@ namespace L1FlyMapViewer
             try
             {
                 lvTiles.Items.Clear();
-                lvTiles.View = View.LargeIcon;
 
                 // 創建 ImageList
                 ImageList imageList = new ImageList();
@@ -9819,7 +9835,7 @@ namespace L1FlyMapViewer
                 }
 
                 // 批量準備項目
-                var items = new List<ListViewItem>();
+                var items = new List<IconTextListItem>();
                 int index = 0;
                 int totalCount = cachedAggregatedTiles.Count;
                 foreach (var tileKvp in filteredTiles.OrderBy(t => t.Key))
@@ -9837,10 +9853,10 @@ namespace L1FlyMapViewer
                         imageList.Images.Add(tile.Thumbnail);
 
                         // 檢查是否為 R 版
-                        bool isRemaster = _renderCache.TilRemasterCache.TryGetValue(tile.TileId, out bool r) && r;
+                        bool isRemaster = TileProvider.Instance.IsRemaster(tile.TileId);
                         string rMark = isRemaster ? "(R)" : "";
 
-                        var item = new ListViewItem
+                        var item = new IconTextListItem
                         {
                             Text = $"ID:{tile.TileId}{rMark}\n×{tile.UsageCount}",
                             ImageIndex = index,
@@ -9852,7 +9868,7 @@ namespace L1FlyMapViewer
                 }
 
                 // 批量添加
-                lvTiles.Items.AddRange(items.ToArray());
+                lvTiles.Items.AddRange(items);
 
                 string statusText = string.IsNullOrWhiteSpace(searchText)
                     ? string.Format(LocalizationManager.L("Label_TileListCount"), lvTiles.Items.Count)
@@ -10438,41 +10454,47 @@ namespace L1FlyMapViewer
 
                     bool isEnabled = _editState.EnabledLayer8Items.Contains((s32Data.FilePath, i));
 
-                    // 繪製標記（圓點）
+                    // 繪製標記（圓點）- 受 ShowLayer8Marker 控制
                     // 啟用時：灰色半透明 (opacity 0.1)，在 SPR 下面
                     // 停用時：橙色實心
                     int markerRadius = (int)(10 * _viewState.ZoomLevel);
                     if (markerRadius < 5) markerRadius = 5;
 
-                    if (isEnabled)
+                    if (_viewState.ShowLayer8Marker)
                     {
-                        // 啟用狀態：先畫灰色半透明 marker
-                        using (SolidBrush brush = new SolidBrush(Color.FromArgb(25, 128, 128, 128)))
+                        if (isEnabled)
                         {
-                            g.FillEllipse(brush, markerX - markerRadius, markerY - markerRadius, markerRadius * 2, markerRadius * 2);
+                            // 啟用狀態：先畫灰色半透明 marker
+                            using (SolidBrush brush = new SolidBrush(Color.FromArgb(25, 128, 128, 128)))
+                            {
+                                g.FillEllipse(brush, markerX - markerRadius, markerY - markerRadius, markerRadius * 2, markerRadius * 2);
+                            }
+                            using (Pen pen = new Pen(Color.FromArgb(50, 255, 255, 255)))
+                            {
+                                g.DrawEllipse(pen, markerX - markerRadius, markerY - markerRadius, markerRadius * 2, markerRadius * 2);
+                            }
                         }
-                        using (Pen pen = new Pen(Color.FromArgb(50, 255, 255, 255)))
+                        else
                         {
-                            g.DrawEllipse(pen, markerX - markerRadius, markerY - markerRadius, markerRadius * 2, markerRadius * 2);
+                            // 停用狀態：橙色實心 marker
+                            using (SolidBrush brush = new SolidBrush(Colors.Orange))
+                            {
+                                g.FillEllipse(brush, markerX - markerRadius, markerY - markerRadius, markerRadius * 2, markerRadius * 2);
+                            }
+                            g.DrawEllipse(Pens.White, markerX - markerRadius, markerY - markerRadius, markerRadius * 2, markerRadius * 2);
                         }
 
-                        // 繪製 SPR 動畫（在 marker 上面，但位置往左偏移）
+                        // 顯示 SprId - 受 ShowLayer8Marker 控制
+                        using (Font font = new Font("Arial", (float)Math.Max(6, 8 * _viewState.ZoomLevel), FontStyle.Bold))
+                        {
+                            g.DrawString(item.SprId.ToString(), font, Brushes.White, markerX + markerRadius + 2, markerY - 6);
+                        }
+                    }
+
+                    // 繪製 SPR 動畫 - 受 ShowLayer8Spr 控制
+                    if (_viewState.ShowLayer8Spr && isEnabled)
+                    {
                         DrawLayer8SpriteOnOverlay(g, item.SprId, sprX, sprY, s32Data.FilePath, i);
-                    }
-                    else
-                    {
-                        // 停用狀態：橙色實心 marker
-                        using (SolidBrush brush = new SolidBrush(Colors.Orange))
-                        {
-                            g.FillEllipse(brush, markerX - markerRadius, markerY - markerRadius, markerRadius * 2, markerRadius * 2);
-                        }
-                        g.DrawEllipse(Pens.White, markerX - markerRadius, markerY - markerRadius, markerRadius * 2, markerRadius * 2);
-                    }
-
-                    // 所有狀態都顯示 SprId
-                    using (Font font = new Font("Arial", (float)Math.Max(6, 8 * _viewState.ZoomLevel), FontStyle.Bold))
-                    {
-                        g.DrawString(item.SprId.ToString(), font, Brushes.White, markerX + markerRadius + 2, markerY - 6);
                     }
                 }
             }
@@ -12748,8 +12770,11 @@ namespace L1FlyMapViewer
                 int imageIndex = 0;
                 foreach (var info in recentMaterials.Take(5))
                 {
-                    var item = new ListViewItem(info.Name ?? "未命名");
-                    item.Tag = info.FilePath;
+                    var item = new IconTextListItem
+                    {
+                        Text = info.Name ?? "未命名",
+                        Tag = info.FilePath
+                    };
 
                     // 加入縮圖
                     if (info.ThumbnailPng != null && info.ThumbnailPng.Length > 0)
@@ -15220,6 +15245,57 @@ namespace L1FlyMapViewer
             ShowTileInfoWithPreview(tileInfo);
         }
 
+        // IconTextListControl 事件包裝器
+        private void lvTiles_MouseUp_Eto(object sender, Eto.Forms.MouseEventArgs e)
+        {
+            lvTiles_MouseUp(sender, e);
+        }
+
+        private void lvMaterials_DoubleClick_Eto(object sender, EventArgs e)
+        {
+            // 使用選取項目直接處理（IconTextListControl 的 ItemDoubleClick 已經確認有選取項目）
+            if (lvMaterials.SelectedItem?.Tag is string filePath)
+            {
+                try
+                {
+                    var library = new L1MapViewer.Helper.MaterialLibrary();
+                    var material = library.LoadMaterial(filePath);
+                    if (material != null)
+                    {
+                        StartMaterialPasteMode(material, filePath);
+                    }
+                    else
+                    {
+                        WinFormsMessageBox.Show("無法載入素材", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    WinFormsMessageBox.Show($"載入素材失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private void lvMaterials_MouseUp_Eto(object sender, Eto.Forms.MouseEventArgs e)
+        {
+            lvMaterials_MouseUp(sender, e);
+        }
+
+        private void lvGroupThumbnails_MouseClick_Eto(object sender, Eto.Forms.MouseEventArgs e)
+        {
+            lvGroupThumbnails_MouseClick(sender, e);
+        }
+
+        private void lvGroupThumbnails_MouseUp_Eto(object sender, Eto.Forms.MouseEventArgs e)
+        {
+            lvGroupThumbnails_MouseUp(sender, e);
+        }
+
+        private void lvGroupThumbnails_SelectionChanged(object sender, EventArgs e)
+        {
+            lvGroupThumbnails_SelectedIndexChanged(sender, e);
+        }
+
         // 顯示 Tile 預覽+詳細資料整合視窗
         private void ShowTileInfoWithPreview(TileInfo tileInfo)
         {
@@ -15549,7 +15625,7 @@ namespace L1FlyMapViewer
             exportSelectedItem.Click += (s, ev) =>
             {
                 var selectedTiles = new List<TileInfo>();
-                foreach (ListViewItem item in lvTiles.SelectedItems)
+                foreach (IconTextListItem item in lvTiles.SelectedItems)
                 {
                     if (item.Tag is TileInfo ti)
                         selectedTiles.Add(ti);
@@ -15563,7 +15639,7 @@ namespace L1FlyMapViewer
             exportAllItem.Click += (s, ev) =>
             {
                 var allTiles = new List<TileInfo>();
-                foreach (ListViewItem item in lvTiles.Items)
+                foreach (IconTextListItem item in lvTiles.Items)
                 {
                     if (item.Tag is TileInfo ti)
                         allTiles.Add(ti);
@@ -15579,7 +15655,7 @@ namespace L1FlyMapViewer
             renumberItem.Click += (s, ev) =>
             {
                 var selectedTiles = new List<TileInfo>();
-                foreach (ListViewItem item in lvTiles.SelectedItems)
+                foreach (IconTextListItem item in lvTiles.SelectedItems)
                 {
                     if (item.Tag is TileInfo ti)
                         selectedTiles.Add(ti);
@@ -15611,7 +15687,7 @@ namespace L1FlyMapViewer
 
             // 檢查是否有 R 版 Tile
             var distinctTileIds = tiles.Select(t => t.TileId).Distinct().ToList();
-            int remasterCount = distinctTileIds.Count(id => _renderCache.TilRemasterCache.TryGetValue(id, out bool r) && r);
+            int remasterCount = distinctTileIds.Count(id => TileProvider.Instance.IsRemaster(id));
             bool hasRemasterTiles = remasterCount > 0;
 
             // 詢問匯出選項
@@ -16517,10 +16593,10 @@ namespace L1FlyMapViewer
             }
 
             // 確保 Layer8 顯示已開啟
-            if (!_viewState.ShowLayer8)
+            if (!_viewState.ShowLayer8Spr)
             {
-                _viewState.ShowLayer8 = true;
-                chkFloatLayer8.Checked = true;
+                _viewState.ShowLayer8Spr = true;
+                chkFloatLayer8Spr.Checked = true;
             }
 
             this.toolStripStatusLabel1.Text = string.Format(LocalizationManager.L("L8_EnabledCount"), addedCount, _editState.EnabledLayer8Items.Count);
@@ -17515,7 +17591,7 @@ namespace L1FlyMapViewer
                             }
 
                             // 批量準備項目
-                            var items = new List<ListViewItem>();
+                            var items = new List<IconTextListItem>();
                             int thumbnailIndex = 0;
                             // 按原始排序順序添加（有 Layer5 的優先，然後按距離）
                             foreach (var kvp in sortedGroups)
@@ -17525,9 +17601,12 @@ namespace L1FlyMapViewer
                                 imageList.Images.Add(result.thumbnail);
 
                                 string distanceText = result.distance == 0 ? "●" : $"D{result.distance}";
-                                ListViewItem item = new ListViewItem($"{distanceText} G{result.groupId} ({result.objectCount})");
-                                item.ImageIndex = thumbnailIndex;
-                                item.Image = result.thumbnail;  // 直接設定圖片，不依賴 ImageList
+                                var item = new IconTextListItem
+                                {
+                                    Text = $"{distanceText} G{result.groupId} ({result.objectCount})",
+                                    ImageIndex = thumbnailIndex,
+                                    Image = result.thumbnail  // 直接設定圖片，不依賴 ImageList
+                                };
 
                                 // 取得第一個 S32（附近群組通常來自同一個 S32）
                                 S32Data firstS32 = result.objects.Count > 0 ? result.objects[0].s32 : null;
@@ -17552,7 +17631,7 @@ namespace L1FlyMapViewer
 
                             // 先設定 ImageList，再添加 Items（順序很重要！）
                             lvGroupThumbnails.LargeImageList = imageList;
-                            lvGroupThumbnails.Items.AddRange(items.ToArray());
+                            lvGroupThumbnails.Items.AddRange(items);
                         }
                         finally
                         {
@@ -17569,7 +17648,7 @@ namespace L1FlyMapViewer
         private void lvMaterials_MouseDoubleClick(object sender, MouseEventArgs e)
         {
             // 使用 HitTest 確認點擊位置
-            var hitInfo = lvMaterials.HitTest(e.Location.ToPoint());
+            var hitInfo = lvMaterials.HitTest(e.Location);
             if (hitInfo.Item == null)
                 return;
 
@@ -18202,7 +18281,7 @@ namespace L1FlyMapViewer
         }
 
         // 重新命名素材
-        private void RenameMaterial(string filePath, ListViewItem listItem)
+        private void RenameMaterial(string filePath, IconTextListItem listItem)
         {
             try
             {
@@ -19244,7 +19323,7 @@ namespace L1FlyMapViewer
         {
             if (_pendingMaterialPath == null) return;
 
-            foreach (ListViewItem item in lvMaterials.Items)
+            foreach (IconTextListItem item in lvMaterials.Items)
             {
                 if (item.Tag is string path && path == _pendingMaterialPath)
                 {
@@ -19262,7 +19341,7 @@ namespace L1FlyMapViewer
         // 清除素材高亮
         private void ClearMaterialHighlight()
         {
-            foreach (ListViewItem item in lvMaterials.Items)
+            foreach (IconTextListItem item in lvMaterials.Items)
             {
                 item.BackgroundColor = lvMaterials.BackColor;
                 item.TextColor = lvMaterials.ForeColor;
@@ -19658,7 +19737,7 @@ namespace L1FlyMapViewer
                             }
 
                             // 批量準備項目 - 按距離編碼和 GroupId 排序
-                            var items = new List<ListViewItem>();
+                            var items = new List<IconTextListItem>();
                             int thumbnailIndex = 0;
                             var sortedResults = thumbnailResults.Values
                                 .OrderBy(r => r.distCode)
@@ -19669,18 +19748,21 @@ namespace L1FlyMapViewer
                                 imageList.Images.Add(result.thumbnail);
 
                                 // 顯示格式: "距離:G群組ID (物件數)"
-                                ListViewItem item = new ListViewItem($"{result.distCode}:G{result.groupId} ({result.objectCount})");
-                                item.ImageIndex = thumbnailIndex;
-                                item.Image = result.thumbnail;  // 直接設定圖片，不依賴 ImageList
-                                item.Tag = new GroupThumbnailInfo
+                                var item = new IconTextListItem
                                 {
-                                    GroupId = result.groupId,
-                                    S32Data = result.s32,
-                                    S32FileName = System.IO.Path.GetFileName(result.s32Path),
-                                    DistanceCode = result.distCode,
-                                    Objects = result.objects,
-                                    HasLayer5Setting = result.hasLayer5,
-                                    Layer5Type = result.layer5Type
+                                    Text = $"{result.distCode}:G{result.groupId} ({result.objectCount})",
+                                    ImageIndex = thumbnailIndex,
+                                    Image = result.thumbnail,  // 直接設定圖片，不依賴 ImageList
+                                    Tag = new GroupThumbnailInfo
+                                    {
+                                        GroupId = result.groupId,
+                                        S32Data = result.s32,
+                                        S32FileName = System.IO.Path.GetFileName(result.s32Path),
+                                        DistanceCode = result.distCode,
+                                        Objects = result.objects,
+                                        HasLayer5Setting = result.hasLayer5,
+                                        Layer5Type = result.layer5Type
+                                    }
                                 };
                                 items.Add(item);
 
@@ -19693,7 +19775,7 @@ namespace L1FlyMapViewer
 
                             // 先設定 ImageList，再添加 Items（順序很重要！）
                             lvGroupThumbnails.LargeImageList = imageList;
-                            lvGroupThumbnails.Items.AddRange(items.ToArray());
+                            lvGroupThumbnails.Items.AddRange(items);
                         }
                         finally
                         {
@@ -19742,7 +19824,7 @@ namespace L1FlyMapViewer
         }
 
         // 群組縮圖快取（用於過濾）
-        private List<ListViewItem> _cachedGroupItems = new List<ListViewItem>();
+        private List<IconTextListItem> _cachedGroupItems = new List<IconTextListItem>();
         private ImageList _cachedGroupImageList = null;
 
         // 群組搜尋過濾
@@ -19764,7 +19846,7 @@ namespace L1FlyMapViewer
                 if (string.IsNullOrWhiteSpace(searchText))
                 {
                     // 無搜尋條件，顯示全部
-                    lvGroupThumbnails.Items.AddRange(_cachedGroupItems.ToArray());
+                    lvGroupThumbnails.Items.AddRange(_cachedGroupItems);
                 }
                 else
                 {
@@ -19777,7 +19859,7 @@ namespace L1FlyMapViewer
                             // 搜尋 GroupId
                             return info.GroupId.ToString().Contains(searchText);
                         })
-                        .ToArray();
+                        .ToList();
                     lvGroupThumbnails.Items.AddRange(filteredItems);
                 }
             }
@@ -20116,7 +20198,7 @@ namespace L1FlyMapViewer
 
             // 收集所有選中群組的資訊
             var selectedInfos = new List<GroupThumbnailInfo>();
-            foreach (ListViewItem item in lvGroupThumbnails.SelectedItems)
+            foreach (IconTextListItem item in lvGroupThumbnails.SelectedItems)
             {
                 if (item.Tag is GroupThumbnailInfo info && info.Objects.Count > 0)
                 {
@@ -20135,7 +20217,7 @@ namespace L1FlyMapViewer
         {
             // 更新選取的群組 ID 列表
             _editState.SelectedLayer4Groups.Clear();
-            foreach (ListViewItem item in lvGroupThumbnails.SelectedItems)
+            foreach (IconTextListItem item in lvGroupThumbnails.SelectedItems)
             {
                 if (item.Tag is GroupThumbnailInfo info)
                 {
@@ -20710,7 +20792,7 @@ namespace L1FlyMapViewer
             // 收集所有選中群組的資訊
             var selectedInfos = new List<GroupThumbnailInfo>();
             int totalObjects = 0;
-            foreach (ListViewItem item in lvGroupThumbnails.SelectedItems)
+            foreach (IconTextListItem item in lvGroupThumbnails.SelectedItems)
             {
                 if (item.Tag is GroupThumbnailInfo info && info.Objects.Count > 0)
                 {
@@ -21676,7 +21758,6 @@ namespace L1FlyMapViewer
                 // ListView 顯示物件列表
                 var listView = new ListView
                 {
-                    Dock = DockStyle.Fill,
                     View = View.Details,
                     FullRowSelect = true,
                     GridLines = true,
@@ -21889,8 +21970,7 @@ namespace L1FlyMapViewer
                 // 底部面板
                 var bottomPanel = new Panel
                 {
-                    Dock = DockStyle.Bottom,
-                    Height = 50
+                    Size = new Size(680, 50)
                 };
 
                 var btnSelectAll = new Button
@@ -22078,8 +22158,16 @@ namespace L1FlyMapViewer
                 bottomPanel.GetControls().Add(btnExportCsv);
                 bottomPanel.GetControls().Add(btnClose);
 
-                form.GetControls().Add(listView);
-                form.GetControls().Add(bottomPanel);
+                // 使用 TableLayout 來正確安排佈局
+                var layout = new Eto.Forms.TableLayout
+                {
+                    Rows =
+                    {
+                        new Eto.Forms.TableRow(listView) { ScaleHeight = true },
+                        new Eto.Forms.TableRow(bottomPanel)
+                    }
+                };
+                form.Content = layout;
 
                 form.ShowDialog(this);
             }
@@ -25810,57 +25898,36 @@ namespace L1FlyMapViewer
             int totalItems = s32WithL5.Sum(x => x.count);
             Label lblSummary = new Label();
             lblSummary.Text = $"共 {s32WithL5.Count} 個 S32 有 Layer5 資料，總計 {totalItems} 項。";
-            lblSummary.SetLocation(new Point(10, 10));
-            lblSummary.Size = new Size(660, 20);
-            resultForm.GetControls().Add(lblSummary);
 
             // 搜尋區域
             Label lblSearch = new Label();
             lblSearch.Text = "搜尋:";
-            lblSearch.SetLocation(new Point(10, 35));
-            lblSearch.Size = new Size(40, 20);
-            resultForm.GetControls().Add(lblSearch);
 
             TextBox txtSearchX = new TextBox();
-            txtSearchX.SetLocation(new Point(50, 32));
             txtSearchX.Size = new Size(60, 22);
             txtSearchX.PlaceholderText = "X";
-            resultForm.GetControls().Add(txtSearchX);
 
             TextBox txtSearchY = new TextBox();
-            txtSearchY.SetLocation(new Point(115, 32));
             txtSearchY.Size = new Size(60, 22);
             txtSearchY.PlaceholderText = "Y";
-            resultForm.GetControls().Add(txtSearchY);
 
             TextBox txtSearchObjIdx = new TextBox();
-            txtSearchObjIdx.SetLocation(new Point(180, 32));
             txtSearchObjIdx.Size = new Size(70, 22);
             txtSearchObjIdx.PlaceholderText = "ObjIdx";
-            resultForm.GetControls().Add(txtSearchObjIdx);
 
             Button btnSearch = new Button();
             btnSearch.Text = "搜尋";
-            btnSearch.SetLocation(new Point(255, 31));
             btnSearch.Size = new Size(50, 24);
-            resultForm.GetControls().Add(btnSearch);
 
             Button btnClearSearch = new Button();
             btnClearSearch.Text = "清除";
-            btnClearSearch.SetLocation(new Point(310, 31));
             btnClearSearch.Size = new Size(50, 24);
-            resultForm.GetControls().Add(btnClearSearch);
 
             Label lblSearchResult = new Label();
             lblSearchResult.Text = "";
-            lblSearchResult.SetLocation(new Point(370, 35));
-            lblSearchResult.Size = new Size(290, 20);
             lblSearchResult.TextColor = Colors.Blue;
-            resultForm.GetControls().Add(lblSearchResult);
 
             CheckedListBox clbItems = new CheckedListBox();
-            clbItems.SetLocation(new Point(10, 60));
-            clbItems.Size = new Size(660, 355);
             clbItems.Font = new Font("Consolas", 9);
             clbItems.CheckOnClick = true;
 
@@ -25975,11 +26042,8 @@ namespace L1FlyMapViewer
                 lblSearchResult.Text = "";
             };
 
-            resultForm.GetControls().Add(clbItems);
-
             Button btnSelectAll = new Button();
             btnSelectAll.Text = "全選";
-            btnSelectAll.SetLocation(new Point(10, 425));
             btnSelectAll.Size = new Size(80, 30);
             btnSelectAll.Click += (s, args) =>
             {
@@ -25988,11 +26052,9 @@ namespace L1FlyMapViewer
                     clbItems.SetItemChecked(i, true);
                 clbItems.EndUpdate();
             };
-            resultForm.GetControls().Add(btnSelectAll);
 
             Button btnDeselectAll = new Button();
             btnDeselectAll.Text = "取消全選";
-            btnDeselectAll.SetLocation(new Point(100, 425));
             btnDeselectAll.Size = new Size(80, 30);
             btnDeselectAll.Click += (s, args) =>
             {
@@ -26001,11 +26063,9 @@ namespace L1FlyMapViewer
                     clbItems.SetItemChecked(i, false);
                 clbItems.EndUpdate();
             };
-            resultForm.GetControls().Add(btnDeselectAll);
 
             Button btnClearSelected = new Button();
             btnClearSelected.Text = "清除勾選項目";
-            btnClearSelected.SetLocation(new Point(10, 465));
             btnClearSelected.Size = new Size(120, 35);
             btnClearSelected.BackgroundColor = WinFormsColors.LightCoral;
             btnClearSelected.Enabled = s32WithL5.Count > 0;
@@ -26055,11 +26115,9 @@ namespace L1FlyMapViewer
                 resultForm.Close();
                 RenderS32Map();
             };
-            resultForm.GetControls().Add(btnClearSelected);
 
             Button btnClearAll = new Button();
             btnClearAll.Text = "清除全部 L5";
-            btnClearAll.SetLocation(new Point(140, 465));
             btnClearAll.Size = new Size(120, 35);
             btnClearAll.BackgroundColor = WinFormsColors.Salmon;
             btnClearAll.Enabled = s32WithL5.Count > 0;
@@ -26091,30 +26149,60 @@ namespace L1FlyMapViewer
                 resultForm.Close();
                 RenderS32Map();
             };
-            resultForm.GetControls().Add(btnClearAll);
 
             Button btnClose = new Button();
             btnClose.Text = "關閉";
-            btnClose.SetLocation(new Point(580, 465));
             btnClose.Size = new Size(90, 35);
             btnClose.Click += (s, args) => resultForm.Close();
-            resultForm.GetControls().Add(btnClose);
 
-            // 調整佈局的方法
-            Action adjustLayout = () =>
+            // 頂部區域 (摘要 + 搜尋)
+            var topPanel = new Eto.Forms.StackLayout
             {
-                int clientWidth = Math.Max(100, resultForm.ClientSize.Width);
-                int clientHeight = Math.Max(200, resultForm.ClientSize.Height);
-                clbItems.Size = new Size(Math.Max(10, clientWidth - 20), Math.Max(10, clientHeight - 130));
-                btnSelectAll.SetLocation(new Point(10, Math.Max(10, clientHeight - 85)));
-                btnDeselectAll.SetLocation(new Point(100, Math.Max(10, clientHeight - 85)));
-                btnClearSelected.SetLocation(new Point(10, Math.Max(10, clientHeight - 45)));
-                btnClearAll.SetLocation(new Point(140, Math.Max(10, clientHeight - 45)));
-                btnClose.SetLocation(new Point(Math.Max(10, clientWidth - 100), Math.Max(10, clientHeight - 45)));
+                Orientation = Eto.Forms.Orientation.Vertical,
+                Padding = new Eto.Drawing.Padding(10, 5),
+                Spacing = 5,
+                Items =
+                {
+                    lblSummary,
+                    new Eto.Forms.StackLayout
+                    {
+                        Orientation = Eto.Forms.Orientation.Horizontal,
+                        Spacing = 5,
+                        Items = { lblSearch, txtSearchX, txtSearchY, txtSearchObjIdx, btnSearch, btnClearSearch, lblSearchResult }
+                    }
+                }
             };
 
-            resultForm.Resize += (s, args) => adjustLayout();
-            resultForm.Shown += (s, args) => adjustLayout();
+            // 中間按鈕列 (全選/取消全選)
+            var middleButtonPanel = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Horizontal,
+                Padding = new Eto.Drawing.Padding(10, 5),
+                Spacing = 10,
+                Items = { btnSelectAll, btnDeselectAll }
+            };
+
+            // 底部按鈕列
+            var bottomButtonPanel = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Horizontal,
+                Padding = new Eto.Drawing.Padding(10, 10),
+                Spacing = 10,
+                Items = { btnClearSelected, btnClearAll, new Eto.Forms.StackLayoutItem(null, true), btnClose }
+            };
+
+            // 使用 TableLayout 安排整體佈局
+            var layout = new Eto.Forms.TableLayout
+            {
+                Rows =
+                {
+                    new Eto.Forms.TableRow(topPanel),
+                    new Eto.Forms.TableRow(clbItems) { ScaleHeight = true },
+                    new Eto.Forms.TableRow(middleButtonPanel),
+                    new Eto.Forms.TableRow(bottomButtonPanel)
+                }
+            };
+            resultForm.Content = layout;
 
             resultForm.Show();
         }
