@@ -96,9 +96,26 @@ namespace L1FlyMapViewer
         }
 
         // 繪製通行性覆蓋層 (SkiaSharp 版本)
-        // 參考 DrawPassableOverlayViewport
+        // 參考 DrawPassableOverlayViewport - 繪製邊線而非填充
+        // Attribute1 = 左上邊線, Attribute2 = 右上邊線
         private void DrawPassableOverlayViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect)
         {
+            // 不可通行：紫色粗線，可通行：青色細線
+            using var penImpassable = new SKPaint
+            {
+                IsAntialias = true,
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = 3,
+                Color = new SKColor(128, 0, 128, 255)  // 紫色
+            };
+            using var penPassable = new SKPaint
+            {
+                IsAntialias = true,
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = 2,
+                Color = new SKColor(50, 200, 255, 255)  // 青色
+            };
+
             foreach (var s32Data in _document.S32Files.Values)
             {
                 int[] loc = s32Data.SegInfo.GetLoc(1.0);
@@ -111,7 +128,6 @@ namespace L1FlyMapViewer
                     {
                         var attr = s32Data.Layer3[y, x];
                         if (attr == null) continue;
-                        if (attr.Attribute1 == 0 && attr.Attribute2 == 0) continue;
 
                         int x1 = x * 2;
                         int localBaseX = 0 - 24 * (x1 / 2);
@@ -123,37 +139,18 @@ namespace L1FlyMapViewer
                         if (X + 48 < 0 || X > worldRect.Width || Y + 24 < 0 || Y > worldRect.Height)
                             continue;
 
+                        // 菱形頂點
                         var pTop = new SKPoint(X + 24, Y + 0);
                         var pRight = new SKPoint(X + 48, Y + 12);
-                        var pBottom = new SKPoint(X + 24, Y + 24);
                         var pLeft = new SKPoint(X + 0, Y + 12);
-                        var pCenter = new SKPoint(X + 24, Y + 12);
 
-                        // 左半邊 - Attribute1 = 1 表示不可通行
-                        if (attr.Attribute1 == 1)
-                        {
-                            using var brush = new SKPaint { Color = new SKColor(255, 0, 0, 100), Style = SKPaintStyle.Fill };
-                            var path = new SKPath();
-                            path.MoveTo(pLeft);
-                            path.LineTo(pTop);
-                            path.LineTo(pCenter);
-                            path.LineTo(pBottom);
-                            path.Close();
-                            canvas.DrawPath(path, brush);
-                        }
+                        // 左上邊線 - 使用 Attribute1 bit0 判斷
+                        var pen1 = (attr.Attribute1 & 0x01) != 0 ? penImpassable : penPassable;
+                        canvas.DrawLine(pLeft, pTop, pen1);
 
-                        // 右半邊 - Attribute2 = 1 表示不可通行
-                        if (attr.Attribute2 == 1)
-                        {
-                            using var brush = new SKPaint { Color = new SKColor(255, 0, 0, 100), Style = SKPaintStyle.Fill };
-                            var path = new SKPath();
-                            path.MoveTo(pTop);
-                            path.LineTo(pRight);
-                            path.LineTo(pBottom);
-                            path.LineTo(pCenter);
-                            path.Close();
-                            canvas.DrawPath(path, brush);
-                        }
+                        // 右上邊線 - 使用 Attribute2 bit0 判斷
+                        var pen2 = (attr.Attribute2 & 0x01) != 0 ? penImpassable : penPassable;
+                        canvas.DrawLine(pTop, pRight, pen2);
                     }
                 }
             }
