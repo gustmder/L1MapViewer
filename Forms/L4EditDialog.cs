@@ -48,23 +48,29 @@ namespace L1MapViewer.Forms
             _originalObject = obj;
 
             Text = "編輯 L4 物件";
-            Size = new Size(420, 400);
+            Size = new Size(450, 480);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
             MinimizeBox = false;
 
+            // 布局常數
+            const int leftMargin = 25;
+            const int labelWidth = 130;
+            const int inputX = 165;
+            const int inputWidth = 100;
+            const int rowHeight = 35;
             int yOffset = 20;
 
             // 目標 S32
             Label lblTargetS32 = new Label();
             lblTargetS32.Text = "所屬 S32:";
-            lblTargetS32.SetLocation(new Point(20, yOffset));
-            lblTargetS32.Size = new Size(120, 20);
+            lblTargetS32.SetLocation(new Point(leftMargin, yOffset + 3));
+            lblTargetS32.Size = new Size(labelWidth, 20);
 
             cmbTargetS32 = new ComboBox();
-            cmbTargetS32.SetLocation(new Point(150, yOffset - 2));
-            cmbTargetS32.Size = new Size(230, 23);
+            cmbTargetS32.SetLocation(new Point(inputX, yOffset));
+            cmbTargetS32.Size = new Size(240, 25);
             cmbTargetS32.DropDownStyle = ComboBoxStyle.DropDownList;
 
             foreach (var s32 in availableS32s)
@@ -86,12 +92,12 @@ namespace L1MapViewer.Forms
 
             Controls.Add(lblTargetS32);
             Controls.Add(cmbTargetS32);
-            yOffset += 30;
+            yOffset += rowHeight;
 
             // 座標資訊標籤
             lblCoordInfo = new Label();
-            lblCoordInfo.SetLocation(new Point(20, yOffset));
-            lblCoordInfo.Size = new Size(360, 20);
+            lblCoordInfo.SetLocation(new Point(leftMargin, yOffset));
+            lblCoordInfo.Size = new Size(380, 22);
             lblCoordInfo.TextColor = Colors.Blue;
             UpdateCoordInfo();
             Controls.Add(lblCoordInfo);
@@ -100,20 +106,20 @@ namespace L1MapViewer.Forms
             // 分隔線
             Label separator1 = new Label();
             separator1.BorderStyle = BorderStyle.Fixed3D;
-            separator1.SetLocation(new Point(20, yOffset));
-            separator1.Size = new Size(360, 2);
+            separator1.SetLocation(new Point(leftMargin, yOffset));
+            separator1.Size = new Size(380, 2);
             Controls.Add(separator1);
-            yOffset += 15;
+            yOffset += 18;
 
             // X 座標
             Label lblX = new Label();
             lblX.Text = "X (L1座標 0-255):";
-            lblX.SetLocation(new Point(20, yOffset));
-            lblX.Size = new Size(120, 20);
+            lblX.SetLocation(new Point(leftMargin, yOffset + 3));
+            lblX.Size = new Size(labelWidth, 20);
 
             numX = new NumericUpDown();
-            numX.SetLocation(new Point(150, yOffset - 2));
-            numX.Size = new Size(100, 23);
+            numX.SetLocation(new Point(inputX, yOffset));
+            numX.Size = new Size(inputWidth, 25);
             numX.Minimum = 0;
             numX.Maximum = 255;
             numX.Value = obj.X;
@@ -121,17 +127,17 @@ namespace L1MapViewer.Forms
 
             Controls.Add(lblX);
             Controls.Add(numX);
-            yOffset += 30;
+            yOffset += rowHeight;
 
             // Y 座標
             Label lblY = new Label();
             lblY.Text = "Y (L1座標 0-255):";
-            lblY.SetLocation(new Point(20, yOffset));
-            lblY.Size = new Size(120, 20);
+            lblY.SetLocation(new Point(leftMargin, yOffset + 3));
+            lblY.Size = new Size(labelWidth, 20);
 
             numY = new NumericUpDown();
-            numY.SetLocation(new Point(150, yOffset - 2));
-            numY.Size = new Size(100, 23);
+            numY.SetLocation(new Point(inputX, yOffset));
+            numY.Size = new Size(inputWidth, 25);
             numY.Minimum = 0;
             numY.Maximum = 255;
             numY.Value = obj.Y;
@@ -139,96 +145,96 @@ namespace L1MapViewer.Forms
 
             Controls.Add(lblY);
             Controls.Add(numY);
-            yOffset += 30;
+            yOffset += rowHeight;
 
             // 分隔線
             Label separator2 = new Label();
             separator2.BorderStyle = BorderStyle.Fixed3D;
-            separator2.SetLocation(new Point(20, yOffset));
-            separator2.Size = new Size(360, 2);
+            separator2.SetLocation(new Point(leftMargin, yOffset));
+            separator2.Size = new Size(380, 2);
             Controls.Add(separator2);
-            yOffset += 15;
+            yOffset += 18;
 
             // GroupId
             Label lblGroupId = new Label();
             lblGroupId.Text = "GroupId:";
-            lblGroupId.SetLocation(new Point(20, yOffset));
-            lblGroupId.Size = new Size(120, 20);
+            lblGroupId.SetLocation(new Point(leftMargin, yOffset + 3));
+            lblGroupId.Size = new Size(labelWidth, 20);
 
             numGroupId = new NumericUpDown();
-            numGroupId.SetLocation(new Point(150, yOffset - 2));
-            numGroupId.Size = new Size(100, 23);
+            numGroupId.SetLocation(new Point(inputX, yOffset));
+            numGroupId.Size = new Size(inputWidth, 25);
             numGroupId.Minimum = 0;
             numGroupId.Maximum = 65535;
             numGroupId.Value = obj.GroupId;
 
             Controls.Add(lblGroupId);
             Controls.Add(numGroupId);
-            yOffset += 30;
+            yOffset += rowHeight;
 
             // Layer
             Label lblLayer = new Label();
-            lblLayer.Text = "Layer (渲染層):";
-            lblLayer.SetLocation(new Point(20, yOffset));
-            lblLayer.Size = new Size(120, 20);
+            lblLayer.Text = "Layer (高度):";
+            lblLayer.SetLocation(new Point(leftMargin, yOffset + 3));
+            lblLayer.Size = new Size(labelWidth, 20);
 
             numLayer = new NumericUpDown();
-            numLayer.SetLocation(new Point(150, yOffset - 2));
-            numLayer.Size = new Size(100, 23);
+            numLayer.SetLocation(new Point(inputX, yOffset));
+            numLayer.Size = new Size(inputWidth, 25);
             numLayer.Minimum = 0;
             numLayer.Maximum = 255;
             numLayer.Value = obj.Layer;
 
             Controls.Add(lblLayer);
             Controls.Add(numLayer);
-            yOffset += 30;
+            yOffset += rowHeight;
 
             // TileId
             Label lblTileId = new Label();
             lblTileId.Text = "TileId:";
-            lblTileId.SetLocation(new Point(20, yOffset));
-            lblTileId.Size = new Size(120, 20);
+            lblTileId.SetLocation(new Point(leftMargin, yOffset + 3));
+            lblTileId.Size = new Size(labelWidth, 20);
 
             numTileId = new NumericUpDown();
-            numTileId.SetLocation(new Point(150, yOffset - 2));
-            numTileId.Size = new Size(100, 23);
+            numTileId.SetLocation(new Point(inputX, yOffset));
+            numTileId.Size = new Size(inputWidth, 25);
             numTileId.Minimum = 0;
             numTileId.Maximum = 65535;
             numTileId.Value = obj.TileId;
 
             Controls.Add(lblTileId);
             Controls.Add(numTileId);
-            yOffset += 30;
+            yOffset += rowHeight;
 
             // IndexId
             Label lblIndexId = new Label();
             lblIndexId.Text = "IndexId:";
-            lblIndexId.SetLocation(new Point(20, yOffset));
-            lblIndexId.Size = new Size(120, 20);
+            lblIndexId.SetLocation(new Point(leftMargin, yOffset + 3));
+            lblIndexId.Size = new Size(labelWidth, 20);
 
             numIndexId = new NumericUpDown();
-            numIndexId.SetLocation(new Point(150, yOffset - 2));
-            numIndexId.Size = new Size(100, 23);
+            numIndexId.SetLocation(new Point(inputX, yOffset));
+            numIndexId.Size = new Size(inputWidth, 25);
             numIndexId.Minimum = 0;
             numIndexId.Maximum = 255;
             numIndexId.Value = obj.IndexId;
 
             Controls.Add(lblIndexId);
             Controls.Add(numIndexId);
-            yOffset += 40;
+            yOffset += rowHeight + 15;
 
             // 按鈕
             btnOK = new Button();
             btnOK.Text = "確定";
             btnOK.DialogResult = DialogResult.Ok;
-            btnOK.SetLocation(new Point(150, yOffset));
-            btnOK.Size = new Size(80, 30);
+            btnOK.SetLocation(new Point(inputX, yOffset));
+            btnOK.Size = new Size(90, 32);
 
             btnCancel = new Button();
             btnCancel.Text = "取消";
             btnCancel.DialogResult = DialogResult.Cancel;
-            btnCancel.SetLocation(new Point(250, yOffset));
-            btnCancel.Size = new Size(80, 30);
+            btnCancel.SetLocation(new Point(inputX + 110, yOffset));
+            btnCancel.Size = new Size(90, 32);
 
             AcceptButton = btnOK;
             CancelButton = btnCancel;

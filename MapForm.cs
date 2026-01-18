@@ -301,6 +301,7 @@ namespace L1FlyMapViewer
         // 每個 S32 block 大小為 3072x1536，使用此索引可快速查找 worldRect 內的 S32
         private Dictionary<(int gridX, int gridY), List<string>> _s32SpatialIndex = new Dictionary<(int, int), List<string>>();
         private const int SPATIAL_GRID_SIZE = 3072;  // 與 S32 block 寬度相同
+        private const int GROUP_THUMBNAIL_SIZE = 40;  // 群組縮圖大小（原本 80，縮小一半）
 
         // Layer4 空間索引 - 用於快速查找附近的 Layer4 物件
         private Layer4SpatialIndex _layer4SpatialIndex = new Layer4SpatialIndex();
@@ -13967,108 +13968,119 @@ namespace L1FlyMapViewer
         {
             Panel panel = new Panel();
             panel.SetDock(DockStyle.Fill);
+            panel.AutoScroll = true;
 
             // S32 檔案資訊
-            Label s32Info = new Label();
             string s32Name = System.IO.Path.GetFileName(currentS32Data.FilePath);
             int gameX = currentS32FileItem.SegInfo.nLinBeginX + x / 2;
             int gameY = currentS32FileItem.SegInfo.nLinBeginY + y;
+
+            Label s32Info = new Label();
             s32Info.Text = $"S32: {s32Name} | 遊戲座標: ({gameX}, {gameY})";
-            s32Info.SetDock(DockStyle.Top);
-            s32Info.Height = 20;
+            s32Info.SetLocation(new Point(10, 10));
+            s32Info.Size = new Size(760, 25);
             s32Info.BackgroundColor = Color.FromArgb(60, 60, 60);
             s32Info.TextColor = Colors.White;
             s32Info.SetTextAlign(ContentAlignment.MiddleCenter);
-            s32Info.Font = new Font("Consolas", 9);
+            s32Info.Font = new Font("Consolas", 10);
+            panel.GetControls().Add(s32Info);
 
             // 左右三角並排顯示
             int leftX = (x / 2) * 2;      // 偶數 X（左三角）
             int rightX = leftX + 1;        // 奇數 X（右三角）
 
-            SplitContainer split = new SplitContainer();
-            split.SetDock(DockStyle.Fill);
-            split.Orientation = Orientation.Vertical;
-            split.SplitterDistance = 350;
-            split.SplitterMoved += (s, e) => { }; // 允許手動調整
-            // 視窗大小改變時自動置中
-            split.Resize += (s, e) =>
-            {
-                if (split.Width > 0)
-                    split.SplitterDistance = split.Width / 2;
-            };
-
-            // 左三角面板
-            Panel leftPanel = new Panel();
-            leftPanel.SetDock(DockStyle.Fill);
-
+            // ===== 左三角 =====
             Label leftTitle = new Label();
             leftTitle.Text = $"◀ 左三角 (X={leftX})";
-            leftTitle.SetDock(DockStyle.Top);
-            leftTitle.Height = 22;
+            leftTitle.SetLocation(new Point(10, 45));
+            leftTitle.Size = new Size(370, 25);
             leftTitle.BackgroundColor = Colors.LightBlue;
             leftTitle.SetTextAlign(ContentAlignment.MiddleCenter);
+            leftTitle.Font = new Font("Arial", 10, FontStyle.Bold);
+            panel.GetControls().Add(leftTitle);
 
             var leftCell = (leftX < 128 && y < 64) ? currentS32Data.Layer1[y, leftX] : null;
+
             PictureBox leftPb = new PictureBox();
-            leftPb.SetDock(DockStyle.Fill);
+            leftPb.SetLocation(new Point(10, 75));
+            leftPb.Size = new Size(370, 300);
             leftPb.SetSizeMode(PictureBoxSizeMode.Zoom);
             leftPb.BackgroundColor = Colors.Black;
+            panel.GetControls().Add(leftPb);
 
             if (leftCell != null && leftCell.TileId > 0)
             {
-                leftPb.Image = LoadTileEnlarged(leftCell.TileId, leftCell.IndexId, 100);
+                leftPb.Image = LoadTileEnlarged(leftCell.TileId, leftCell.IndexId, 200);
 
                 Label leftInfo = new Label();
-                leftInfo.Text = $"Tile: {leftCell.TileId} | Idx: {leftCell.IndexId}";
-                leftInfo.SetDock(DockStyle.Bottom);
-                leftInfo.Height = 22;
+                leftInfo.Text = $"TileId: {leftCell.TileId} (0x{leftCell.TileId:X4})\nIndexId: {leftCell.IndexId}\n檔案: {leftCell.TileId}.til";
+                leftInfo.SetLocation(new Point(10, 380));
+                leftInfo.Size = new Size(370, 60);
+                leftInfo.BackgroundColor = Color.FromArgb(40, 40, 40);
+                leftInfo.TextColor = Colors.White;
+                leftInfo.Font = new Font("Consolas", 10);
                 leftInfo.SetTextAlign(ContentAlignment.MiddleCenter);
-                leftPanel.GetControls().Add(leftInfo);
+                panel.GetControls().Add(leftInfo);
+            }
+            else
+            {
+                Label leftEmpty = new Label();
+                leftEmpty.Text = "(無資料)";
+                leftEmpty.SetLocation(new Point(10, 380));
+                leftEmpty.Size = new Size(370, 30);
+                leftEmpty.TextColor = Colors.Gray;
+                leftEmpty.SetTextAlign(ContentAlignment.MiddleCenter);
+                panel.GetControls().Add(leftEmpty);
             }
 
-            leftPanel.GetControls().Add(leftPb);
-            leftPanel.GetControls().Add(leftTitle);
-            split.Panel1.GetControls().Add(leftPanel);
-
-            // 右三角面板
-            Panel rightPanel = new Panel();
-            rightPanel.SetDock(DockStyle.Fill);
-
+            // ===== 右三角 =====
             Label rightTitle = new Label();
             rightTitle.Text = $"▶ 右三角 (X={rightX})";
-            rightTitle.SetDock(DockStyle.Top);
-            rightTitle.Height = 22;
+            rightTitle.SetLocation(new Point(390, 45));
+            rightTitle.Size = new Size(370, 25);
             rightTitle.BackgroundColor = Colors.LightGreen;
             rightTitle.SetTextAlign(ContentAlignment.MiddleCenter);
+            rightTitle.Font = new Font("Arial", 10, FontStyle.Bold);
+            panel.GetControls().Add(rightTitle);
 
             var rightCell = (rightX < 128 && y < 64) ? currentS32Data.Layer1[y, rightX] : null;
+
             PictureBox rightPb = new PictureBox();
-            rightPb.SetDock(DockStyle.Fill);
+            rightPb.SetLocation(new Point(390, 75));
+            rightPb.Size = new Size(370, 300);
             rightPb.SetSizeMode(PictureBoxSizeMode.Zoom);
             rightPb.BackgroundColor = Colors.Black;
+            panel.GetControls().Add(rightPb);
 
             if (rightCell != null && rightCell.TileId > 0)
             {
-                rightPb.Image = LoadTileEnlarged(rightCell.TileId, rightCell.IndexId, 100);
+                rightPb.Image = LoadTileEnlarged(rightCell.TileId, rightCell.IndexId, 200);
 
                 Label rightInfo = new Label();
-                rightInfo.Text = $"Tile: {rightCell.TileId} | Idx: {rightCell.IndexId}";
-                rightInfo.SetDock(DockStyle.Bottom);
-                rightInfo.Height = 22;
+                rightInfo.Text = $"TileId: {rightCell.TileId} (0x{rightCell.TileId:X4})\nIndexId: {rightCell.IndexId}\n檔案: {rightCell.TileId}.til";
+                rightInfo.SetLocation(new Point(390, 380));
+                rightInfo.Size = new Size(370, 60);
+                rightInfo.BackgroundColor = Color.FromArgb(40, 40, 40);
+                rightInfo.TextColor = Colors.White;
+                rightInfo.Font = new Font("Consolas", 10);
                 rightInfo.SetTextAlign(ContentAlignment.MiddleCenter);
-                rightPanel.GetControls().Add(rightInfo);
+                panel.GetControls().Add(rightInfo);
+            }
+            else
+            {
+                Label rightEmpty = new Label();
+                rightEmpty.Text = "(無資料)";
+                rightEmpty.SetLocation(new Point(390, 380));
+                rightEmpty.Size = new Size(370, 30);
+                rightEmpty.TextColor = Colors.Gray;
+                rightEmpty.SetTextAlign(ContentAlignment.MiddleCenter);
+                panel.GetControls().Add(rightEmpty);
             }
 
-            rightPanel.GetControls().Add(rightPb);
-            rightPanel.GetControls().Add(rightTitle);
-            split.Panel2.GetControls().Add(rightPanel);
-
-            panel.GetControls().Add(split);
-            panel.GetControls().Add(s32Info);
             return panel;
         }
 
-        // 創建第二層面板 - 搜尋所有 S32，按左三角/右三角及不同 S32 分開顯示
+        // 創建第二層面板 - 搜尋所有 S32，按左三角/右三角分區直接顯示 tile 圖片
         private Panel CreateLayer2Panel(int x, int y)
         {
             Panel panel = new Panel();
@@ -14113,150 +14125,154 @@ namespace L1FlyMapViewer
             }
 
             int totalCount = leftItems.Count + rightItems.Count;
+            panel.AutoScroll = true;
+
+            // 標題區 - 全域座標
+            Label headerLabel = new Label();
+            headerLabel.Text = $"Layer2 資料 (全域座標: {globalLayer1X}, {globalLayer1Y}) - 共 {totalCount} 項";
+            headerLabel.SetLocation(new Point(10, 5));
+            headerLabel.Size = new Size(760, 25);
+            headerLabel.BackgroundColor = Color.FromArgb(60, 60, 60);
+            headerLabel.TextColor = Colors.White;
+            headerLabel.SetTextAlign(ContentAlignment.MiddleCenter);
+            headerLabel.Font = new Font("Consolas", 10);
+            panel.GetControls().Add(headerLabel);
+
             if (totalCount > 0)
             {
-                // SplitContainer: 左邊 ListView，右邊預覽
-                SplitContainer splitContainer = new SplitContainer();
-                splitContainer.SetDock(DockStyle.Fill);
-                splitContainer.Orientation = Orientation.Vertical;
-                splitContainer.SplitterDistance = 280;
+                // ===== 左三角區域 =====
+                Label leftTitle = new Label();
+                leftTitle.Text = $"◀ 左三角 ({leftItems.Count} 項)";
+                leftTitle.SetLocation(new Point(10, 40));
+                leftTitle.Size = new Size(370, 25);
+                leftTitle.BackgroundColor = Colors.LightBlue;
+                leftTitle.SetTextAlign(ContentAlignment.MiddleCenter);
+                leftTitle.Font = new Font("Arial", 10, FontStyle.Bold);
+                panel.GetControls().Add(leftTitle);
 
-                // 左邊：ListView
-                ListView listView = new ListView();
-                listView.SetDock(DockStyle.Fill);
-                listView.View = View.Details;
-                listView.FullRowSelect = true;
-                listView.GridLines = true;
-                listView.HideSelection = false;
-
-                listView.Columns.Add("區域", 50);
-                listView.Columns.Add("S32", 85);
-                listView.Columns.Add("X", 40);
-                listView.Columns.Add("Y", 40);
-                listView.Columns.Add("Tile", 50);
-                listView.Columns.Add("Idx", 40);
-
-                // 左三角項目
-                foreach (var (s32Name, s32Data, item) in leftItems)
+                int leftY = 70;
+                if (leftItems.Count == 0)
                 {
-                    var lvItem = new ListViewItem("◀左");
-                    lvItem.BackgroundColor = Colors.LightBlue;
-                    lvItem.SubItems.Add(s32Name);
-                    lvItem.SubItems.Add(item.X.ToString());
-                    lvItem.SubItems.Add(item.Y.ToString());
-                    lvItem.SubItems.Add(item.TileId.ToString());
-                    lvItem.SubItems.Add(item.IndexId.ToString());
-                    lvItem.Tag = (s32Data, item);
-                    listView.Items.Add(lvItem);
+                    Label noLeft = new Label();
+                    noLeft.Text = "(無資料)";
+                    noLeft.SetLocation(new Point(10, leftY));
+                    noLeft.Size = new Size(370, 30);
+                    noLeft.TextColor = Colors.Gray;
+                    noLeft.SetTextAlign(ContentAlignment.MiddleCenter);
+                    panel.GetControls().Add(noLeft);
+                    leftY += 35;
+                }
+                else
+                {
+                    foreach (var (s32Name, s32Data, item) in leftItems)
+                    {
+                        var itemPanel = CreateLayer2ItemPanel(s32Name, s32Data, item, 0);
+                        itemPanel.SetLocation(new Point(10, leftY));
+                        panel.GetControls().Add(itemPanel);
+                        leftY += 145;
+                    }
                 }
 
-                // 右三角項目
-                foreach (var (s32Name, s32Data, item) in rightItems)
+                // ===== 右三角區域 =====
+                Label rightTitle = new Label();
+                rightTitle.Text = $"▶ 右三角 ({rightItems.Count} 項)";
+                rightTitle.SetLocation(new Point(390, 40));
+                rightTitle.Size = new Size(370, 25);
+                rightTitle.BackgroundColor = Colors.LightGreen;
+                rightTitle.SetTextAlign(ContentAlignment.MiddleCenter);
+                rightTitle.Font = new Font("Arial", 10, FontStyle.Bold);
+                panel.GetControls().Add(rightTitle);
+
+                int rightY = 70;
+                if (rightItems.Count == 0)
                 {
-                    var lvItem = new ListViewItem("▶右");
-                    lvItem.BackgroundColor = Colors.LightGreen;
-                    lvItem.SubItems.Add(s32Name);
-                    lvItem.SubItems.Add(item.X.ToString());
-                    lvItem.SubItems.Add(item.Y.ToString());
-                    lvItem.SubItems.Add(item.TileId.ToString());
-                    lvItem.SubItems.Add(item.IndexId.ToString());
-                    lvItem.Tag = (s32Data, item);
-                    listView.Items.Add(lvItem);
+                    Label noRight = new Label();
+                    noRight.Text = "(無資料)";
+                    noRight.SetLocation(new Point(390, rightY));
+                    noRight.Size = new Size(370, 30);
+                    noRight.TextColor = Colors.Gray;
+                    noRight.SetTextAlign(ContentAlignment.MiddleCenter);
+                    panel.GetControls().Add(noRight);
                 }
-
-                splitContainer.Panel1.GetControls().Add(listView);
-
-                // 右邊：預覽面板
-                Panel previewPanel = new Panel();
-                previewPanel.SetDock(DockStyle.Fill);
-                previewPanel.BackgroundColor = Colors.Black;
-
-                PictureBox previewPb = new PictureBox();
-                previewPb.SetDock(DockStyle.Fill);
-                previewPb.SetSizeMode(PictureBoxSizeMode.Zoom);
-                previewPb.BackgroundColor = Colors.Black;
-                previewPanel.GetControls().Add(previewPb);
-
-                Label previewInfo = new Label();
-                previewInfo.SetDock(DockStyle.Bottom);
-                previewInfo.Height = 40;
-                previewInfo.TextColor = Colors.White;
-                previewInfo.BackgroundColor = Color.FromArgb(40, 40, 40);
-                previewInfo.SetTextAlign(ContentAlignment.MiddleCenter);
-                previewInfo.Text = "選取項目以預覽";
-                previewPanel.GetControls().Add(previewInfo);
-
-                Button btnDelete = new Button();
-                btnDelete.Text = "刪除";
-                btnDelete.SetDock(DockStyle.Top);
-                btnDelete.Height = 25;
-                btnDelete.BackgroundColor = WinFormsColors.IndianRed;
-                btnDelete.TextColor = Colors.White;
-                btnDelete.Enabled = false;
-                previewPanel.GetControls().Add(btnDelete);
-
-                splitContainer.Panel2.GetControls().Add(previewPanel);
-
-                // 選取事件
-                listView.SelectedIndexChanged += (s, e) =>
+                else
                 {
-                    if (listView.SelectedItems.Count > 0)
+                    foreach (var (s32Name, s32Data, item) in rightItems)
                     {
-                        var selected = listView.SelectedItems[0];
-                        var (s32Data, item) = ((S32Data, Layer2Item))selected.Tag;
-
-                        previewPb.Image = LoadTileEnlarged(item.TileId, item.IndexId, 100);
-                        previewInfo.Text = $"Tile: {item.TileId} | Idx: {item.IndexId}\n" +
-                                           $"位置: ({item.X}, {item.Y})";
-                        btnDelete.Enabled = true;
-                        btnDelete.Tag = (s32Data, item);
+                        var itemPanel = CreateLayer2ItemPanel(s32Name, s32Data, item, 0);
+                        itemPanel.SetLocation(new Point(390, rightY));
+                        panel.GetControls().Add(itemPanel);
+                        rightY += 145;
                     }
-                    else
-                    {
-                        previewPb.Image = null;
-                        previewInfo.Text = "選取項目以預覽";
-                        btnDelete.Enabled = false;
-                    }
-                };
-
-                // 刪除事件
-                btnDelete.Click += (s, e) =>
-                {
-                    if (btnDelete.Tag != null)
-                    {
-                        var (s32Data, item) = ((S32Data, Layer2Item))btnDelete.Tag;
-
-                        if (WinFormsMessageBox.Show($"確定要刪除這個 Layer2 項目？\nTile: {item.TileId}, Idx: {item.IndexId}",
-                            "確認刪除", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                        {
-                            s32Data.Layer2.Remove(item);
-                            s32Data.IsModified = true;
-                            ClearS32BlockCache();
-                            RenderS32Map();
-
-                            // 從 ListView 移除
-                            listView.Items.Remove(listView.SelectedItems[0]);
-                            previewPb.Image = null;
-                            previewInfo.Text = "已刪除";
-                            btnDelete.Enabled = false;
-
-                            this.toolStripStatusLabel1.Text = $"已刪除 Layer2 項目 (Tile:{item.TileId})";
-                        }
-                    }
-                };
-
-                panel.GetControls().Add(splitContainer);
+                }
             }
             else
             {
                 Label noData = new Label();
-                noData.Text = $"此格子無 Layer2 資料\n\n(全域座標: {globalLayer1X}, {globalLayer1Y})";
-                noData.SetDock(DockStyle.Fill);
+                noData.Text = "(無資料)";
+                noData.SetLocation(new Point(10, 40));
+                noData.Size = new Size(760, 30);
+                noData.TextColor = Colors.Gray;
                 noData.SetTextAlign(ContentAlignment.MiddleCenter);
                 panel.GetControls().Add(noData);
             }
 
             return panel;
+        }
+
+        // 創建單個 Layer2 項目面板（包含圖片和詳細資訊）
+        private Panel CreateLayer2ItemPanel(string s32Name, S32Data s32Data, Layer2Item item, int yPos)
+        {
+            Panel itemPanel = new Panel();
+            itemPanel.SetLocation(new Point(5, yPos));
+            itemPanel.Size = new Size(340, 140);
+            itemPanel.BorderStyle = BorderStyle.FixedSingle;
+            itemPanel.BackgroundColor = Color.FromArgb(50, 50, 50);
+
+            // Tile 圖片
+            PictureBox pb = new PictureBox();
+            pb.SetLocation(new Point(5, 5));
+            pb.Size = new Size(100, 100);
+            pb.SetSizeMode(PictureBoxSizeMode.Zoom);
+            pb.BackgroundColor = Colors.Black;
+            pb.Image = LoadTileEnlarged(item.TileId, item.IndexId, 100);
+            itemPanel.GetControls().Add(pb);
+
+            // 詳細資訊
+            Label info = new Label();
+            info.SetLocation(new Point(110, 5));
+            info.Size = new Size(220, 100);
+            info.TextColor = Colors.White;
+            info.Font = new Font("Consolas", 9);
+            info.Text = $"TileId: {item.TileId} (0x{item.TileId:X4})\n" +
+                       $"IndexId: {item.IndexId}\n" +
+                       $"檔案: {item.TileId}.til\n" +
+                       $"位置: X={item.X}, Y={item.Y}\n" +
+                       $"S32: {s32Name}";
+            itemPanel.GetControls().Add(info);
+
+            // 刪除按鈕
+            Button btnDelete = new Button();
+            btnDelete.SetLocation(new Point(5, 110));
+            btnDelete.Size = new Size(100, 25);
+            btnDelete.Text = "刪除";
+            btnDelete.BackgroundColor = WinFormsColors.IndianRed;
+            btnDelete.TextColor = Colors.White;
+            btnDelete.Click += (s, e) =>
+            {
+                if (WinFormsMessageBox.Show($"確定要刪除這個 Layer2 項目？\nTile: {item.TileId}, Idx: {item.IndexId}",
+                    "確認刪除", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    s32Data.Layer2.Remove(item);
+                    s32Data.IsModified = true;
+                    ClearS32BlockCache();
+                    RenderS32Map();
+                    itemPanel.Visible = false;
+                    this.toolStripStatusLabel1.Text = $"已刪除 Layer2 項目 (Tile:{item.TileId})";
+                }
+            };
+            itemPanel.GetControls().Add(btnDelete);
+
+            return itemPanel;
         }
 
         // 創建第三層面板
@@ -14366,7 +14382,7 @@ namespace L1FlyMapViewer
             return panel;
         }
 
-        // 創建第四層面板 - 搜尋所有 S32，按左三角/右三角及不同 S32 分開顯示
+        // 創建第四層面板 - 搜尋所有 S32，按左三角/右三角分區直接顯示 tile 圖片
         private Panel CreateLayer4Panel(int x, int y)
         {
             Panel panel = new Panel();
@@ -14411,230 +14427,198 @@ namespace L1FlyMapViewer
             }
 
             int totalCount = leftObjects.Count + rightObjects.Count;
+            panel.AutoScroll = true;
+
+            // 標題區 - 全域座標
+            Label headerLabel = new Label();
+            headerLabel.Text = $"Layer4 資料 (全域座標: {globalLayer1X}, {globalLayer1Y}) - 共 {totalCount} 項";
+            headerLabel.SetLocation(new Point(10, 5));
+            headerLabel.Size = new Size(760, 25);
+            headerLabel.BackgroundColor = Color.FromArgb(60, 60, 60);
+            headerLabel.TextColor = Colors.White;
+            headerLabel.SetTextAlign(ContentAlignment.MiddleCenter);
+            headerLabel.Font = new Font("Consolas", 10);
+            panel.GetControls().Add(headerLabel);
+
             if (totalCount > 0)
             {
-                // SplitContainer: 左邊 ListView，右邊預覽
-                SplitContainer splitContainer = new SplitContainer();
-                splitContainer.SetDock(DockStyle.Fill);
-                splitContainer.Orientation = Orientation.Vertical;
-                splitContainer.SplitterDistance = 280;
+                // ===== 左三角區域 =====
+                Label leftTitle = new Label();
+                leftTitle.Text = $"◀ 左三角 ({leftObjects.Count} 項)";
+                leftTitle.SetLocation(new Point(10, 40));
+                leftTitle.Size = new Size(370, 25);
+                leftTitle.BackgroundColor = Colors.LightBlue;
+                leftTitle.SetTextAlign(ContentAlignment.MiddleCenter);
+                leftTitle.Font = new Font("Arial", 10, FontStyle.Bold);
+                panel.GetControls().Add(leftTitle);
 
-                // 左邊：ListView
-                ListView listView = new ListView();
-                listView.SetDock(DockStyle.Fill);
-                listView.View = View.Details;
-                listView.FullRowSelect = true;
-                listView.GridLines = true;
-                listView.HideSelection = false;
-
-                listView.Columns.Add("區域", 50);
-                listView.Columns.Add("S32", 85);
-                listView.Columns.Add("L", 30);
-                listView.Columns.Add("Grp", 45);
-                listView.Columns.Add("Tile", 45);
-                listView.Columns.Add("Idx", 35);
-
-                // 左三角物件
-                foreach (var (s32Name, s32Data, obj) in leftObjects.OrderBy(o => o.obj.Layer))
+                int leftY = 70;
+                if (leftObjects.Count == 0)
                 {
-                    var item = new ListViewItem("◀左");
-                    item.BackgroundColor = Colors.LightBlue;
-                    item.SubItems.Add(s32Name);
-                    item.SubItems.Add(obj.Layer.ToString());
-                    item.SubItems.Add(obj.GroupId.ToString());
-                    item.SubItems.Add(obj.TileId.ToString());
-                    item.SubItems.Add(obj.IndexId.ToString());
-                    item.Tag = (s32Data, obj);
-                    listView.Items.Add(item);
+                    Label noLeft = new Label();
+                    noLeft.Text = "(無資料)";
+                    noLeft.SetLocation(new Point(10, leftY));
+                    noLeft.Size = new Size(370, 30);
+                    noLeft.TextColor = Colors.Gray;
+                    noLeft.SetTextAlign(ContentAlignment.MiddleCenter);
+                    panel.GetControls().Add(noLeft);
+                    leftY += 35;
+                }
+                else
+                {
+                    foreach (var (s32Name, s32Data, obj) in leftObjects.OrderBy(o => o.obj.Layer))
+                    {
+                        var itemPanel = CreateLayer4ItemPanel(s32Name, s32Data, obj, 0);
+                        itemPanel.SetLocation(new Point(10, leftY));
+                        panel.GetControls().Add(itemPanel);
+                        leftY += 165;
+                    }
                 }
 
-                // 右三角物件
-                foreach (var (s32Name, s32Data, obj) in rightObjects.OrderBy(o => o.obj.Layer))
+                // ===== 右三角區域 =====
+                Label rightTitle = new Label();
+                rightTitle.Text = $"▶ 右三角 ({rightObjects.Count} 項)";
+                rightTitle.SetLocation(new Point(390, 40));
+                rightTitle.Size = new Size(370, 25);
+                rightTitle.BackgroundColor = Colors.LightGreen;
+                rightTitle.SetTextAlign(ContentAlignment.MiddleCenter);
+                rightTitle.Font = new Font("Arial", 10, FontStyle.Bold);
+                panel.GetControls().Add(rightTitle);
+
+                int rightY = 70;
+                if (rightObjects.Count == 0)
                 {
-                    var item = new ListViewItem("▶右");
-                    item.BackgroundColor = Colors.LightGreen;
-                    item.SubItems.Add(s32Name);
-                    item.SubItems.Add(obj.Layer.ToString());
-                    item.SubItems.Add(obj.GroupId.ToString());
-                    item.SubItems.Add(obj.TileId.ToString());
-                    item.SubItems.Add(obj.IndexId.ToString());
-                    item.Tag = (s32Data, obj);
-                    listView.Items.Add(item);
+                    Label noRight = new Label();
+                    noRight.Text = "(無資料)";
+                    noRight.SetLocation(new Point(390, rightY));
+                    noRight.Size = new Size(370, 30);
+                    noRight.TextColor = Colors.Gray;
+                    noRight.SetTextAlign(ContentAlignment.MiddleCenter);
+                    panel.GetControls().Add(noRight);
                 }
-
-                splitContainer.Panel1.GetControls().Add(listView);
-
-                // 右邊：預覽面板
-                Panel previewPanel = new Panel();
-                previewPanel.SetDock(DockStyle.Fill);
-                previewPanel.BackgroundColor = Colors.Black;
-
-                PictureBox previewPb = new PictureBox();
-                previewPb.SetDock(DockStyle.Fill);
-                previewPb.SetSizeMode(PictureBoxSizeMode.Zoom);
-                previewPb.BackgroundColor = Colors.Black;
-                previewPanel.GetControls().Add(previewPb);
-
-                Label previewInfo = new Label();
-                previewInfo.SetDock(DockStyle.Bottom);
-                previewInfo.Height = 40;
-                previewInfo.TextColor = Colors.White;
-                previewInfo.BackgroundColor = Color.FromArgb(40, 40, 40);
-                previewInfo.SetTextAlign(ContentAlignment.MiddleCenter);
-                previewInfo.Text = "選取項目以預覽";
-                previewPanel.GetControls().Add(previewInfo);
-
-                // 按鈕面板（放在頂部）
-                Panel buttonPanel = new Panel();
-                buttonPanel.SetDock(DockStyle.Top);
-                buttonPanel.Height = 30;
-
-                Button btnEdit = new Button();
-                btnEdit.Text = "編輯";
-                btnEdit.SetLocation(new Point(5, 2));
-                btnEdit.Size = new Size(70, 25);
-                btnEdit.BackgroundColor = WinFormsColors.SteelBlue;
-                btnEdit.TextColor = Colors.White;
-                btnEdit.Enabled = false;
-                buttonPanel.GetControls().Add(btnEdit);
-
-                Button btnDelete = new Button();
-                btnDelete.Text = "刪除";
-                btnDelete.SetLocation(new Point(80, 2));
-                btnDelete.Size = new Size(70, 25);
-                btnDelete.BackgroundColor = WinFormsColors.IndianRed;
-                btnDelete.TextColor = Colors.White;
-                btnDelete.Enabled = false;
-                buttonPanel.GetControls().Add(btnDelete);
-
-                previewPanel.GetControls().Add(buttonPanel);
-
-                splitContainer.Panel2.GetControls().Add(previewPanel);
-
-                // 選取變更時更新預覽
-                listView.SelectedIndexChanged += (s, e) =>
+                else
                 {
-                    if (listView.SelectedItems.Count > 0)
+                    foreach (var (s32Name, s32Data, obj) in rightObjects.OrderBy(o => o.obj.Layer))
                     {
-                        var selItem = listView.SelectedItems[0];
-                        var (s32Data, obj) = ((S32Data, ObjectTile))selItem.Tag;
-                        previewPb.Image = LoadTileEnlarged(obj.TileId, obj.IndexId, 120);
-                        previewInfo.Text = $"Tile:{obj.TileId} Idx:{obj.IndexId}\nL:{obj.Layer} G:{obj.GroupId} X:{obj.X} Y:{obj.Y}";
-                        btnDelete.Enabled = true;
-                        btnEdit.Enabled = true;
-                        btnDelete.Tag = (s32Data, obj, selItem);
-                        btnEdit.Tag = (s32Data, obj, selItem);
+                        var itemPanel = CreateLayer4ItemPanel(s32Name, s32Data, obj, 0);
+                        itemPanel.SetLocation(new Point(390, rightY));
+                        panel.GetControls().Add(itemPanel);
+                        rightY += 165;
                     }
-                    else
-                    {
-                        previewPb.Image = null;
-                        previewInfo.Text = "選取項目以預覽";
-                        btnDelete.Enabled = false;
-                        btnEdit.Enabled = false;
-                    }
-                };
-
-                // 編輯按鈕
-                btnEdit.Click += (s, e) =>
-                {
-                    if (btnEdit.Tag == null) return;
-                    var (s32Data, obj, selItem) = ((S32Data, ObjectTile, ListViewItem))btnEdit.Tag;
-                    EditLayer4Object(s32Data, obj, selItem, listView, previewPb, previewInfo);
-                };
-
-                // 刪除按鈕
-                btnDelete.Click += (s, e) =>
-                {
-                    if (btnDelete.Tag == null) return;
-                    var (s32Data, obj, selItem) = ((S32Data, ObjectTile, ListViewItem))btnDelete.Tag;
-                    string s32Name = selItem.SubItems[1].Text;
-                    if (WinFormsMessageBox.Show($"確定要刪除此物件嗎？\n({s32Name})\nGroup:{obj.GroupId}, Layer:{obj.Layer}",
-                        "確認", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                    {
-                        s32Data.Layer4.Remove(obj);
-                        Layer4Index_Remove(s32Data, obj);
-                        s32Data.IsModified = true;
-                        RenderS32Map();
-                        listView.Items.Remove(selItem);
-                        previewPb.Image = null;
-                        previewInfo.Text = "已刪除";
-                        btnDelete.Enabled = false;
-                        btnEdit.Enabled = false;
-                        this.toolStripStatusLabel1.Text = $"已刪除物件 ({s32Name})";
-                    }
-                };
-
-                // 右鍵選單
-                listView.MouseClick += (s, e) =>
-                {
-                    if (e.Buttons == Eto.Forms.MouseButtons.Alternate && listView.SelectedItems.Count > 0)
-                    {
-                        var selItem = listView.SelectedItems[0];
-                        var (s32Data, obj) = ((S32Data, ObjectTile))selItem.Tag;
-
-                        var menu = new ContextMenuStrip();
-
-                        var editItem = new ToolStripMenuItem("編輯此物件");
-                        editItem.Click += (s2, e2) =>
-                        {
-                            EditLayer4Object(s32Data, obj, selItem, listView, previewPb, previewInfo);
-                        };
-                        menu.Items.Add(editItem);
-
-                        var deleteItem = new ToolStripMenuItem("刪除此物件");
-                        deleteItem.Click += (s2, e2) =>
-                        {
-                            string s32Name = selItem.SubItems[1].Text;
-                            if (WinFormsMessageBox.Show($"確定要刪除此物件嗎？\n({s32Name})\nGroup:{obj.GroupId}, Layer:{obj.Layer}",
-                                "確認", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                            {
-                                s32Data.Layer4.Remove(obj);
-                                Layer4Index_Remove(s32Data, obj);
-                                s32Data.IsModified = true;
-                                RenderS32Map();
-                                listView.Items.Remove(selItem);
-                                previewPb.Image = null;
-                                previewInfo.Text = "已刪除";
-                                this.toolStripStatusLabel1.Text = $"已刪除物件 ({s32Name})";
-                            }
-                        };
-                        menu.Items.Add(deleteItem);
-                        menu.Show(listView, e.Location);
-                    }
-                };
-
-                // 雙擊編輯
-                listView.MouseDoubleClick += (s, e) =>
-                {
-                    if (listView.SelectedItems.Count > 0)
-                    {
-                        var selItem = listView.SelectedItems[0];
-                        var (s32Data, obj) = ((S32Data, ObjectTile))selItem.Tag;
-                        EditLayer4Object(s32Data, obj, selItem, listView, previewPb, previewInfo);
-                    }
-                };
-
-                // 統計標籤
-                Label statsLabel = new Label();
-                statsLabel.Text = $"◀左: {leftObjects.Count} | ▶右: {rightObjects.Count} | 共 {totalCount}";
-                statsLabel.SetDock(DockStyle.Top);
-                statsLabel.Height = 20;
-                statsLabel.SetTextAlign(ContentAlignment.MiddleCenter);
-                statsLabel.BackgroundColor = Colors.WhiteSmoke;
-
-                panel.GetControls().Add(splitContainer);
-                panel.GetControls().Add(statsLabel);
+                }
             }
             else
             {
                 Label noData = new Label();
-                noData.Text = "此格無物件";
-                noData.SetDock(DockStyle.Fill);
+                noData.Text = "(無資料)";
+                noData.SetLocation(new Point(10, 40));
+                noData.Size = new Size(760, 30);
+                noData.TextColor = Colors.Gray;
                 noData.SetTextAlign(ContentAlignment.MiddleCenter);
                 panel.GetControls().Add(noData);
             }
 
             return panel;
+        }
+
+        // 創建單個 Layer4 項目面板（包含圖片和詳細資訊）
+        private Panel CreateLayer4ItemPanel(string s32Name, S32Data s32Data, ObjectTile obj, int yPos)
+        {
+            Panel itemPanel = new Panel();
+            itemPanel.SetLocation(new Point(5, yPos));
+            itemPanel.Size = new Size(340, 160);
+            itemPanel.BorderStyle = BorderStyle.FixedSingle;
+            itemPanel.BackgroundColor = Color.FromArgb(50, 50, 50);
+
+            // Tile 圖片
+            PictureBox pb = new PictureBox();
+            pb.SetLocation(new Point(5, 5));
+            pb.Size = new Size(100, 100);
+            pb.SetSizeMode(PictureBoxSizeMode.Zoom);
+            pb.BackgroundColor = Colors.Black;
+            pb.Image = LoadTileEnlarged(obj.TileId, obj.IndexId, 100);
+            itemPanel.GetControls().Add(pb);
+
+            // 詳細資訊
+            Label info = new Label();
+            info.SetLocation(new Point(110, 5));
+            info.Size = new Size(220, 100);
+            info.TextColor = Colors.White;
+            info.Font = new Font("Consolas", 9);
+            info.Text = $"TileId: {obj.TileId} (0x{obj.TileId:X4})\n" +
+                       $"IndexId: {obj.IndexId}\n" +
+                       $"檔案: {obj.TileId}.til\n" +
+                       $"Layer: {obj.Layer} | GroupId: {obj.GroupId}\n" +
+                       $"位置: X={obj.X}, Y={obj.Y}\n" +
+                       $"S32: {s32Name}";
+            itemPanel.GetControls().Add(info);
+
+            // 編輯按鈕
+            Button btnEdit = new Button();
+            btnEdit.SetLocation(new Point(5, 110));
+            btnEdit.Size = new Size(100, 25);
+            btnEdit.Text = "編輯";
+            btnEdit.BackgroundColor = WinFormsColors.SteelBlue;
+            btnEdit.TextColor = Colors.White;
+            btnEdit.Click += (s, e) =>
+            {
+                using (var dialog = new L1MapViewer.Forms.L4EditDialog(obj, s32Data, _document.S32Files.Values))
+                {
+                    if (dialog.ShowDialog(this) == DialogResult.Ok)
+                    {
+                        var targetS32 = dialog.SelectedS32;
+                        bool s32Changed = dialog.S32Changed && targetS32 != null && targetS32 != s32Data;
+
+                        if (s32Changed)
+                        {
+                            s32Data.Layer4.Remove(obj);
+                            Layer4Index_Remove(s32Data, obj);
+                            s32Data.IsModified = true;
+                            targetS32.Layer4.Add(obj);
+                            Layer4Index_Add(targetS32, obj);
+                            targetS32.IsModified = true;
+                        }
+                        else
+                        {
+                            s32Data.IsModified = true;
+                        }
+                        RenderS32Map();
+                        // 更新資訊標籤
+                        info.Text = $"TileId: {obj.TileId} (0x{obj.TileId:X4})\n" +
+                                   $"IndexId: {obj.IndexId}\n" +
+                                   $"檔案: {obj.TileId}.til\n" +
+                                   $"Layer: {obj.Layer} | GroupId: {obj.GroupId}\n" +
+                                   $"位置: X={obj.X}, Y={obj.Y}\n" +
+                                   $"S32: {(s32Changed ? System.IO.Path.GetFileName(targetS32.FilePath) : s32Name)}";
+                        pb.Image = LoadTileEnlarged(obj.TileId, obj.IndexId, 100);
+                    }
+                }
+            };
+            itemPanel.GetControls().Add(btnEdit);
+
+            // 刪除按鈕
+            Button btnDelete = new Button();
+            btnDelete.SetLocation(new Point(110, 110));
+            btnDelete.Size = new Size(100, 25);
+            btnDelete.Text = "刪除";
+            btnDelete.BackgroundColor = WinFormsColors.IndianRed;
+            btnDelete.TextColor = Colors.White;
+            btnDelete.Click += (s, e) =>
+            {
+                if (WinFormsMessageBox.Show($"確定要刪除此物件嗎？\n({s32Name})\nGroup:{obj.GroupId}, Layer:{obj.Layer}",
+                    "確認", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    s32Data.Layer4.Remove(obj);
+                    Layer4Index_Remove(s32Data, obj);
+                    s32Data.IsModified = true;
+                    RenderS32Map();
+                    itemPanel.Visible = false;
+                    this.toolStripStatusLabel1.Text = $"已刪除物件 ({s32Name})";
+                }
+            };
+            itemPanel.GetControls().Add(btnDelete);
+
+            return itemPanel;
         }
 
         // 編輯 L4 物件
@@ -17647,7 +17631,7 @@ namespace L1FlyMapViewer
                     var info = kvp.Value;
 
                     // 生成群組縮圖（傳遞 Layer5 設定以繪製邊框）
-                    Bitmap thumbnail = GenerateGroupThumbnail(info.objects, 80, info.hasLayer5, info.layer5Type);
+                    Bitmap thumbnail = GenerateGroupThumbnail(info.objects, GROUP_THUMBNAIL_SIZE, info.hasLayer5, info.layer5Type);
 
                     if (thumbnail != null && !cancellationToken.IsCancellationRequested)
                     {
@@ -17685,7 +17669,7 @@ namespace L1FlyMapViewer
                         if (cancellationToken.IsCancellationRequested) return;
 
                         ImageList imageList = new ImageList();
-                        imageList.ImageSize = new Size(80, 80);
+                        imageList.ImageSize = new Size(GROUP_THUMBNAIL_SIZE, GROUP_THUMBNAIL_SIZE);
                         imageList.ColorDepth = ColorDepth.Depth32Bit;
 
                         lvGroupThumbnails.BeginUpdate();  // 暫停重繪
@@ -17735,6 +17719,11 @@ namespace L1FlyMapViewer
                             // 快取項目和 ImageList（用於過濾）
                             _cachedGroupItems = items;
                             _cachedGroupImageList = imageList;
+
+                            // 設定控件的 Tile 大小以配合縮圖
+                            lvGroupThumbnails.ImageSize = GROUP_THUMBNAIL_SIZE;
+                            lvGroupThumbnails.TileWidth = GROUP_THUMBNAIL_SIZE + 20;
+                            lvGroupThumbnails.TileHeight = GROUP_THUMBNAIL_SIZE + 35;
 
                             // 先設定 ImageList，再添加 Items（順序很重要！）
                             lvGroupThumbnails.LargeImageList = imageList;
@@ -19769,7 +19758,7 @@ namespace L1FlyMapViewer
                     bool hasLayer5 = groupLayer5Info.TryGetValue(key.groupId, out byte layer5Type);
 
                     // 生成群組縮圖
-                    Bitmap thumbnail = GenerateGroupThumbnailForS32(s32Data, objects, 80, hasLayer5, layer5Type);
+                    Bitmap thumbnail = GenerateGroupThumbnailForS32(s32Data, objects, GROUP_THUMBNAIL_SIZE, hasLayer5, layer5Type);
 
                     if (thumbnail != null && !cancellationToken.IsCancellationRequested)
                     {
@@ -19831,7 +19820,7 @@ namespace L1FlyMapViewer
 
                         // 建立 ImageList
                         ImageList imageList = new ImageList();
-                        imageList.ImageSize = new Size(80, 80);
+                        imageList.ImageSize = new Size(GROUP_THUMBNAIL_SIZE, GROUP_THUMBNAIL_SIZE);
                         imageList.ColorDepth = ColorDepth.Depth32Bit;
 
                         lvGroupThumbnails.BeginUpdate();
@@ -19879,6 +19868,11 @@ namespace L1FlyMapViewer
                             // 快取項目和 ImageList
                             _cachedGroupItems = items;
                             _cachedGroupImageList = imageList;
+
+                            // 設定控件的 Tile 大小以配合縮圖
+                            lvGroupThumbnails.ImageSize = GROUP_THUMBNAIL_SIZE;
+                            lvGroupThumbnails.TileWidth = GROUP_THUMBNAIL_SIZE + 20;
+                            lvGroupThumbnails.TileHeight = GROUP_THUMBNAIL_SIZE + 35;
 
                             // 先設定 ImageList，再添加 Items（順序很重要！）
                             lvGroupThumbnails.LargeImageList = imageList;

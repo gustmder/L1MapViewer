@@ -67,10 +67,34 @@ namespace L1MapViewer.Controls
         private ImageList _imageList;
 
         // Tile 尺寸設定
-        public int TileWidth { get; set; } = 90;
-        public int TileHeight { get; set; } = 115;  // 增加高度以容納圖片+兩行文字
-        public int ImageSize { get; set; } = 64;
-        public int TilePadding { get; set; } = 4;
+        private int _tileWidth = 90;
+        private int _tileHeight = 115;
+        private int _imageSize = 64;
+        private int _tilePadding = 4;
+
+        public int TileWidth
+        {
+            get => _tileWidth;
+            set { _tileWidth = value; UpdateContentSize(); Invalidate(); }
+        }
+
+        public int TileHeight
+        {
+            get => _tileHeight;
+            set { _tileHeight = value; UpdateContentSize(); Invalidate(); }
+        }
+
+        public int ImageSize
+        {
+            get => _imageSize;
+            set { _imageSize = value; Invalidate(); }
+        }
+
+        public int TilePadding
+        {
+            get => _tilePadding;
+            set { _tilePadding = value; UpdateContentSize(); Invalidate(); }
+        }
 
         // 多選模式
         public bool MultiSelect { get; set; } = false;

@@ -1360,6 +1360,9 @@ namespace L1FlyMapViewer
             // lvTiles
             //
             this.lvTiles.Size = new Size(210, 125);
+            this.lvTiles.ImageSize = 40;
+            this.lvTiles.TileWidth = 60;
+            this.lvTiles.TileHeight = 75;
             this.lvTiles.ItemDoubleClick += new System.EventHandler(this.lvTiles_DoubleClick);
             this.lvTiles.MouseUp += new System.EventHandler<Eto.Forms.MouseEventArgs>(this.lvTiles_MouseUp_Eto);
 
@@ -1377,6 +1380,9 @@ namespace L1FlyMapViewer
             // lvMaterials
             //
             this.lvMaterials.Size = new Size(210, 95);
+            this.lvMaterials.ImageSize = 40;
+            this.lvMaterials.TileWidth = 60;
+            this.lvMaterials.TileHeight = 75;
             this.lvMaterials.MultiSelect = false;
             this.lvMaterials.AllowDrop = true;
             this.lvMaterials.ItemDoubleClick += new System.EventHandler(this.lvMaterials_DoubleClick_Eto);
@@ -1430,6 +1436,9 @@ namespace L1FlyMapViewer
             //
             this.lvGroupThumbnails.Size = new Size(210, 260);
             this.lvGroupThumbnails.MultiSelect = true;
+            this.lvGroupThumbnails.ImageSize = 40;
+            this.lvGroupThumbnails.TileWidth = 60;
+            this.lvGroupThumbnails.TileHeight = 75;
             this.lvGroupThumbnails.MouseDown += new System.EventHandler<Eto.Forms.MouseEventArgs>(this.lvGroupThumbnails_MouseClick_Eto);
             this.lvGroupThumbnails.ItemDoubleClick += new System.EventHandler(this.lvGroupThumbnails_DoubleClick);
             this.lvGroupThumbnails.MouseUp += new System.EventHandler<Eto.Forms.MouseEventArgs>(this.lvGroupThumbnails_MouseUp_Eto);
