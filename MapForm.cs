@@ -91,6 +91,10 @@ namespace L1FlyMapViewer
         // MiniMapControl（取代原本的 PictureBox 和渲染邏輯）
         private L1MapViewer.Controls.MiniMapControl _miniMapControl;
 
+        // 主要 Splitter 控件引用（用於跨平台調整）
+        private Eto.Forms.Splitter _mainSplitter;
+        private Eto.Forms.Splitter _centerRightSplitter;
+
         // 狀態列控件引用 (用於同步狀態)
         private Eto.Forms.Button _statusBtnCopyMoveCmd;
         private Eto.Forms.TextBox _statusTxtJump;
@@ -797,25 +801,37 @@ namespace L1FlyMapViewer
 
             // === 主內容區域 (左中右 Splitter) ===
             // 中右 Splitter
-            var centerRightSplitter = new Eto.Forms.Splitter
+            _centerRightSplitter = new Eto.Forms.Splitter
             {
                 Orientation = Eto.Forms.Orientation.Horizontal,
                 FixedPanel = Eto.Forms.SplitterFixedPanel.Panel2,
                 Panel2MinimumSize = 200,
-                Position = 800,
                 Panel1 = centerLayout,
                 Panel2 = rightLayout
             };
 
             // 左 + (中右) Splitter
-            var mainSplitter = new Eto.Forms.Splitter
+            _mainSplitter = new Eto.Forms.Splitter
             {
                 Orientation = Eto.Forms.Orientation.Horizontal,
                 FixedPanel = Eto.Forms.SplitterFixedPanel.Panel1,
                 Panel1MinimumSize = 250,
-                Position = 280,
                 Panel1 = leftLayout,
-                Panel2 = centerRightSplitter
+                Panel2 = _centerRightSplitter
+            };
+
+            // GTK 平台需要在視窗顯示後設定 Splitter 位置
+            this.Shown += (s, e) =>
+            {
+                // 延遲設定位置，確保佈局已完成
+                Eto.Forms.Application.Instance.AsyncInvoke(() =>
+                {
+                    _mainSplitter.Position = 280;
+                    // centerRightSplitter 使用 FixedPanel=Panel2，Position 代表 Panel1 的寬度
+                    // 計算為視窗寬度減去右側面板和左側面板的寬度
+                    int centerWidth = Math.Max(600, this.ClientSize.Width - 280 - 300);
+                    _centerRightSplitter.Position = centerWidth;
+                });
             };
 
             // === 狀態列 ===
@@ -909,7 +925,7 @@ namespace L1FlyMapViewer
                 Spacing = new Eto.Drawing.Size(0, 0),
                 Rows =
                 {
-                    new Eto.Forms.TableRow(new Eto.Forms.TableCell(mainSplitter, true)) { ScaleHeight = true },
+                    new Eto.Forms.TableRow(new Eto.Forms.TableCell(_mainSplitter, true)) { ScaleHeight = true },
                     new Eto.Forms.TableRow(new Eto.Forms.TableCell(statusLayout, false))
                 }
             };
