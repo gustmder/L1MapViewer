@@ -193,20 +193,17 @@ public static class CrashReporter
                          $"Debug 日誌:\n{DebugLog.LogPath}";
 
             // 嘗試使用系統原生訊息框
-            if (OperatingSystem.IsWindows())
-            {
-                System.Windows.MessageBox.Show(message, "L1MapViewer 閃退報告",
-                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
-            }
-            else
-            {
-                // 其他平台輸出到 Console
-                Console.WriteLine("\n" + new string('=', 60));
-                Console.WriteLine("L1MapViewer 閃退報告");
-                Console.WriteLine(new string('=', 60));
-                Console.WriteLine(message);
-                Console.WriteLine(new string('=', 60) + "\n");
-            }
+#if WINDOWS
+            System.Windows.MessageBox.Show(message, "L1MapViewer 閃退報告",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+#else
+            // 其他平台輸出到 Console
+            Console.WriteLine("\n" + new string('=', 60));
+            Console.WriteLine("L1MapViewer 閃退報告");
+            Console.WriteLine(new string('=', 60));
+            Console.WriteLine(message);
+            Console.WriteLine(new string('=', 60) + "\n");
+#endif
         }
         catch
         {

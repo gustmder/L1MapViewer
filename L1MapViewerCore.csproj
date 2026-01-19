@@ -6,6 +6,8 @@
         <TargetFramework Condition="$([MSBuild]::IsOSPlatform('Windows'))">net10.0-windows</TargetFramework>
         <TargetFramework Condition="!$([MSBuild]::IsOSPlatform('Windows'))">net10.0</TargetFramework>
         <UseWPF Condition="$([MSBuild]::IsOSPlatform('Windows'))">true</UseWPF>
+        <!-- Define WINDOWS for conditional compilation -->
+        <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(DefineConstants);WINDOWS</DefineConstants>
         <!-- Allow running on newer .NET versions if net8.0 runtime isn't available -->
         <RollForward>Major</RollForward>
         <!-- Use workloads when available, otherwise fall back to manual reference -->
