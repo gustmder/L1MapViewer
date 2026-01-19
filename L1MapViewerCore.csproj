@@ -10,8 +10,12 @@
         <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(DefineConstants);WINDOWS</DefineConstants>
         <!-- Allow running on newer .NET versions if net8.0 runtime isn't available -->
         <RollForward>Major</RollForward>
+        <!-- RuntimeIdentifiers required by Eto.Platform.macOS -->
+        <RuntimeIdentifiers Condition="$([MSBuild]::IsOSPlatform('OSX'))">osx-x64;osx-arm64</RuntimeIdentifiers>
         <!-- Use workloads when available, otherwise fall back to manual reference -->
         <UseWorkloads Condition="'$(UseWorkloads)' == ''">false</UseWorkloads>
+        <!-- Set UseGtk=false to exclude GTK and use native macOS platform only -->
+        <UseGtk Condition="'$(UseGtk)' == ''">true</UseGtk>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -39,7 +43,8 @@
       <!-- Cross-platform UI framework -->
       <PackageReference Include="Eto.Forms" Version="2.10.2" />
       <!-- GTK works on both Linux and macOS (as a fallback when macOS workload isn't available) -->
-      <PackageReference Include="Eto.Platform.Gtk" Version="2.10.2" Condition="$([MSBuild]::IsOSPlatform('Linux')) OR $([MSBuild]::IsOSPlatform('OSX'))" />
+      <!-- On macOS, GTK is only included when UseGtk=true (default). Set UseGtk=false to use native macOS platform only -->
+      <PackageReference Include="Eto.Platform.Gtk" Version="2.10.2" Condition="$([MSBuild]::IsOSPlatform('Linux')) OR ($([MSBuild]::IsOSPlatform('OSX')) AND '$(UseGtk)' == 'true')" />
       <!-- On macOS, reference the platform package for NuGet restore but assets come from manual copy -->
       <PackageReference Include="Eto.Platform.macOS" Version="2.10.2" Condition="$([MSBuild]::IsOSPlatform('OSX'))" GeneratePathProperty="true" />
       <PackageReference Include="Eto.Platform.Wpf" Version="2.10.2" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
@@ -79,9 +84,26 @@
         <EtoGtkSource>$(NuGetPackageRoot)eto.platform.gtk/2.10.2/lib/net6.0/Eto.Gtk.dll</EtoGtkSource>
       </PropertyGroup>
       <Copy SourceFiles="$(EtoMacOSSource)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="$([MSBuild]::IsOSPlatform('OSX')) AND Exists('$(EtoMacOSSource)')" />
-      <Copy SourceFiles="$(EtoGtkSource)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('$(EtoGtkSource)')" />
+      <!-- Only copy GTK on macOS if UseGtk is true -->
+      <Copy SourceFiles="$(EtoGtkSource)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="'$(UseGtk)' == 'true' AND Exists('$(EtoGtkSource)')" />
       <Message Text="Copied Eto.macOS.dll to $(OutputPath)" Importance="high" Condition="$([MSBuild]::IsOSPlatform('OSX')) AND Exists('$(EtoMacOSSource)')" />
-      <Message Text="Copied Eto.Gtk.dll to $(OutputPath)" Importance="high" Condition="Exists('$(EtoGtkSource)')" />
+      <Message Text="Copied Eto.Gtk.dll to $(OutputPath)" Importance="high" Condition="'$(UseGtk)' == 'true' AND Exists('$(EtoGtkSource)')" />
+    </Target>
+
+    <!-- Also copy during Publish for self-contained deployments -->
+    <Target Name="CopyEtoPlatformAssembliesPublish" AfterTargets="Publish" Condition="$([MSBuild]::IsOSPlatform('OSX')) OR $([MSBuild]::IsOSPlatform('Linux'))">
+      <PropertyGroup>
+        <EtoMacOSSource>$(NuGetPackageRoot)eto.platform.macos/2.10.2/lib/net8.0-macos14.0/Eto.macOS.dll</EtoMacOSSource>
+        <EtoGtkSource>$(NuGetPackageRoot)eto.platform.gtk/2.10.2/lib/net6.0/Eto.Gtk.dll</EtoGtkSource>
+      </PropertyGroup>
+      <Copy SourceFiles="$(EtoMacOSSource)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" Condition="$([MSBuild]::IsOSPlatform('OSX')) AND Exists('$(EtoMacOSSource)')" />
+      <!-- Only copy GTK on macOS if UseGtk is true -->
+      <Copy SourceFiles="$(EtoGtkSource)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" Condition="'$(UseGtk)' == 'true' AND Exists('$(EtoGtkSource)')" />
+      <Message Text="Copied Eto.macOS.dll to $(PublishDir)" Importance="high" Condition="$([MSBuild]::IsOSPlatform('OSX')) AND Exists('$(EtoMacOSSource)')" />
+      <Message Text="Copied Eto.Gtk.dll to $(PublishDir)" Importance="high" Condition="'$(UseGtk)' == 'true' AND Exists('$(EtoGtkSource)')" />
+      <!-- Remove Eto.Gtk.dll from publish output if UseGtk is false -->
+      <Delete Files="$(PublishDir)Eto.Gtk.dll" Condition="'$(UseGtk)' == 'false' AND Exists('$(PublishDir)Eto.Gtk.dll')" />
+      <Message Text="Removed Eto.Gtk.dll from $(PublishDir) (UseGtk=false)" Importance="high" Condition="'$(UseGtk)' == 'false'" />
     </Target>
 
 </Project>
