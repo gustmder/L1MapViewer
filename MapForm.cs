@@ -3728,13 +3728,12 @@ namespace L1FlyMapViewer
             if (e.Buttons != Eto.Forms.MouseButtons.Alternate)
                 return;
 
-            int index = lstMaps.IndexFromPoint(new Point((int)e.Location.X, (int)e.Location.Y));
-            if (index < 0 || index >= lstMaps.Items.Count)
+            // 使用當前選中的項目（由 Eto.Forms 處理點擊選取）
+            // 注意：Eto.Forms.ListBox 會在 MouseDown 時自動選取點擊的項目
+            if (lstMaps.SelectedIndex < 0 || lstMaps.SelectedItem == null)
                 return;
 
-            // 選取該項目
-            lstMaps.SelectedIndex = index;
-            string selectedMapName = lstMaps.Items[index].ToString();
+            string selectedMapName = lstMaps.SelectedItem.ToString();
 
             // 取得地圖 ID
             string mapId = selectedMapName;

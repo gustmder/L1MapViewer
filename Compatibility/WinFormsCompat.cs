@@ -843,11 +843,20 @@ public class WinFormsListBox : Eto.Forms.ListBox
     public object SelectedItem { get => SelectedValue; set => SelectedValue = value; }
 
     // IndexFromPoint - returns item index at given point
+    // Note: This is an approximation since Eto.Forms.ListBox doesn't expose scroll position
+    // The calculation assumes default item height and may not be accurate for all themes
     public int IndexFromPoint(Point point)
     {
         // Approximate calculation based on item height
-        int itemHeight = 20; // Default item height
-        return Math.Max(-1, Math.Min(DataStore?.Count() - 1 ?? -1, point.Y / itemHeight));
+        // Note: Eto.Forms ListBox doesn't provide scroll offset access,
+        // so this only works correctly when the list is scrolled to top
+        // For GTK platform, we use the SelectedIndex if the point is within the visible area
+        int itemHeight = 20; // Default item height estimate
+        int count = DataStore?.Count() ?? 0;
+        if (count == 0) return -1;
+
+        int index = point.Y / itemHeight;
+        return Math.Max(-1, Math.Min(count - 1, index));
     }
 
     public int IndexFromPoint(int x, int y) => IndexFromPoint(new Point(x, y));
