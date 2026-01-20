@@ -322,6 +322,41 @@ namespace L1MapViewer.Reader {
             var idxData = LoadIdxFromPath(idxPath, pakPath);
             return idxData?.Keys.ToList();
         }
+
+        /// <summary>
+        /// 所有 Sprite 資料夾名稱（依序搜尋）
+        /// </summary>
+        public static readonly string[] SpriteIdxTypes = new[] {
+            "Sprite",
+            "Sprite00", "Sprite01", "Sprite02", "Sprite03",
+            "Sprite04", "Sprite05", "Sprite06", "Sprite07",
+            "Sprite08", "Sprite09", "Sprite10", "Sprite11",
+            "Sprite12", "Sprite13", "Sprite14", "Sprite15"
+        };
+
+        /// <summary>
+        /// 從多個 Sprite 資料夾中搜尋並讀取 SPR 檔案
+        /// </summary>
+        /// <param name="sprFileName">SPR 檔案名稱，例如 "123-0.spr"</param>
+        /// <returns>檔案內容，如果所有資料夾都找不到則返回 null</returns>
+        public static byte[]? UnPackSprite(string sprFileName) {
+            foreach (var idxType in SpriteIdxTypes) {
+                byte[]? data = UnPack(idxType, sprFileName);
+                if (data != null && data.Length > 0) {
+                    return data;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 從多個 Sprite 資料夾中搜尋並讀取 SPR 檔案（根據 SprId）
+        /// </summary>
+        /// <param name="sprId">SPR ID</param>
+        /// <returns>檔案內容，如果所有資料夾都找不到則返回 null</returns>
+        public static byte[]? UnPackSpriteById(int sprId) {
+            return UnPackSprite($"{sprId}-0.spr");
+        }
     }
 }
 

@@ -9518,47 +9518,33 @@ namespace L1FlyMapViewer
         // 載入 Layer8 SPR 帧（支援多 idx 檔案，保留 offset）
         private List<L1MapViewer.Models.Layer8Frame> LoadLayer8SprFrames(int sprId)
         {
-            string sprKey = $"{sprId}-0.spr";
-
-            // 依序嘗試不同的 idx 檔案
-            string[] idxTypes = new[] {
-                "Sprite",
-                "Sprite00", "Sprite01", "Sprite02", "Sprite03",
-                "Sprite04", "Sprite05", "Sprite06", "Sprite07",
-                "Sprite08", "Sprite09", "Sprite10", "Sprite11",
-                "Sprite12", "Sprite13", "Sprite14", "Sprite15"
-            };
-
-            foreach (var idxType in idxTypes)
+            try
             {
-                try
+                byte[] sprData = L1PakReader.UnPackSpriteById(sprId);
+                if (sprData != null && sprData.Length > 0)
                 {
-                    byte[] sprData = L1PakReader.UnPack(idxType, sprKey);
-                    if (sprData != null && sprData.Length > 0)
+                    var rawFrames = Lin.Helper.Core.Sprite.SprReader.LoadRaw(sprData);
+                    if (rawFrames != null && rawFrames.Length > 0)
                     {
-                        var rawFrames = Lin.Helper.Core.Sprite.SprReader.LoadRaw(sprData);
-                        if (rawFrames != null && rawFrames.Length > 0)
+                        var result = new List<L1MapViewer.Models.Layer8Frame>();
+                        foreach (var f in rawFrames)
                         {
-                            var result = new List<L1MapViewer.Models.Layer8Frame>();
-                            foreach (var f in rawFrames)
+                            if (f.Width > 0 && f.Height > 0 && f.Pixels != null)
                             {
-                                if (f.Width > 0 && f.Height > 0 && f.Pixels != null)
+                                result.Add(new L1MapViewer.Models.Layer8Frame
                                 {
-                                    result.Add(new L1MapViewer.Models.Layer8Frame
-                                    {
-                                        Image = CreateBitmapFromRgbaLayer8(f.Pixels, f.Width, f.Height),
-                                        XOffset = f.XOffset,
-                                        YOffset = f.YOffset
-                                    });
-                                }
+                                    Image = CreateBitmapFromRgbaLayer8(f.Pixels, f.Width, f.Height),
+                                    XOffset = f.XOffset,
+                                    YOffset = f.YOffset
+                                });
                             }
-                            if (result.Count > 0)
-                                return result;
                         }
+                        if (result.Count > 0)
+                            return result;
                     }
                 }
-                catch { }
             }
+            catch { }
 
             return new List<L1MapViewer.Models.Layer8Frame>();  // 找不到
         }
@@ -23282,8 +23268,7 @@ namespace L1FlyMapViewer
 
                 try
                 {
-                    string sprKey = $"{sprId}-0.spr";
-                    byte[] sprData = L1PakReader.UnPack("Sprite", sprKey);
+                    byte[] sprData = L1PakReader.UnPackSpriteById(sprId);
                     if (sprData != null && sprData.Length > 0)
                     {
                         var frames = SprReader.LoadRaw(sprData);
