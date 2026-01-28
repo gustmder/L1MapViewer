@@ -115,8 +115,9 @@ namespace L1FlyMapViewer
             chkShowPassable.Text = LocalizationManager.L("Layer_Passable");
             chkShowGrid.Text = LocalizationManager.L("Layer_Grid");
             chkShowS32Boundary.Text = LocalizationManager.L("Layer_S32Border");
-            chkShowSafeZones.Text = LocalizationManager.L("Layer_SafeZones");
-            chkShowCombatZones.Text = LocalizationManager.L("Layer_CombatZones");
+            chkFloatSafeZones.Text = LocalizationManager.L("Layer_SafeZones");
+            chkFloatCombatZones.Text = LocalizationManager.L("Layer_CombatZones");
+            chkFloatMarketZones.Text = LocalizationManager.L("Layer_MarketZones");
 
             // S32 編輯面板按鈕
             btnReloadMap.Text = LocalizationManager.L("Button_ReloadF5");

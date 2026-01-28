@@ -172,6 +172,9 @@ namespace L1MapViewer.Localization
             { "Layer_Passable", "通行性 (紅藍)" },
             { "Layer_Grid", "顯示格線" },
             { "Layer_S32Border", "S32邊界" },
+            { "Layer_SafeZones", "安全區域" },
+            { "Layer_CombatZones", "戰鬥區域" },
+            { "Layer_MarketZones", "商店區域" },
             { "Layer_CombatArea", "戰鬥區域" },
             { "Layer_Regions", "顯示區域" },
 
@@ -186,6 +189,7 @@ namespace L1MapViewer.Localization
             { "Layer_FloatS32Border", "S32邊界" },
             { "Layer_FloatSafeZones", "安全區" },
             { "Layer_FloatCombatZones", "戰鬥區" },
+            { "Layer_FloatMarketZones", "商店區" },
             { "Layer_L8Spr", "L8 圖片" },
             { "Layer_L8Marker", "L8 輔助" },
 

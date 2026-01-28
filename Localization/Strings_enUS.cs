@@ -170,6 +170,9 @@ namespace L1MapViewer.Localization
             { "Layer_Passable", "Passability (Red/Blue)" },
             { "Layer_Grid", "Show Grid" },
             { "Layer_S32Border", "S32 Borders" },
+            { "Layer_SafeZones", "Safe Zones" },
+            { "Layer_CombatZones", "Combat Zones" },
+            { "Layer_MarketZones", "Market Zones" },
             { "Layer_CombatArea", "Combat Area" },
             { "Layer_Regions", "Show Regions" },
 
@@ -184,6 +187,7 @@ namespace L1MapViewer.Localization
             { "Layer_FloatS32Border", "S32 Border" },
             { "Layer_FloatSafeZones", "Safe Zone" },
             { "Layer_FloatCombatZones", "Combat" },
+            { "Layer_FloatMarketZones", "Market" },
             { "Layer_L8Spr", "L8 SPR" },
             { "Layer_L8Marker", "L8 Marker" },
 

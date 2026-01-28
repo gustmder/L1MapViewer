@@ -227,6 +227,73 @@ namespace L1FlyMapViewer
             }
         }
 
+        // 繪製商店區域覆蓋層 (SkiaSharp 版本)
+        private void DrawMarketZonesOverlayViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect, IEnumerable<S32Data> s32FilesSnapshot)
+        {
+            using var marketBrush = new SKPaint
+            {
+                IsAntialias = false,
+                Style = SKPaintStyle.Fill,
+                Color = new SKColor(0, 200, 0, 80)  // 綠色半透明
+            };
+
+            int marketCount = 0;
+            int cellCount = 0;
+
+            foreach (var s32Data in s32FilesSnapshot)
+            {
+                // 如果沒有 MarketRegion 資料，跳過
+                if (s32Data.MarketRegion == null)
+                    continue;
+
+                marketCount++;
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                int mx = loc[0];
+                int my = loc[1];
+
+                // 取得 S32 的遊戲座標起點
+                int startGameX = s32Data.SegInfo.nLinBeginX;
+                int startGameY = s32Data.SegInfo.nLinBeginY;
+
+                for (int y = 0; y < 64; y++)
+                {
+                    for (int x = 0; x < 64; x++)
+                    {
+                        // 使用世界座標查詢 MarketRegion
+                        int worldGameX = startGameX + x;
+                        int worldGameY = startGameY + y;
+                        var isInRegion = s32Data.MarketRegion.IsInRegion(worldGameX, worldGameY);
+                        if (isInRegion != true)
+                            continue;
+
+                        cellCount++;
+
+                        int x1 = x * 2;
+                        int localBaseX = 0 - 24 * (x1 / 2);
+                        int localBaseY = 63 * 12 - 12 * (x1 / 2);
+
+                        int X = mx + localBaseX + x1 * 24 + y * 24 - worldRect.X;
+                        int Y = my + localBaseY + y * 12 - worldRect.Y;
+
+                        if (X + 48 < 0 || X > worldRect.Width || Y + 24 < 0 || Y > worldRect.Height)
+                            continue;
+
+                        // 繪製整個菱形
+                        using var path = new SKPath();
+                        path.MoveTo(X + 24, Y + 0);      // 上
+                        path.LineTo(X + 48, Y + 12);     // 右
+                        path.LineTo(X + 24, Y + 24);     // 下
+                        path.LineTo(X + 0, Y + 12);      // 左
+                        path.Close();
+                        canvas.DrawPath(path, marketBrush);
+                    }
+                }
+            }
+
+            // 改用 Info 層級以便確認有執行到
+            _logger.Info($"[RENDER-OVERLAY] MarketZones: marketCount={marketCount}, cellCount={cellCount}");
+        }
+
         // 繪製格線 (SkiaSharp 版本)
         // 參考 DrawS32GridViewport
         private void DrawS32GridViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect, IEnumerable<S32Data> s32FilesSnapshot)

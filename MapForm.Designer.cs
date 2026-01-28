@@ -170,6 +170,8 @@ namespace L1FlyMapViewer
         private Panel layerFloatPanel;
         private Label lblLayerIcon;
         private Panel layerPopupPanel;
+        // 圖層 CheckBox - UI 由 CreateCustomLayerPanel() 動態建立
+        // 新增/移除圖層選項時，需同步更新 MapForm.cs 的 layerConfigs 陣列
         private CheckBox chkFloatLayer1;
         private CheckBox chkFloatLayer2;
         private CheckBox chkFloatLayer4;
@@ -179,14 +181,13 @@ namespace L1FlyMapViewer
         private CheckBox chkFloatLayer5;
         private CheckBox chkFloatSafeZones;
         private CheckBox chkFloatCombatZones;
+        private CheckBox chkFloatMarketZones;
         private CheckBox chkFloatLayer8Spr;
         private CheckBox chkFloatLayer8Marker;
         private CheckBox chkShowPassable;
         private CheckBox chkShowLayer5;
         private CheckBox chkShowGrid;
         private CheckBox chkShowS32Boundary;
-        private CheckBox chkShowSafeZones;
-        private CheckBox chkShowCombatZones;
         private Button btnCopySettings;
         private Button btnRegionEdit;
         private Button btnCopyMapCoords;
@@ -371,8 +372,6 @@ namespace L1FlyMapViewer
             this.chkShowPassable = new CheckBox();
             this.chkShowGrid = new CheckBox();
             this.chkShowS32Boundary = new CheckBox();
-            this.chkShowSafeZones = new CheckBox();
-            this.chkShowCombatZones = new CheckBox();
             this.btnCopySettings = new Button();
             this.btnCopyMapCoords = new Button();
             this.btnImportFs32 = new Button();
@@ -400,6 +399,7 @@ namespace L1FlyMapViewer
             this.chkFloatLayer5 = new CheckBox();
             this.chkFloatSafeZones = new CheckBox();
             this.chkFloatCombatZones = new CheckBox();
+            this.chkFloatMarketZones = new CheckBox();
             this.chkFloatLayer8Spr = new CheckBox();
             this.chkFloatLayer8Marker = new CheckBox();
             this.chkShowLayer5 = new CheckBox();
@@ -613,11 +613,11 @@ namespace L1FlyMapViewer
 
             this.menuLayerSafe.SetName("menuLayerSafe");
             this.menuLayerSafe.Text = "安全區域";
-            this.menuLayerSafe.Click += (s, e) => { menuLayerSafe.Checked = !menuLayerSafe.Checked; chkShowSafeZones.Checked = menuLayerSafe.Checked; };
+            this.menuLayerSafe.Click += (s, e) => { menuLayerSafe.Checked = !menuLayerSafe.Checked; chkFloatSafeZones.Checked = menuLayerSafe.Checked; };
 
             this.menuLayerCombat.SetName("menuLayerCombat");
             this.menuLayerCombat.Text = "戰鬥區域";
-            this.menuLayerCombat.Click += (s, e) => { menuLayerCombat.Checked = !menuLayerCombat.Checked; chkShowCombatZones.Checked = menuLayerCombat.Checked; };
+            this.menuLayerCombat.Click += (s, e) => { menuLayerCombat.Checked = !menuLayerCombat.Checked; chkFloatCombatZones.Checked = menuLayerCombat.Checked; };
 
             this.menuLayerGrid.SetName("menuLayerGrid");
             this.menuLayerGrid.Text = "格線";
@@ -1178,30 +1178,6 @@ namespace L1FlyMapViewer
             this.chkShowLayer5.CheckedChanged += new System.EventHandler(this.S32Layer_CheckedChanged);
 
             //
-            // chkShowSafeZones
-            //
-            this.chkShowSafeZones.SetAutoSize(true);
-            this.chkShowSafeZones.SetLocation(new Point(650, 10));
-            this.chkShowSafeZones.SetName("chkShowSafeZones");
-            this.chkShowSafeZones.Size = new Size(70, 17);
-            this.chkShowSafeZones.TabIndex = 16;
-            this.chkShowSafeZones.Text = "安全區域";
-            this.chkShowSafeZones.SetUseVisualStyleBackColor(true);
-            this.chkShowSafeZones.CheckedChanged += new System.EventHandler(this.S32Layer_CheckedChanged);
-
-            //
-            // chkShowCombatZones
-            //
-            this.chkShowCombatZones.SetAutoSize(true);
-            this.chkShowCombatZones.SetLocation(new Point(730, 10));
-            this.chkShowCombatZones.SetName("chkShowCombatZones");
-            this.chkShowCombatZones.Size = new Size(70, 17);
-            this.chkShowCombatZones.TabIndex = 17;
-            this.chkShowCombatZones.Text = "戰鬥區域";
-            this.chkShowCombatZones.SetUseVisualStyleBackColor(true);
-            this.chkShowCombatZones.CheckedChanged += new System.EventHandler(this.S32Layer_CheckedChanged);
-
-            //
             // btnCopySettings
             //
             this.btnCopySettings.SetLocation(new Point(210, 5));
@@ -1353,7 +1329,7 @@ namespace L1FlyMapViewer
             this.layerFloatPanel.GetControls().Add(this.layerPopupPanel);
             this.layerFloatPanel.SetLocation(new Point(10, 10));
             this.layerFloatPanel.SetName("layerFloatPanel");
-            this.layerFloatPanel.Size = new Size(110, 295);
+            this.layerFloatPanel.Size = new Size(110, 340);
             this.layerFloatPanel.TabIndex = 10;
             this.layerFloatPanel.SetAnchor(AnchorStyles.Top | AnchorStyles.Right);
 
@@ -1383,12 +1359,13 @@ namespace L1FlyMapViewer
             this.layerPopupPanel.GetControls().Add(this.chkFloatS32Boundary);
             this.layerPopupPanel.GetControls().Add(this.chkFloatSafeZones);
             this.layerPopupPanel.GetControls().Add(this.chkFloatCombatZones);
+            this.layerPopupPanel.GetControls().Add(this.chkFloatMarketZones);
             this.layerPopupPanel.GetControls().Add(this.chkFloatLayer8Spr);
             this.layerPopupPanel.GetControls().Add(this.chkFloatLayer8Marker);
             this.layerPopupPanel.SetLocation(new Point(0, 24));
             this.layerPopupPanel.SetName("layerPopupPanel");
             this.layerPopupPanel.Padding = new Padding(5);
-            this.layerPopupPanel.Size = new Size(110, 290);
+            this.layerPopupPanel.Size = new Size(110, 312);
             this.layerPopupPanel.TabIndex = 1;
             this.layerPopupPanel.Visible = true;
 
@@ -1515,11 +1492,24 @@ namespace L1FlyMapViewer
             this.chkFloatCombatZones.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
 
             //
+            // chkFloatMarketZones
+            //
+            this.chkFloatMarketZones.SetAutoSize(true);
+            this.chkFloatMarketZones.TextColor = Color.FromArgb(100, 200, 100);
+            this.chkFloatMarketZones.SetLocation(new Point(8, 203));
+            this.chkFloatMarketZones.SetName("chkFloatMarketZones");
+            this.chkFloatMarketZones.Size = new Size(80, 19);
+            this.chkFloatMarketZones.TabIndex = 9;
+            this.chkFloatMarketZones.Text = "商店區域";
+            this.chkFloatMarketZones.SetUseVisualStyleBackColor(true);
+            this.chkFloatMarketZones.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
+
+            //
             // chkFloatLayer8Spr
             //
             this.chkFloatLayer8Spr.SetAutoSize(true);
             this.chkFloatLayer8Spr.TextColor = Color.FromArgb(255, 180, 100);
-            this.chkFloatLayer8Spr.SetLocation(new Point(8, 203));
+            this.chkFloatLayer8Spr.SetLocation(new Point(8, 225));
             this.chkFloatLayer8Spr.SetName("chkFloatLayer8Spr");
             this.chkFloatLayer8Spr.Size = new Size(80, 19);
             this.chkFloatLayer8Spr.TabIndex = 9;
@@ -1533,7 +1523,7 @@ namespace L1FlyMapViewer
             //
             this.chkFloatLayer8Marker.SetAutoSize(true);
             this.chkFloatLayer8Marker.TextColor = Color.FromArgb(255, 180, 100);
-            this.chkFloatLayer8Marker.SetLocation(new Point(8, 223));
+            this.chkFloatLayer8Marker.SetLocation(new Point(8, 247));
             this.chkFloatLayer8Marker.SetName("chkFloatLayer8Marker");
             this.chkFloatLayer8Marker.Size = new Size(80, 19);
             this.chkFloatLayer8Marker.TabIndex = 10;

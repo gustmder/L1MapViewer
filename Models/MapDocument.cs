@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using L1MapViewer.Other;
+using NLog;
 
 namespace L1MapViewer.Models
 {
@@ -12,6 +13,7 @@ namespace L1MapViewer.Models
     /// </summary>
     public class MapDocument
     {
+        private static readonly Logger _logger = LogManager.GetCurrentClassLogger();
         /// <summary>
         /// 當前地圖 ID
         /// </summary>
@@ -184,6 +186,23 @@ namespace L1MapViewer.Models
                             segInfo.nMapMinBlockY = MapInfo.nMinBlockY;
                             segInfo.nMapBlockCountX = MapInfo.nBlockCountX;
                             s32Data.SegInfo = segInfo;
+
+                            // 載入對應的 MarketRegion 檔案
+                            string marketRegionPath = Path.Combine(Path.GetDirectoryName(filePath)!, $"{fileName}.MarketRegion");
+                            bool marketExists = File.Exists(marketRegionPath);
+                            _logger.Info($"[MARKET-LOAD] Check: {marketRegionPath}, Exists={marketExists}");
+                            if (marketExists)
+                            {
+                                try
+                                {
+                                    s32Data.MarketRegion = Lin.Helper.Core.Map.L1MapMarketRegion.Load(marketRegionPath);
+                                    _logger.Info($"[MARKET-LOAD] Loaded: {marketRegionPath}, CountInRegion={s32Data.MarketRegion.CountInRegion()}");
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.Error(ex, $"[MARKET-LOAD] Failed to load: {marketRegionPath}");
+                                }
+                            }
                         }
                     }
 

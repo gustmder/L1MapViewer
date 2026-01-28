@@ -170,6 +170,9 @@ namespace L1MapViewer.Localization
             { "Layer_Passable", "통행성 (빨강/파랑)" },
             { "Layer_Grid", "그리드 표시" },
             { "Layer_S32Border", "S32 경계" },
+            { "Layer_SafeZones", "안전 영역" },
+            { "Layer_CombatZones", "전투 영역" },
+            { "Layer_MarketZones", "상점 영역" },
             { "Layer_CombatArea", "전투 영역" },
             { "Layer_Regions", "영역 표시" },
 
@@ -184,6 +187,7 @@ namespace L1MapViewer.Localization
             { "Layer_FloatS32Border", "S32 경계" },
             { "Layer_FloatSafeZones", "안전 지역" },
             { "Layer_FloatCombatZones", "전투 지역" },
+            { "Layer_FloatMarketZones", "상점 지역" },
             { "Layer_L8Spr", "L8 이미지" },
             { "Layer_L8Marker", "L8 보조" },
 

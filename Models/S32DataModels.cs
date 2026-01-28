@@ -91,6 +91,9 @@ namespace L1MapViewer.Models
         // 第8層擴展資訊
         public bool Layer8HasExtendedData { get; set; } = false;
 
+        // MarketRegion 資料（商店區域）
+        public L1MapMarketRegion? MarketRegion { get; set; }
+
         // 檔案路徑和 SegInfo
         public string FilePath { get; set; } = string.Empty;
         public Struct.L1MapSeg SegInfo { get; set; }

@@ -29,6 +29,9 @@ namespace L1MapViewer.Models
         /// <summary>顯示戰鬥區域（紅色）</summary>
         public bool ShowCombatZones { get; }
 
+        /// <summary>顯示商店區域（綠色）</summary>
+        public bool ShowMarketZones { get; }
+
         /// <summary>顯示遊戲格線</summary>
         public bool ShowGrid { get; }
 
@@ -55,6 +58,7 @@ namespace L1MapViewer.Models
             bool showPassability = false,
             bool showSafeZones = false,
             bool showCombatZones = false,
+            bool showMarketZones = false,
             bool showGrid = false,
             bool showS32Boundary = false,
             bool showLayer5 = false,
@@ -68,6 +72,7 @@ namespace L1MapViewer.Models
             ShowPassability = showPassability;
             ShowSafeZones = showSafeZones;
             ShowCombatZones = showCombatZones;
+            ShowMarketZones = showMarketZones;
             ShowGrid = showGrid;
             ShowS32Boundary = showS32Boundary;
             ShowLayer5 = showLayer5;
@@ -88,6 +93,7 @@ namespace L1MapViewer.Models
                 showPassability: viewState.ShowPassability,
                 showSafeZones: viewState.ShowSafeZones,
                 showCombatZones: viewState.ShowCombatZones,
+                showMarketZones: viewState.ShowMarketZones,
                 showGrid: viewState.ShowGrid,
                 showS32Boundary: viewState.ShowS32Boundary,
                 showLayer5: false,
@@ -129,6 +135,6 @@ namespace L1MapViewer.Models
         /// 檢查是否有任何覆蓋層開啟
         /// </summary>
         public bool HasOverlays => ShowLayer3Attributes || ShowPassability || ShowSafeZones ||
-                                   ShowCombatZones || ShowGrid || ShowS32Boundary || ShowLayer5 || ShowCoordinateLabels;
+                                   ShowCombatZones || ShowMarketZones || ShowGrid || ShowS32Boundary || ShowLayer5 || ShowCoordinateLabels;
     }
 }

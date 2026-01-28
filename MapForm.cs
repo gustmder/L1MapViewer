@@ -557,6 +557,7 @@ namespace L1FlyMapViewer
                 (locKey: "Layer_FloatS32Border", color: Eto.Drawing.Colors.Orange, chk: chkFloatS32Boundary),
                 (locKey: "Layer_FloatSafeZones", color: Eto.Drawing.Color.FromArgb(100, 180, 255), chk: chkFloatSafeZones),
                 (locKey: "Layer_FloatCombatZones", color: Eto.Drawing.Color.FromArgb(255, 100, 100), chk: chkFloatCombatZones),
+                (locKey: "Layer_FloatMarketZones", color: Eto.Drawing.Color.FromArgb(100, 200, 100), chk: chkFloatMarketZones),
                 (locKey: "Layer_L8Spr", color: Eto.Drawing.Color.FromArgb(255, 180, 100), chk: chkFloatLayer8Spr),
                 (locKey: "Layer_L8Marker", color: Eto.Drawing.Color.FromArgb(255, 180, 100), chk: chkFloatLayer8Marker),
             };
@@ -4538,6 +4539,23 @@ namespace L1FlyMapViewer
                             s32Data.FilePath = fileData.item.FilePath;
                             s32Data.SegInfo = fileData.item.SegInfo;
                             s32Data.IsModified = false;
+
+                            // 載入對應的 MarketRegion 檔案
+                            string fileName = Path.GetFileNameWithoutExtension(fileData.item.FilePath);
+                            string marketRegionPath = Path.Combine(Path.GetDirectoryName(fileData.item.FilePath)!, $"{fileName}.MarketRegion");
+                            if (File.Exists(marketRegionPath))
+                            {
+                                try
+                                {
+                                    s32Data.MarketRegion = Lin.Helper.Core.Map.L1MapMarketRegion.Load(marketRegionPath);
+                                    _logger.Info($"[MARKET-LOAD] Loaded: {marketRegionPath}, CountInRegion={s32Data.MarketRegion.CountInRegion()}");
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.Error(ex, $"[MARKET-LOAD] Failed to load: {marketRegionPath}");
+                                }
+                            }
+
                             parsedResults.Add((fileData.item.FilePath, s32Data));
                         }
                     }
@@ -6585,16 +6603,6 @@ namespace L1FlyMapViewer
             var senderName = (sender as CheckBox)?.Text ?? sender?.GetType().Name ?? "unknown";
             _logger.Debug($"[LAYER] S32Layer_CheckedChanged triggered by: {senderName}");
 
-            // 同步 ViewState
-            if (sender == chkShowSafeZones)
-            {
-                _viewState.ShowSafeZones = chkShowSafeZones.Checked == true;
-            }
-            else if (sender == chkShowCombatZones)
-            {
-                _viewState.ShowCombatZones = chkShowCombatZones.Checked == true;
-            }
-
             // 同步到浮動面板的 CheckBox（避免無限遞迴）
             if (sender == chkLayer1 && chkFloatLayer1.Checked != chkLayer1.Checked)
             {
@@ -6624,14 +6632,6 @@ namespace L1FlyMapViewer
             {
                 chkFloatLayer5.Checked = chkShowLayer5.Checked;
             }
-            else if (sender == chkShowSafeZones && chkFloatSafeZones.Checked != chkShowSafeZones.Checked)
-            {
-                chkFloatSafeZones.Checked = chkShowSafeZones.Checked;
-            }
-            else if (sender == chkShowCombatZones && chkFloatCombatZones.Checked != chkShowCombatZones.Checked)
-            {
-                chkFloatCombatZones.Checked = chkShowCombatZones.Checked;
-            }
 
             // 同步到選單項目（CheckBox → Menu）
             if (sender == chkLayer1 && menuLayerL1.Checked != (chkLayer1.Checked == true))
@@ -6644,10 +6644,6 @@ namespace L1FlyMapViewer
                 menuLayerL5.Checked = chkShowLayer5.Checked == true;
             else if (sender == chkShowPassable && menuLayerPassable.Checked != (chkShowPassable.Checked == true))
                 menuLayerPassable.Checked = chkShowPassable.Checked == true;
-            else if (sender == chkShowSafeZones && menuLayerSafe.Checked != (chkShowSafeZones.Checked == true))
-                menuLayerSafe.Checked = chkShowSafeZones.Checked == true;
-            else if (sender == chkShowCombatZones && menuLayerCombat.Checked != (chkShowCombatZones.Checked == true))
-                menuLayerCombat.Checked = chkShowCombatZones.Checked == true;
             else if (sender == chkShowGrid && menuLayerGrid.Checked != (chkShowGrid.Checked == true))
                 menuLayerGrid.Checked = chkShowGrid.Checked == true;
             else if (sender == chkShowS32Boundary && menuLayerS32Bound.Checked != (chkShowS32Boundary.Checked == true))
@@ -6702,11 +6698,23 @@ namespace L1FlyMapViewer
             }
             else if (sender == chkFloatSafeZones)
             {
-                chkShowSafeZones.Checked = chkFloatSafeZones.Checked;
+                _viewState.ShowSafeZones = chkFloatSafeZones.Checked == true;
+                menuLayerSafe.Checked = chkFloatSafeZones.Checked == true;
+                ClearS32BlockCache();
+                RenderS32Map();
             }
             else if (sender == chkFloatCombatZones)
             {
-                chkShowCombatZones.Checked = chkFloatCombatZones.Checked;
+                _viewState.ShowCombatZones = chkFloatCombatZones.Checked == true;
+                menuLayerCombat.Checked = chkFloatCombatZones.Checked == true;
+                ClearS32BlockCache();
+                RenderS32Map();
+            }
+            else if (sender == chkFloatMarketZones)
+            {
+                _viewState.ShowMarketZones = chkFloatMarketZones.Checked == true;
+                ClearS32BlockCache();
+                RenderS32Map();
             }
             else if (sender == chkFloatLayer8Spr)
             {
@@ -6780,8 +6788,9 @@ namespace L1FlyMapViewer
             chkFloatGrid.Checked = chkShowGrid.Checked;
             chkFloatS32Boundary.Checked = chkShowS32Boundary.Checked;
             chkFloatLayer5.Checked = chkShowLayer5.Checked;
-            chkFloatSafeZones.Checked = chkShowSafeZones.Checked;
-            chkFloatCombatZones.Checked = chkShowCombatZones.Checked;
+            chkFloatSafeZones.Checked = _viewState.ShowSafeZones;
+            chkFloatCombatZones.Checked = _viewState.ShowCombatZones;
+            chkFloatMarketZones.Checked = _viewState.ShowMarketZones;
             UpdateLayerIconText();
         }
 
@@ -6925,20 +6934,23 @@ namespace L1FlyMapViewer
         private void EnsureRegionsLayerVisible()
         {
             bool needRender = false;
-            if (chkShowSafeZones.Checked != true)
+            if (!_viewState.ShowSafeZones)
             {
-                chkShowSafeZones.Checked = true;
+                _viewState.ShowSafeZones = true;
                 chkFloatSafeZones.Checked = true;
+                menuLayerSafe.Checked = true;
                 needRender = true;
             }
-            if (chkShowCombatZones.Checked != true)
+            if (!_viewState.ShowCombatZones)
             {
-                chkShowCombatZones.Checked = true;
+                _viewState.ShowCombatZones = true;
                 chkFloatCombatZones.Checked = true;
+                menuLayerCombat.Checked = true;
                 needRender = true;
             }
             if (needRender)
             {
+                ClearS32BlockCache();
                 UpdateLayerIconText();
                 RenderS32Map();
             }
@@ -7755,6 +7767,7 @@ namespace L1FlyMapViewer
             // Capture 其他需要的狀態
             bool showSafeZones = _viewState.ShowSafeZones;
             bool showCombatZones = _viewState.ShowCombatZones;
+            bool showMarketZones = _viewState.ShowMarketZones;
             var groupHighlightCells = _editState.GroupHighlightCells.Count > 0
                 ? new List<(int, int)>(_editState.GroupHighlightCells)
                 : null;
@@ -8040,6 +8053,20 @@ namespace L1FlyMapViewer
                             catch (Exception ex)
                             {
                                 _logger.Error(ex, "[RENDER-OVERLAY] Regions failed");
+                            }
+                        }
+
+                        if (showMarketZones)
+                        {
+                            try
+                            {
+                                var sw = Stopwatch.StartNew();
+                                DrawMarketZonesOverlayViewportSK(skCanvas, currentMap, worldRect, s32ValuesSnapshot);
+                                _logger.Debug($"[RENDER-OVERLAY] MarketZones took {sw.ElapsedMilliseconds}ms");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Error(ex, "[RENDER-OVERLAY] MarketZones failed");
                             }
                         }
 

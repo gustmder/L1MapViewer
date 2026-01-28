@@ -236,6 +236,7 @@ namespace L1MapViewer.Models
         private bool _showPassability = false;
         private bool _showSafeZones = false;
         private bool _showCombatZones = false;
+        private bool _showMarketZones = false;
         private bool _showGrid = false;
         private bool _showS32Boundary = false;
 
@@ -291,6 +292,15 @@ namespace L1MapViewer.Models
         {
             get => _showCombatZones;
             set { if (_showCombatZones != value) { _showCombatZones = value; DisplayOptionsChanged?.Invoke(this, EventArgs.Empty); } }
+        }
+
+        /// <summary>
+        /// 顯示商店區域（綠色）
+        /// </summary>
+        public bool ShowMarketZones
+        {
+            get => _showMarketZones;
+            set { if (_showMarketZones != value) { _showMarketZones = value; DisplayOptionsChanged?.Invoke(this, EventArgs.Empty); } }
         }
 
         /// <summary>

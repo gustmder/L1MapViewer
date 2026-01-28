@@ -170,6 +170,9 @@ namespace L1MapViewer.Localization
             { "Layer_Passable", "通行性 (赤青)" },
             { "Layer_Grid", "グリッド表示" },
             { "Layer_S32Border", "S32境界" },
+            { "Layer_SafeZones", "安全エリア" },
+            { "Layer_CombatZones", "戦闘エリア" },
+            { "Layer_MarketZones", "商店エリア" },
             { "Layer_CombatArea", "戦闘エリア" },
             { "Layer_Regions", "領域表示" },
 
@@ -184,6 +187,7 @@ namespace L1MapViewer.Localization
             { "Layer_FloatS32Border", "S32境界" },
             { "Layer_FloatSafeZones", "安全地帯" },
             { "Layer_FloatCombatZones", "戦闘地帯" },
+            { "Layer_FloatMarketZones", "店舗地帯" },
             { "Layer_L8Spr", "L8 画像" },
             { "Layer_L8Marker", "L8 補助" },
 

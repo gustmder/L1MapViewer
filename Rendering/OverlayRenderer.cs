@@ -4,6 +4,7 @@ using Eto.Drawing;
 using L1MapViewer.Compatibility;
 using L1MapViewer.Helper;
 using L1MapViewer.Models;
+using NLog;
 
 namespace L1MapViewer.Rendering
 {
@@ -13,6 +14,7 @@ namespace L1MapViewer.Rendering
     /// </summary>
     public class OverlayRenderer
     {
+        private static readonly Logger _logger = LogManager.GetCurrentClassLogger();
         /// <summary>
         /// 渲染所有啟用的覆蓋層到 Bitmap
         /// </summary>
@@ -35,6 +37,11 @@ namespace L1MapViewer.Rendering
             if (options.ShowSafeZones || options.ShowCombatZones)
             {
                 DrawRegions(bitmap, worldRect, s32Files, options.ShowSafeZones, options.ShowCombatZones);
+            }
+
+            if (options.ShowMarketZones)
+            {
+                DrawMarketZones(bitmap, worldRect, s32Files);
             }
 
             if (options.ShowGrid)
@@ -234,6 +241,78 @@ namespace L1MapViewer.Rendering
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// 繪製商店區域覆蓋層（綠色標記可設商店位置）
+        /// </summary>
+        public void DrawMarketZones(Bitmap bitmap, Rectangle worldRect, IEnumerable<S32Data> s32Files)
+        {
+            int s32Count = 0;
+            int marketCount = 0;
+            int cellCount = 0;
+
+            using (Graphics g = GraphicsHelper.FromImage(bitmap))
+            {
+                // 綠色半透明填充
+                using (Brush marketBrush = new SolidBrush(Color.FromArgb(80, 0, 200, 0)))
+                {
+                    foreach (var s32Data in s32Files)
+                    {
+                        s32Count++;
+
+                        // 如果沒有 MarketRegion 資料，跳過
+                        if (s32Data.MarketRegion == null)
+                            continue;
+
+                        marketCount++;
+                        int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                        int mx = loc[0];
+                        int my = loc[1];
+
+                        // 遍歷遊戲座標 (64x64)
+                        // MarketRegion: Cells[row, col] 其中 row=0-63, col=0-127
+                        // row 對應本地 Y, col 對應本地 X*2 (2x 水平解析度)
+                        for (int y = 0; y < 64; y++)
+                        {
+                            for (int x = 0; x < 64; x++)
+                            {
+                                // 直接用 row=y, col=x*2 查詢
+                                var cellValue = s32Data.MarketRegion.GetCellValue(y, x * 2);
+                                if (cellValue == null || cellValue == 0)
+                                    continue;
+
+                                cellCount++;
+
+                                // 計算像素座標（與 DrawRegions 相同邏輯）
+                                int x1 = x * 2;  // Layer1 X 座標
+                                int localBaseX = 0 - 24 * (x1 / 2);
+                                int localBaseY = 63 * 12 - 12 * (x1 / 2);
+
+                                int X = mx + localBaseX + x1 * 24 + y * 24 - worldRect.X;
+                                int Y = my + localBaseY + y * 12 - worldRect.Y;
+
+                                // 跳過不在 Viewport 內的格子
+                                if (X + 48 < 0 || X > worldRect.Width || Y + 24 < 0 || Y > worldRect.Height)
+                                    continue;
+
+                                // 繪製菱形格子的區域標記
+                                Point[] diamond = new Point[]
+                                {
+                                    new Point(X + 24, Y + 0),      // 上
+                                    new Point(X + 48, Y + 12),     // 右
+                                    new Point(X + 24, Y + 24),     // 下
+                                    new Point(X + 0, Y + 12)       // 左
+                                };
+
+                                g.FillPolygon(marketBrush, diamond);
+                            }
+                        }
+                    }
+                }
+            }
+
+            _logger.Debug($"DrawMarketZones: s32Count={s32Count}, marketCount={marketCount}, cellCount={cellCount}");
         }
 
         /// <summary>
