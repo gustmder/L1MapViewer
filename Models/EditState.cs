@@ -274,6 +274,15 @@ namespace L1MapViewer.Models
 
         #endregion
 
+        #region 可開店區編輯
+
+        /// <summary>
+        /// 可開店區編輯模式
+        /// </summary>
+        public MarketRegionEditMode MarketRegionMode { get; set; } = MarketRegionEditMode.None;
+
+        #endregion
+
         #region Layer5 透明編輯
 
         /// <summary>
@@ -392,5 +401,15 @@ namespace L1MapViewer.Models
         Normal,     // 一般區域（無特殊標記）
         Safe,       // 安全區域（0x02 位元）
         Combat      // 戰鬥區域（0x04 位元）
+    }
+
+    /// <summary>
+    /// 可開店區編輯模式
+    /// </summary>
+    public enum MarketRegionEditMode
+    {
+        None,           // 無編輯
+        SetMarket,      // 設定為可開店
+        ClearMarket     // 清除可開店
     }
 }

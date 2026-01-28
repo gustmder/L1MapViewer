@@ -102,6 +102,16 @@ namespace L1MapViewer.Localization
             { "Button_EditPassable", "통행 편집" },
             { "Button_EditLayer5", "투명도 편집" },
             { "Button_RegionEdit", "영역 편집" },
+            { "Button_MarketRegionEdit", "노점 구역" },
+            { "Button_MergeL2ToL1", "L2를 L1에 병합" },
+
+            // === Market Region Edit ===
+            { "Status_MarketRegionCancelled", "노점 구역 설정 모드가 취소되었습니다" },
+            { "Status_MarketRegionMode", "노점 구역 설정 모드: 왼쪽 클릭으로 선택, 오른쪽 클릭으로 노점 구역 설정/해제" },
+            { "Menu_SetMarketRegion", "노점 구역으로 설정 ({0} 셀)" },
+            { "Menu_ClearMarketRegion", "노점 구역 해제 ({0} 셀)" },
+            { "Action_SetMarketRegion", "노점 구역으로 설정" },
+            { "Action_ClearMarketRegion", "노점 구역 해제" },
             { "Button_ExportS32", "S32 내보내기" },
             { "Button_NewS32", "새 S32" },
             { "Button_ClearLayer7", "텔레포트 지우기" },

@@ -91,8 +91,13 @@ namespace L1MapViewer.Models
         // 第8層擴展資訊
         public bool Layer8HasExtendedData { get; set; } = false;
 
-        // MarketRegion 資料（商店區域）
+        // MarketRegion 資料（可開店區）
         public L1MapMarketRegion? MarketRegion { get; set; }
+
+        /// <summary>
+        /// MarketRegion 原始檔案是否存在（用於判斷是否需要產生新檔案）
+        /// </summary>
+        public bool MarketRegionFileExists { get; set; } = false;
 
         // 檔案路徑和 SegInfo
         public string FilePath { get; set; } = string.Empty;
@@ -110,6 +115,29 @@ namespace L1MapViewer.Models
                     _isModified = value;
                     ModifiedStateChanged?.Invoke(this, value);
                 }
+            }
+        }
+
+        /// <summary>
+        /// MarketRegion 是否已修改
+        /// </summary>
+        public bool IsMarketRegionModified => MarketRegion?.Modified ?? false;
+
+        /// <summary>
+        /// 是否需要儲存 MarketRegion 檔案
+        /// 條件：已修改，且（原檔案存在 或 有非零資料）
+        /// </summary>
+        public bool NeedsSaveMarketRegion
+        {
+            get
+            {
+                if (MarketRegion == null || !MarketRegion.Modified)
+                    return false;
+                // 原檔案存在則一定要存
+                if (MarketRegionFileExists)
+                    return true;
+                // 原檔案不存在，只有有非零資料才需要產生
+                return MarketRegion.CountInRegion() > 0;
             }
         }
 

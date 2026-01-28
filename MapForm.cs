@@ -706,6 +706,7 @@ namespace L1FlyMapViewer
             toolRow2.Items.Add(btnEditLayer5);
             toolRow2.Items.Add(btnMergeL2ToL1);
             toolRow2.Items.Add(btnRegionEdit);
+            toolRow2.Items.Add(btnMarketRegionEdit);
 
             // 工具列容器
             var toolbarLayout = new Eto.Forms.StackLayout
@@ -6905,6 +6906,50 @@ namespace L1FlyMapViewer
             }
         }
 
+        // 可開店區設置按鈕點擊事件
+        private void btnMarketRegionEdit_Click(object sender, EventArgs e)
+        {
+            if (_editState.MarketRegionMode != MarketRegionEditMode.None)
+            {
+                // 取消可開店區編輯模式
+                _editState.MarketRegionMode = MarketRegionEditMode.None;
+                btnMarketRegionEdit.BackgroundColor = SystemColors.Control;
+                this.toolStripStatusLabel1.Text = LocalizationManager.L("Status_MarketRegionCancelled");
+            }
+            else
+            {
+                // 啟用可開店區編輯模式
+                _editState.MarketRegionMode = MarketRegionEditMode.SetMarket;
+                btnMarketRegionEdit.BackgroundColor = Colors.LightGreen;
+                // 取消其他編輯模式
+                currentPassableEditMode = PassableEditMode.None;
+                btnEditPassable.BackgroundColor = SystemColors.Control;
+                UpdatePassabilityHelpLabel();
+                currentRegionEditMode = RegionEditMode.None;
+                btnRegionEdit.BackgroundColor = SystemColors.Control;
+                UpdateRegionHelpLabel();
+                _editState.IsLayer5EditMode = false;
+                btnEditLayer5.BackgroundColor = SystemColors.Control;
+                UpdateLayer5HelpLabel();
+                // 自動顯示可開店區覆蓋層
+                EnsureMarketZonesLayerVisible();
+                this.toolStripStatusLabel1.Text = LocalizationManager.L("Status_MarketRegionMode");
+            }
+        }
+
+        // 確保可開店區圖層可見
+        private void EnsureMarketZonesLayerVisible()
+        {
+            if (!_viewState.ShowMarketZones)
+            {
+                _viewState.ShowMarketZones = true;
+                chkFloatMarketZones.Checked = true;
+                ClearS32BlockCache();
+                UpdateLayerIconText();
+                RenderS32Map();
+            }
+        }
+
         // 確保通行性圖層可見
         private void EnsurePassabilityLayerVisible()
         {
@@ -7131,6 +7176,53 @@ namespace L1FlyMapViewer
 
             // 清除選取區域
             _editState.SelectedCells.Clear();
+
+            ClearS32BlockCache();
+            RenderS32Map();
+        }
+
+        // 設定選取格子的可開店區狀態
+        private void SetSelectedCellsMarketRegion(bool setAsMarket)
+        {
+            if (_editState.SelectedCells.Count == 0) return;
+
+            int count = 0;
+            HashSet<S32Data> modifiedS32s = new HashSet<S32Data>();
+
+            foreach (var cell in _editState.SelectedCells)
+            {
+                if (cell.S32Data == null) continue;
+
+                // 計算遊戲座標
+                int gameX = cell.S32Data.SegInfo.nLinBeginX + cell.LocalX / 2;
+                int gameY = cell.S32Data.SegInfo.nLinBeginY + cell.LocalY;
+
+                // 確保 MarketRegion 存在，如不存在則建立
+                if (cell.S32Data.MarketRegion == null)
+                {
+                    // 從 SegInfo 取得 block 座標
+                    int blockX = cell.S32Data.SegInfo.nBlockX;
+                    int blockY = cell.S32Data.SegInfo.nBlockY;
+                    cell.S32Data.MarketRegion = Lin.Helper.Core.Map.L1MapMarketRegion.Create(blockX, blockY, "MarketRegion");
+                }
+
+                // 設定可開店區
+                bool success = cell.S32Data.MarketRegion.SetInRegion(gameX, gameY, setAsMarket);
+                if (success)
+                {
+                    modifiedS32s.Add(cell.S32Data);
+                    count++;
+                }
+            }
+
+            string action = setAsMarket ? LocalizationManager.L("Action_SetMarketRegion") : LocalizationManager.L("Action_ClearMarketRegion");
+            this.toolStripStatusLabel1.Text = $"{action}: {count}";
+
+            // 清除選取區域
+            _editState.SelectedCells.Clear();
+
+            // 更新保存按鈕狀態（MarketRegion 有修改）
+            UpdateSaveButtonState();
 
             ClearS32BlockCache();
             RenderS32Map();
@@ -12105,6 +12197,21 @@ namespace L1FlyMapViewer
                 var regionCombatItem = new ToolStripMenuItem($"設為戰鬥區域 ({cellCount} 格)");
                 regionCombatItem.Click += (s, ev) => SetSelectedCellsRegionType(RegionType.Combat);
                 menu.Items.Add(regionCombatItem);
+            }
+
+            // 可開店區編輯模式：加入設定/清除可開店區選項
+            if (_editState.MarketRegionMode != MarketRegionEditMode.None)
+            {
+                int cellCount = _editState.SelectedCells.Count;
+                menu.Items.Add(new ToolStripSeparator());
+
+                var setMarketItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("Menu_SetMarketRegion"), cellCount));
+                setMarketItem.Click += (s, ev) => SetSelectedCellsMarketRegion(true);
+                menu.Items.Add(setMarketItem);
+
+                var clearMarketItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("Menu_ClearMarketRegion"), cellCount));
+                clearMarketItem.Click += (s, ev) => SetSelectedCellsMarketRegion(false);
+                menu.Items.Add(clearMarketItem);
             }
 
             // 新增 S32 選項（在任何情況下都顯示，方便在延伸區新增 S32）
@@ -17170,7 +17277,7 @@ namespace L1FlyMapViewer
             return panel;
         }
 
-        // 保存 S32 按鈕點擊事件 - 保存所有被修改的 S32 檔案
+        // 保存 S32 按鈕點擊事件 - 保存所有被修改的 S32 檔案和 MarketRegion
         private void btnSaveS32_Click(object sender, EventArgs e)
         {
             // 檢查是否按住 Shift 鍵（跳過 GroupId 重編）
@@ -17178,48 +17285,74 @@ namespace L1FlyMapViewer
 
             // 找出所有被修改的 S32 檔案
             var modifiedFiles = _document.S32Files.Where(kvp => kvp.Value.IsModified).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            // 找出所有需要儲存的 MarketRegion
+            var marketRegionToSave = _document.S32Files.Values.Where(s => s.NeedsSaveMarketRegion).ToList();
 
-            if (modifiedFiles.Count == 0)
+            if (modifiedFiles.Count == 0 && marketRegionToSave.Count == 0)
             {
                 this.toolStripStatusLabel1.Text = "沒有需要保存的修改";
                 return;
             }
 
             // 檢查 Layer5 異常
-            if (!CheckLayer5IssuesAndConfirm(modifiedFiles, "保存"))
+            if (modifiedFiles.Count > 0 && !CheckLayer5IssuesAndConfirm(modifiedFiles, "保存"))
                 return;
 
-            int successCount = 0;
-            int failCount = 0;
+            int s32SuccessCount = 0;
+            int s32FailCount = 0;
+            int marketSuccessCount = 0;
+            int marketFailCount = 0;
             StringBuilder errors = new StringBuilder();
 
+            // 保存 S32 檔案
             foreach (var kvp in modifiedFiles)
             {
                 try
                 {
                     SaveS32File(kvp.Key, skipReindex);
                     kvp.Value.IsModified = false;
-                    successCount++;
+                    s32SuccessCount++;
                 }
                 catch (Exception ex)
                 {
-                    failCount++;
-                    errors.AppendLine($"{Path.GetFileName(kvp.Key)}: {ex.Message}");
+                    s32FailCount++;
+                    errors.AppendLine($"S32 {Path.GetFileName(kvp.Key)}: {ex.Message}");
                 }
             }
 
-            // 只在狀態列顯示結果
-            string reindexNote = skipReindex ? " (未重編GroupId)" : "";
-            if (failCount == 0)
+            // 保存 MarketRegion 檔案
+            foreach (var s32Data in marketRegionToSave)
             {
-                this.toolStripStatusLabel1.Text = $"成功保存 {successCount} 個 S32 檔案{reindexNote}";
+                try
+                {
+                    SaveMarketRegionFile(s32Data);
+                    marketSuccessCount++;
+                }
+                catch (Exception ex)
+                {
+                    marketFailCount++;
+                    errors.AppendLine($"MarketRegion {Path.GetFileName(s32Data.FilePath)}: {ex.Message}");
+                }
+            }
+
+            // 組合結果訊息
+            int totalFail = s32FailCount + marketFailCount;
+            string reindexNote = skipReindex ? " (未重編GroupId)" : "";
+            var resultParts = new List<string>();
+            if (s32SuccessCount > 0) resultParts.Add($"S32: {s32SuccessCount}");
+            if (marketSuccessCount > 0) resultParts.Add($"MarketRegion: {marketSuccessCount}");
+            string resultMsg = string.Join(", ", resultParts);
+
+            if (totalFail == 0)
+            {
+                this.toolStripStatusLabel1.Text = $"成功保存 {resultMsg}{reindexNote}";
             }
             else
             {
-                this.toolStripStatusLabel1.Text = $"保存完成：成功 {successCount} 個，失敗 {failCount} 個{reindexNote}";
+                this.toolStripStatusLabel1.Text = $"保存完成：成功 {resultMsg}，失敗 {totalFail} 個{reindexNote}";
                 // 只有失敗時才顯示錯誤訊息
                 WinFormsMessageBox.Show(
-                    $"保存完成：\n成功: {successCount} 個\n失敗: {failCount} 個\n\n失敗詳情：\n{errors}",
+                    $"保存完成：\n成功: {resultMsg}\n失敗: {totalFail} 個\n\n失敗詳情：\n{errors}",
                     "部分失敗",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
@@ -17229,12 +17362,35 @@ namespace L1FlyMapViewer
             UpdateSaveButtonState();
         }
 
+        // 保存 MarketRegion 檔案
+        private void SaveMarketRegionFile(S32Data s32Data)
+        {
+            if (s32Data.MarketRegion == null) return;
+
+            string s32FileName = Path.GetFileNameWithoutExtension(s32Data.FilePath);
+            string marketRegionPath = Path.Combine(Path.GetDirectoryName(s32Data.FilePath)!, $"{s32FileName}.MarketRegion");
+
+            // 檢查是否需要存檔
+            // 如果原本沒有檔案且所有 cell 都是 0，就不產生新檔案
+            if (!s32Data.MarketRegionFileExists && s32Data.MarketRegion.CountInRegion() == 0)
+            {
+                // 不需要產生新檔案，但標記為已保存
+                // （透過內部 Modified flag 處理）
+                return;
+            }
+
+            s32Data.MarketRegion.Save(marketRegionPath);
+            s32Data.MarketRegionFileExists = true; // 現在檔案存在了
+            _logger.Debug($"[SaveMarketRegion] Saved: {marketRegionPath}");
+        }
+
         /// <summary>
         /// 更新保存按鈕狀態 - 有未保存變更時顯示橙色
         /// </summary>
         private void UpdateSaveButtonState()
         {
-            if (_document.HasUnsavedChanges)
+            bool hasChanges = _document.HasUnsavedChanges || HasUnsavedMarketRegionChanges();
+            if (hasChanges)
             {
                 // 有未保存變更 - 橙色背景
                 btnSaveS32.BackgroundColor = Color.FromArgb(255, 165, 0); // Orange
@@ -17246,6 +17402,14 @@ namespace L1FlyMapViewer
                 btnSaveS32.BackgroundColor = SystemColors.Control;
                 btnSaveS32.Text = LocalizationManager.L("Button_SaveS32");
             }
+        }
+
+        /// <summary>
+        /// 檢查是否有未保存的 MarketRegion 修改
+        /// </summary>
+        private bool HasUnsavedMarketRegionChanges()
+        {
+            return _document.S32Files.Values.Any(s => s.NeedsSaveMarketRegion);
         }
 
         /// <summary>

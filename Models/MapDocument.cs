@@ -252,6 +252,7 @@ namespace L1MapViewer.Models
 
             if (File.Exists(marketRegionPath))
             {
+                s32Data.MarketRegionFileExists = true;
                 try
                 {
                     s32Data.MarketRegion = Lin.Helper.Core.Map.L1MapMarketRegion.Load(marketRegionPath);
@@ -260,6 +261,10 @@ namespace L1MapViewer.Models
                 {
                     // 忽略載入失敗的 MarketRegion
                 }
+            }
+            else
+            {
+                s32Data.MarketRegionFileExists = false;
             }
         }
 

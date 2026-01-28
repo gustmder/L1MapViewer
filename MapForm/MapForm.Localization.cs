@@ -128,6 +128,8 @@ namespace L1FlyMapViewer
             btnEditPassable.Text = LocalizationManager.L("Button_EditPassable");
             btnEditLayer5.Text = LocalizationManager.L("Button_EditLayer5");
             btnRegionEdit.Text = LocalizationManager.L("Button_RegionEdit");
+            btnMarketRegionEdit.Text = LocalizationManager.L("Button_MarketRegionEdit");
+            btnMergeL2ToL1.Text = LocalizationManager.L("Button_MergeL2ToL1");
 
             // S32 檔案列表按鈕
             btnS32SelectAll.Text = LocalizationManager.L("Button_SelectAll");

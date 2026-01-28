@@ -102,6 +102,16 @@ namespace L1MapViewer.Localization
             { "Button_EditPassable", "通行編輯" },
             { "Button_EditLayer5", "編輯半透明" },
             { "Button_RegionEdit", "區域編輯" },
+            { "Button_MarketRegionEdit", "可開店區" },
+            { "Button_MergeL2ToL1", "L2合併L1" },
+
+            // === Market Region Edit ===
+            { "Status_MarketRegionCancelled", "已取消可開店區設置模式" },
+            { "Status_MarketRegionMode", "可開店區設置模式：左鍵選取區域，右鍵設定/清除可開店區" },
+            { "Menu_SetMarketRegion", "設為可開店區 ({0} 格)" },
+            { "Menu_ClearMarketRegion", "清除可開店區 ({0} 格)" },
+            { "Action_SetMarketRegion", "設為可開店區" },
+            { "Action_ClearMarketRegion", "清除可開店區" },
             { "Button_ExportS32", "匯出 S32" },
             { "Button_NewS32", "新增 S32" },
             { "Button_ClearLayer7", "清除傳送點" },
@@ -174,7 +184,7 @@ namespace L1MapViewer.Localization
             { "Layer_S32Border", "S32邊界" },
             { "Layer_SafeZones", "安全區域" },
             { "Layer_CombatZones", "戰鬥區域" },
-            { "Layer_MarketZones", "商店區域" },
+            { "Layer_MarketZones", "可開店區" },
             { "Layer_CombatArea", "戰鬥區域" },
             { "Layer_Regions", "顯示區域" },
 
@@ -189,7 +199,7 @@ namespace L1MapViewer.Localization
             { "Layer_FloatS32Border", "S32邊界" },
             { "Layer_FloatSafeZones", "安全區" },
             { "Layer_FloatCombatZones", "戰鬥區" },
-            { "Layer_FloatMarketZones", "商店區" },
+            { "Layer_FloatMarketZones", "可開店區" },
             { "Layer_L8Spr", "L8 圖片" },
             { "Layer_L8Marker", "L8 輔助" },
 

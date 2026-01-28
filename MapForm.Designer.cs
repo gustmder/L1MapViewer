@@ -190,6 +190,7 @@ namespace L1FlyMapViewer
         private CheckBox chkShowS32Boundary;
         private Button btnCopySettings;
         private Button btnRegionEdit;
+        private Button btnMarketRegionEdit;
         private Button btnCopyMapCoords;
         private Button btnImportFs32;
         private Button btnEditPassable;
@@ -376,6 +377,7 @@ namespace L1FlyMapViewer
             this.btnCopyMapCoords = new Button();
             this.btnImportFs32 = new Button();
             this.btnRegionEdit = new Button();
+            this.btnMarketRegionEdit = new Button();
             this.btnEditPassable = new Button();
             this.btnEditLayer5 = new Button();
             this.btnMergeL2ToL1 = new Button();
@@ -1062,18 +1064,10 @@ namespace L1FlyMapViewer
 
             //
             // s32LayerControlPanel
+            // 注意: 實際的按鈕是在 MapForm.cs 中用 StackLayout (toolRow1, toolRow2) 建構的
             //
             this.s32LayerControlPanel.BackgroundColor = Colors.LightGrey;
             this.s32LayerControlPanel.BorderStyle = BorderStyle.FixedSingle;
-            this.s32LayerControlPanel.GetControls().Add(this.btnCopySettings);
-            this.s32LayerControlPanel.GetControls().Add(this.btnCopyMapCoords);
-            this.s32LayerControlPanel.GetControls().Add(this.btnImportFs32);
-            this.s32LayerControlPanel.GetControls().Add(this.btnEditPassable);
-            this.s32LayerControlPanel.GetControls().Add(this.btnEditLayer5);
-            this.s32LayerControlPanel.GetControls().Add(this.btnRegionEdit);
-            this.s32LayerControlPanel.GetControls().Add(this.btnSaveS32);
-            this.s32LayerControlPanel.GetControls().Add(this.btnReloadMap);
-            this.s32LayerControlPanel.GetControls().Add(this.btnAnalyzeAttr);
             this.s32LayerControlPanel.SetDock(DockStyle.Top);
             this.s32LayerControlPanel.SetLocation(new Point(0, 0));
             this.s32LayerControlPanel.SetName("s32LayerControlPanel");
@@ -1253,6 +1247,17 @@ namespace L1FlyMapViewer
             this.btnRegionEdit.Text = "戰鬥區域";
             this.btnRegionEdit.SetUseVisualStyleBackColor(true);
             this.btnRegionEdit.Click += new System.EventHandler(this.btnRegionEdit_Click);
+
+            //
+            // btnMarketRegionEdit
+            //
+            this.btnMarketRegionEdit.SetLocation(new Point(370, 35));
+            this.btnMarketRegionEdit.SetName("btnMarketRegionEdit");
+            this.btnMarketRegionEdit.Size = new Size(80, 25);
+            this.btnMarketRegionEdit.TabIndex = 17;
+            this.btnMarketRegionEdit.Text = "可開店區";
+            this.btnMarketRegionEdit.SetUseVisualStyleBackColor(true);
+            this.btnMarketRegionEdit.Click += new System.EventHandler(this.btnMarketRegionEdit_Click);
 
             //
             // btnSaveS32
@@ -1500,7 +1505,7 @@ namespace L1FlyMapViewer
             this.chkFloatMarketZones.SetName("chkFloatMarketZones");
             this.chkFloatMarketZones.Size = new Size(80, 19);
             this.chkFloatMarketZones.TabIndex = 9;
-            this.chkFloatMarketZones.Text = "商店區域";
+            this.chkFloatMarketZones.Text = "可開店區";
             this.chkFloatMarketZones.SetUseVisualStyleBackColor(true);
             this.chkFloatMarketZones.CheckedChanged += new System.EventHandler(this.chkFloatLayer_CheckedChanged);
 

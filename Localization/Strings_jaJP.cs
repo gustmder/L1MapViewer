@@ -102,6 +102,16 @@ namespace L1MapViewer.Localization
             { "Button_EditPassable", "通行編集" },
             { "Button_EditLayer5", "半透明編集" },
             { "Button_RegionEdit", "領域編集" },
+            { "Button_MarketRegionEdit", "露店エリア" },
+            { "Button_MergeL2ToL1", "L2をL1に統合" },
+
+            // === Market Region Edit ===
+            { "Status_MarketRegionCancelled", "露店エリア設定モードをキャンセルしました" },
+            { "Status_MarketRegionMode", "露店エリア設定モード：左クリックで選択、右クリックで露店エリアの設定/解除" },
+            { "Menu_SetMarketRegion", "露店エリアに設定 ({0} セル)" },
+            { "Menu_ClearMarketRegion", "露店エリアを解除 ({0} セル)" },
+            { "Action_SetMarketRegion", "露店エリアに設定" },
+            { "Action_ClearMarketRegion", "露店エリアを解除" },
             { "Button_ExportS32", "S32エクスポート" },
             { "Button_NewS32", "S32新規" },
             { "Button_ClearLayer7", "転送ポイントクリア" },

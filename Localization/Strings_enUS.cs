@@ -102,6 +102,16 @@ namespace L1MapViewer.Localization
             { "Button_EditPassable", "Edit Passable" },
             { "Button_EditLayer5", "Edit Transparency" },
             { "Button_RegionEdit", "Region Edit" },
+            { "Button_MarketRegionEdit", "Market Zone" },
+            { "Button_MergeL2ToL1", "Merge L2 to L1" },
+
+            // === Market Region Edit ===
+            { "Status_MarketRegionCancelled", "Market zone edit mode cancelled" },
+            { "Status_MarketRegionMode", "Market zone edit mode: Left-click to select, right-click to set/clear market zone" },
+            { "Menu_SetMarketRegion", "Set as Market Zone ({0} cells)" },
+            { "Menu_ClearMarketRegion", "Clear Market Zone ({0} cells)" },
+            { "Action_SetMarketRegion", "Set as Market Zone" },
+            { "Action_ClearMarketRegion", "Clear Market Zone" },
             { "Button_ExportS32", "Export S32" },
             { "Button_NewS32", "New S32" },
             { "Button_ClearLayer7", "Clear Teleports" },
