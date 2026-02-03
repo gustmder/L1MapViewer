@@ -3228,7 +3228,9 @@ namespace L1FlyMapViewer
 
                             try
                             {
-                                var s32Data = S32Parser.ParseFile(filePath);
+                                // SEG 檔案使用 SegParser（與單一匯出相同）
+                                byte[] segData = File.ReadAllBytes(filePath);
+                                var s32Data = SegParser.Parse(segData);
                                 if (s32Data != null)
                                 {
                                     // 從 L1MapSeg 設定 SegInfo

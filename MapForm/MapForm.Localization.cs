@@ -57,6 +57,8 @@ namespace L1FlyMapViewer
             exportToolStripMenuItem.Text = LocalizationManager.L("Menu_Export_ServerPassability");
             exportL1JToolStripMenuItem.Text = LocalizationManager.L("Menu_Export_L1JFormat");
             exportDIRToolStripMenuItem.Text = LocalizationManager.L("Menu_Export_DIRFormat");
+            exportAllL1JToolStripMenuItem.Text = LocalizationManager.L("Menu_Export_AllMapsL1J");
+            exportAllDIRToolStripMenuItem.Text = LocalizationManager.L("Menu_Export_AllMapsDIR");
             menuExit.Text = LocalizationManager.L("Menu_File_Exit");
 
             // 編輯選單項目
