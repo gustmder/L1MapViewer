@@ -18980,7 +18980,12 @@ namespace L1FlyMapViewer
                 if (maxRelY == int.MinValue) maxRelY = 0;
 
                 // 偏移修正值 - 使用 maxRelY 作為基準點（素材底部對齊點擊位置）
+                // 確保 offsetFixX 是偶數，以保持 Layer1/Layer4 座標的奇偶性對齊
+                // pasteOriginX 是偶數 (gameX*2)，offsetFixX 也必須是偶數，
+                // 這樣 targetGlobalX 的奇偶性才會與 RelativeX 一致
                 int offsetFixX = minRelX;
+                if (offsetFixX % 2 != 0)
+                    offsetFixX -= 1;
                 int offsetFixY = maxRelY;
 
                 int layer1Count = 0, layer2Count = 0, layer3Count = 0, layer4Count = 0;
