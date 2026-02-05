@@ -74,7 +74,7 @@ dotnet publish --configuration Release --runtime win-x64 --self-contained true -
 
 ## Requirements
 
-- Windows 10/11
+- **Windows 10/11**（不支援 Windows 7/8，v1.26.0118 起使用 SkiaSharp 繪圖引擎需要 Windows 10+）
 - .NET 10.0 Runtime（framework-dependent 版本）或無需額外安裝（self-contained 版本）
 
 ## Credits
