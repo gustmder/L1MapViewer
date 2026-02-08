@@ -170,6 +170,8 @@ namespace L1MapViewer.Localization
             { "Label_Layer1Coord", "Layer1 Coordinates" },
             { "Label_Zoom", "Zoom" },
             { "Label_S32Files", "S32 Files" },
+            { "Label_S32FileList", "S32 File List" },
+            { "Label_S32FileListCount", "S32 File List ({0})" },
 
             // === Layer Names ===
             { "Layer_1", "Layer 1 (Floor)" },
@@ -694,6 +696,68 @@ namespace L1MapViewer.Localization
             { "Layer2_Name", "Decoration" },
             { "Layer4_Name", "Object" },
             { "Layer8_Name", "SPR" },
+
+            // === Passability Edit ===
+            { "Pass_LeftTop", "Upper-Left" },
+            { "Pass_RightTop", "Upper-Right" },
+            { "Pass_LeftBottom", "Lower-Left" },
+            { "Pass_RightBottom", "Lower-Right" },
+            { "Pass_All", "Whole Cell" },
+            { "Pass_Passable", "Passable" },
+            { "Pass_Impassable", "Impassable" },
+            { "Pass_Yes", "Yes" },
+            { "Pass_No", "No" },
+            { "Pass_MenuPassable", "{0} Passable ({1} cells)" },
+            { "Pass_MenuImpassable", "{0} Impassable ({1} cells)" },
+            { "Status_PassEditCancelled", "Passability edit mode cancelled" },
+            { "Status_PassEditMode", "Passability edit mode: Left-click to select area, right-click to set passability" },
+            { "Status_SetPassable", "Set ({0},{1}) as passable" },
+            { "Status_SetImpassable", "Set ({0},{1}) as impassable" },
+            { "Status_BatchSetPassability", "Batch set {0} cells as {1} (affected {2} S32 files)" },
+            { "Status_SetBoundaryPassability", "Set {0} boundaries as {1} (affected {2} S32 files)" },
+            { "Status_SetCellsPassability", "Set {0} cells' {1} to {2} (Ctrl+Z to undo)" },
+            { "Undo_SetPassability", "Set {0} cells {1} {2}" },
+            { "Help_PassEditMode", "[Passability Edit Mode]\n\u2022 Left-click drag to select area\n\u2022 Right-click: Set passability\n  - Upper/Lower/Left/Right block\n  - Whole cell passable/impassable\n\u2022 Click button again: Cancel mode" },
+
+            // === Passability Export ===
+            { "Filter_TextFiles", "Text files (*.txt)|*.txt" },
+            { "Export_PassTitle", "Export Map Passability Data ({0} Format)" },
+            { "Export_NoMapsFound", "No maps found!" },
+            { "Export_BatchPassConfirm", "Export passability data for {0} maps\nFormat: {1}\nOutput to: {2}\n\nContinue?" },
+            { "Export_ConfirmExport", "Confirm Export" },
+
+            // === Attribute Decoder ===
+            { "Attr_Impassable", "Impassable" },
+            { "Attr_SafeZone", "Safe Zone" },
+            { "Attr_CombatZone", "Combat Zone" },
+            { "Attr_NormalZone", "Normal Zone" },
+            { "Attr_NoFlags", "No flags (passable)" },
+            { "Attr_Info_Left", "[Attr1 Upper-Left]" },
+            { "Attr_Info_Right", "[Attr2 Upper-Right]" },
+
+            // === Analyze Dialog ===
+            { "Analyze_DataList", "Data List" },
+            { "Analyze_LocalX", "Local X" },
+            { "Analyze_LocalY", "Local Y" },
+            { "Analyze_GameX", "Game X" },
+            { "Analyze_GameY", "Game Y" },
+            { "Analyze_Attr1Left", "Attr1(Upper-Left)" },
+            { "Analyze_Region1", "Region1" },
+            { "Analyze_Pass1", "Pass1" },
+            { "Analyze_Attr2Right", "Attr2(Upper-Right)" },
+            { "Analyze_Region2", "Region2" },
+            { "Analyze_Pass2", "Pass2" },
+            { "Analyze_S32File", "S32 File" },
+            { "Analyze_Total", "Total" },
+            { "Analyze_Summary", "Safe: {0} | Combat: {1} | Impassable: {2}" },
+
+            // === Region Edit Context Menu ===
+            { "Menu_SetNormalRegion", "Set as Normal Zone ({0} cells)" },
+            { "Menu_SetSafeRegion", "Set as Safe Zone ({0} cells)" },
+            { "Menu_SetCombatRegion", "Set as Combat Zone ({0} cells)" },
+
+            // === Clear Dialog ===
+            { "Clear_Layer3Desc", "Layer 3 (Attributes) - Set as passable" },
 
             // === Tile Cleanup Dialog ===
             { "Menu_Tools_CleanupTiles", "Cleanup Unused Tiles..." },

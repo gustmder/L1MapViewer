@@ -838,12 +838,7 @@ namespace L1FlyMapViewer
             }
             else if (currentPassableEditMode != PassableEditMode.None)
             {
-                helpText = "【通行編輯模式】\n" +
-                           "• 左鍵拖曳選取區域\n" +
-                           "• 右鍵：設定通行性\n" +
-                           "  - 上/下/左/右 阻擋\n" +
-                           "  - 整格 可/不可通行\n" +
-                           "• 再按按鈕：取消模式";
+                helpText = LocalizationManager.L("Help_PassEditMode");
                 bgColor = new SKColor(30, 30, 30, 200);
                 textColor = new SKColor(173, 216, 230); // LightBlue
             }

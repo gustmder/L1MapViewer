@@ -170,6 +170,8 @@ namespace L1MapViewer.Localization
             { "Label_Layer1Coord", "Layer1 좌표" },
             { "Label_Zoom", "확대/축소" },
             { "Label_S32Files", "S32 파일" },
+            { "Label_S32FileList", "S32 파일 목록" },
+            { "Label_S32FileListCount", "S32 파일 목록 ({0})" },
 
             // === Layer Names ===
             { "Layer_1", "레이어 1 (바닥)" },
@@ -694,6 +696,68 @@ namespace L1MapViewer.Localization
             { "Layer2_Name", "장식" },
             { "Layer4_Name", "오브젝트" },
             { "Layer8_Name", "SPR" },
+
+            // === Passability Edit ===
+            { "Pass_LeftTop", "좌상" },
+            { "Pass_RightTop", "우상" },
+            { "Pass_LeftBottom", "좌하" },
+            { "Pass_RightBottom", "우하" },
+            { "Pass_All", "전체" },
+            { "Pass_Passable", "통행 가능" },
+            { "Pass_Impassable", "통행 불가" },
+            { "Pass_Yes", "가능" },
+            { "Pass_No", "불가" },
+            { "Pass_MenuPassable", "{0} 통행 가능 ({1} 셀)" },
+            { "Pass_MenuImpassable", "{0} 통행 불가 ({1} 셀)" },
+            { "Status_PassEditCancelled", "통행 편집 모드가 취소되었습니다" },
+            { "Status_PassEditMode", "통행 편집 모드: 좌클릭으로 선택, 우클릭으로 통행성 설정" },
+            { "Status_SetPassable", "({0},{1})을(를) 통행 가능으로 설정했습니다" },
+            { "Status_SetImpassable", "({0},{1})을(를) 통행 불가로 설정했습니다" },
+            { "Status_BatchSetPassability", "{0}개 셀을 {1}(으)로 일괄 설정 ({2}개 S32 파일에 영향)" },
+            { "Status_SetBoundaryPassability", "{0}개 경계를 {1}(으)로 설정 ({2}개 S32 파일에 영향)" },
+            { "Status_SetCellsPassability", "{0}개 셀의 {1}을(를) {2}(으)로 설정 (Ctrl+Z로 되돌리기)" },
+            { "Undo_SetPassability", "{0}개 셀 {1} {2} 설정" },
+            { "Help_PassEditMode", "【통행 편집 모드】\n• 좌클릭 드래그로 선택\n• 우클릭: 통행성 설정\n  - 상/하/좌/우 차단\n  - 전체 통행 가능/불가\n• 버튼 다시 클릭: 모드 해제" },
+
+            // === Passability Export ===
+            { "Filter_TextFiles", "텍스트 파일 (*.txt)|*.txt" },
+            { "Export_PassTitle", "맵 통행 데이터 내보내기 ({0} 형식)" },
+            { "Export_NoMapsFound", "맵을 찾을 수 없습니다!" },
+            { "Export_BatchPassConfirm", "{0}개 맵의 통행 데이터를 내보냅니다\n형식: {1}\n출력 경로: {2}\n\n계속하시겠습니까?" },
+            { "Export_ConfirmExport", "내보내기 확인" },
+
+            // === Attribute Decoder ===
+            { "Attr_Impassable", "통행 불가" },
+            { "Attr_SafeZone", "안전 구역" },
+            { "Attr_CombatZone", "전투 구역" },
+            { "Attr_NormalZone", "일반 구역" },
+            { "Attr_NoFlags", "플래그 없음(통행 가능)" },
+            { "Attr_Info_Left", "【Attr1 좌상】" },
+            { "Attr_Info_Right", "【Attr2 우상】" },
+
+            // === Analyze Dialog ===
+            { "Analyze_DataList", "데이터 목록" },
+            { "Analyze_LocalX", "로컬X" },
+            { "Analyze_LocalY", "로컬Y" },
+            { "Analyze_GameX", "게임X" },
+            { "Analyze_GameY", "게임Y" },
+            { "Analyze_Attr1Left", "Attr1(좌상)" },
+            { "Analyze_Region1", "구역1" },
+            { "Analyze_Pass1", "통행1" },
+            { "Analyze_Attr2Right", "Attr2(우상)" },
+            { "Analyze_Region2", "구역2" },
+            { "Analyze_Pass2", "통행2" },
+            { "Analyze_S32File", "S32 파일" },
+            { "Analyze_Total", "합계" },
+            { "Analyze_Summary", "안전: {0} | 전투: {1} | 통행 불가: {2}" },
+
+            // === Region Edit Context Menu ===
+            { "Menu_SetNormalRegion", "일반 구역으로 설정 ({0} 셀)" },
+            { "Menu_SetSafeRegion", "안전 구역으로 설정 ({0} 셀)" },
+            { "Menu_SetCombatRegion", "전투 구역으로 설정 ({0} 셀)" },
+
+            // === Clear Dialog ===
+            { "Clear_Layer3Desc", "레이어 3 (속성) - 통행 가능으로 설정" },
 
             // === Tile Cleanup Dialog ===
             { "Menu_Tools_CleanupTiles", "미사용 타일 정리..." },

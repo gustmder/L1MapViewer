@@ -2898,9 +2898,9 @@ namespace L1FlyMapViewer
             string formatName = isL1JFormat ? "L1J" : "DIR";
             using (SaveFileDialog saveDialog = new SaveFileDialog())
             {
-                saveDialog.Filter = "文字檔 (*.txt)|*.txt";
+                saveDialog.Filter = LocalizationManager.L("Filter_TextFiles");
                 saveDialog.FileName = $"{_document.MapId}.txt";
-                saveDialog.Title = $"匯出地圖通行資料 ({formatName} 格式)";
+                saveDialog.Title = LocalizationManager.L("Export_PassTitle", formatName);
 
                 if (saveDialog.ShowDialog(this) == DialogResult.Ok)
                 {
@@ -3152,14 +3152,14 @@ namespace L1FlyMapViewer
 
                 if (mapIds.Count == 0)
                 {
-                    WinFormsMessageBox.Show("沒有找到任何地圖！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    WinFormsMessageBox.Show(LocalizationManager.L("Export_NoMapsFound"), LocalizationManager.L("Title_Info"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
                 // 確認匯出
                 var result = WinFormsMessageBox.Show(
-                    $"將匯出 {mapIds.Count} 張地圖的通行資料\n格式: {formatName}\n輸出至: {outputFolder}\n\n是否繼續？",
-                    "確認匯出",
+                    LocalizationManager.L("Export_BatchPassConfirm", mapIds.Count, formatName, outputFolder),
+                    LocalizationManager.L("Export_ConfirmExport"),
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question);
 
@@ -6874,7 +6874,7 @@ namespace L1FlyMapViewer
                 // 取消模式
                 currentPassableEditMode = PassableEditMode.None;
                 btnEditPassable.BackgroundColor = SystemColors.Control;
-                this.toolStripStatusLabel1.Text = "已取消通行編輯模式";
+                this.toolStripStatusLabel1.Text = LocalizationManager.L("Status_PassEditCancelled");
                 UpdatePassabilityHelpLabel();
             }
             else
@@ -6892,7 +6892,7 @@ namespace L1FlyMapViewer
                 UpdateRegionHelpLabel();
                 // 自動顯示通行性覆蓋層
                 EnsurePassabilityLayerVisible();
-                this.toolStripStatusLabel1.Text = "通行編輯模式：左鍵選取區域，右鍵設定通行性";
+                this.toolStripStatusLabel1.Text = LocalizationManager.L("Status_PassEditMode");
                 UpdatePassabilityHelpLabel();
             }
         }
@@ -7471,6 +7471,16 @@ namespace L1FlyMapViewer
             All          // 設定整格（全部四個邊）
         }
 
+        private string GetPassabilityTargetName(PassabilityTarget target) => target switch
+        {
+            PassabilityTarget.LeftTop => LocalizationManager.L("Pass_LeftTop"),
+            PassabilityTarget.RightTop => LocalizationManager.L("Pass_RightTop"),
+            PassabilityTarget.LeftBottom => LocalizationManager.L("Pass_LeftBottom"),
+            PassabilityTarget.RightBottom => LocalizationManager.L("Pass_RightBottom"),
+            PassabilityTarget.All => LocalizationManager.L("Pass_All"),
+            _ => ""
+        };
+
         // 批次設定選取區域的通行性
         private void SetSelectedCellsPassability(PassabilityTarget target, bool passable)
         {
@@ -7714,20 +7724,12 @@ namespace L1FlyMapViewer
 
             if (actualChanges.Count > 0)
             {
-                string targetName = target switch
-                {
-                    PassabilityTarget.LeftTop => "左上",
-                    PassabilityTarget.RightTop => "右上",
-                    PassabilityTarget.LeftBottom => "左下",
-                    PassabilityTarget.RightBottom => "右下",
-                    PassabilityTarget.All => "整格",
-                    _ => ""
-                };
-                string passableText = passable ? "可通行" : "不可通行";
+                string targetName = GetPassabilityTargetName(target);
+                string passableText = passable ? LocalizationManager.L("Pass_Passable") : LocalizationManager.L("Pass_Impassable");
 
                 var undoAction = new UndoAction
                 {
-                    Description = $"設定 {actualChanges.Count} 格 {targetName} {passableText}"
+                    Description = LocalizationManager.L("Undo_SetPassability", actualChanges.Count, targetName, passableText)
                 };
 
                 foreach (var kvp in actualChanges)
@@ -7753,17 +7755,9 @@ namespace L1FlyMapViewer
             RenderS32Map();
 
             // 顯示結果
-            string targetNameResult = target switch
-            {
-                PassabilityTarget.LeftTop => "左上",
-                PassabilityTarget.RightTop => "右上",
-                PassabilityTarget.LeftBottom => "左下",
-                PassabilityTarget.RightBottom => "右下",
-                PassabilityTarget.All => "整格",
-                _ => ""
-            };
-            string passableTextResult = passable ? "可通行" : "不可通行";
-            this.toolStripStatusLabel1.Text = $"已設定 {modifiedCount} 格的 {targetNameResult} 為{passableTextResult} (Ctrl+Z 可還原)";
+            string targetNameResult = GetPassabilityTargetName(target);
+            string passableTextResult = passable ? LocalizationManager.L("Pass_Passable") : LocalizationManager.L("Pass_Impassable");
+            this.toolStripStatusLabel1.Text = LocalizationManager.L("Status_SetCellsPassability", modifiedCount, targetNameResult, passableTextResult);
         }
 
         // 更新區域編輯操作說明標籤
@@ -11505,14 +11499,14 @@ namespace L1FlyMapViewer
                 // 清除不可通行屬性（Attribute1 & Attribute2 的 0x01 位元）
                 s32Data.Layer3[cellY, layer3X].Attribute1 = (short)(s32Data.Layer3[cellY, layer3X].Attribute1 & ~0x01);
                 s32Data.Layer3[cellY, layer3X].Attribute2 = (short)(s32Data.Layer3[cellY, layer3X].Attribute2 & ~0x01);
-                this.toolStripStatusLabel1.Text = $"已設定 ({gameX},{gameY}) 為可通行";
+                this.toolStripStatusLabel1.Text = LocalizationManager.L("Status_SetPassable", gameX, gameY);
             }
             else
             {
                 // 設定不可通行屬性（Attribute1 & Attribute2 的 0x01 位元）
                 s32Data.Layer3[cellY, layer3X].Attribute1 = (short)(s32Data.Layer3[cellY, layer3X].Attribute1 | 0x01);
                 s32Data.Layer3[cellY, layer3X].Attribute2 = (short)(s32Data.Layer3[cellY, layer3X].Attribute2 | 0x01);
-                this.toolStripStatusLabel1.Text = $"已設定 ({gameX},{gameY}) 為不可通行";
+                this.toolStripStatusLabel1.Text = LocalizationManager.L("Status_SetImpassable", gameX, gameY);
             }
 
             s32Data.IsModified = true;
@@ -11564,7 +11558,7 @@ namespace L1FlyMapViewer
             }
 
             RenderS32Map();
-            this.toolStripStatusLabel1.Text = $"已批次設定 {modifiedCount} 個格子為{(passable ? "可通行" : "不可通行")} (影響 {modifiedS32Files.Count} 個 S32 檔案)";
+            this.toolStripStatusLabel1.Text = LocalizationManager.L("Status_BatchSetPassability", modifiedCount, passable ? LocalizationManager.L("Pass_Passable") : LocalizationManager.L("Pass_Impassable"), modifiedS32Files.Count);
         }
 
         // 多邊形通行性設定：找出多邊形內的格子邊界，設定對應的通行屬性
@@ -11686,7 +11680,7 @@ namespace L1FlyMapViewer
             }
 
             RenderS32Map();
-            this.toolStripStatusLabel1.Text = $"已設定 {modifiedCount} 個邊界為{(passable ? "可通行" : "不可通行")} (影響 {modifiedS32Files.Count} 個 S32 檔案)";
+            this.toolStripStatusLabel1.Text = LocalizationManager.L("Status_SetBoundaryPassability", modifiedCount, passable ? LocalizationManager.L("Pass_Passable") : LocalizationManager.L("Pass_Impassable"), modifiedS32Files.Count);
         }
 
         // 檢查點是否在多邊形內（射線法）
@@ -12194,55 +12188,55 @@ namespace L1FlyMapViewer
                 menu.Items.Add(new ToolStripSeparator());
 
                 // 左上
-                var leftTopPassable = new ToolStripMenuItem($"左上 可通行 ({cellCount} 格)");
+                var leftTopPassable = new ToolStripMenuItem(LocalizationManager.L("Pass_MenuPassable", LocalizationManager.L("Pass_LeftTop"), cellCount));
                 leftTopPassable.Click += (s, ev) => SetSelectedCellsPassability(PassabilityTarget.LeftTop, true);
                 menu.Items.Add(leftTopPassable);
 
-                var leftTopImpassable = new ToolStripMenuItem($"左上 不可通行 ({cellCount} 格)");
+                var leftTopImpassable = new ToolStripMenuItem(LocalizationManager.L("Pass_MenuImpassable", LocalizationManager.L("Pass_LeftTop"), cellCount));
                 leftTopImpassable.Click += (s, ev) => SetSelectedCellsPassability(PassabilityTarget.LeftTop, false);
                 menu.Items.Add(leftTopImpassable);
 
                 menu.Items.Add(new ToolStripSeparator());
 
                 // 右上
-                var rightTopPassable = new ToolStripMenuItem($"右上 可通行 ({cellCount} 格)");
+                var rightTopPassable = new ToolStripMenuItem(LocalizationManager.L("Pass_MenuPassable", LocalizationManager.L("Pass_RightTop"), cellCount));
                 rightTopPassable.Click += (s, ev) => SetSelectedCellsPassability(PassabilityTarget.RightTop, true);
                 menu.Items.Add(rightTopPassable);
 
-                var rightTopImpassable = new ToolStripMenuItem($"右上 不可通行 ({cellCount} 格)");
+                var rightTopImpassable = new ToolStripMenuItem(LocalizationManager.L("Pass_MenuImpassable", LocalizationManager.L("Pass_RightTop"), cellCount));
                 rightTopImpassable.Click += (s, ev) => SetSelectedCellsPassability(PassabilityTarget.RightTop, false);
                 menu.Items.Add(rightTopImpassable);
 
                 menu.Items.Add(new ToolStripSeparator());
 
                 // 左下（實際設定鄰近格子的右上）
-                var leftBottomPassable = new ToolStripMenuItem($"左下 可通行 ({cellCount} 格)");
+                var leftBottomPassable = new ToolStripMenuItem(LocalizationManager.L("Pass_MenuPassable", LocalizationManager.L("Pass_LeftBottom"), cellCount));
                 leftBottomPassable.Click += (s, ev) => SetSelectedCellsPassability(PassabilityTarget.LeftBottom, true);
                 menu.Items.Add(leftBottomPassable);
 
-                var leftBottomImpassable = new ToolStripMenuItem($"左下 不可通行 ({cellCount} 格)");
+                var leftBottomImpassable = new ToolStripMenuItem(LocalizationManager.L("Pass_MenuImpassable", LocalizationManager.L("Pass_LeftBottom"), cellCount));
                 leftBottomImpassable.Click += (s, ev) => SetSelectedCellsPassability(PassabilityTarget.LeftBottom, false);
                 menu.Items.Add(leftBottomImpassable);
 
                 menu.Items.Add(new ToolStripSeparator());
 
                 // 右下（實際設定鄰近格子的左上）
-                var rightBottomPassable = new ToolStripMenuItem($"右下 可通行 ({cellCount} 格)");
+                var rightBottomPassable = new ToolStripMenuItem(LocalizationManager.L("Pass_MenuPassable", LocalizationManager.L("Pass_RightBottom"), cellCount));
                 rightBottomPassable.Click += (s, ev) => SetSelectedCellsPassability(PassabilityTarget.RightBottom, true);
                 menu.Items.Add(rightBottomPassable);
 
-                var rightBottomImpassable = new ToolStripMenuItem($"右下 不可通行 ({cellCount} 格)");
+                var rightBottomImpassable = new ToolStripMenuItem(LocalizationManager.L("Pass_MenuImpassable", LocalizationManager.L("Pass_RightBottom"), cellCount));
                 rightBottomImpassable.Click += (s, ev) => SetSelectedCellsPassability(PassabilityTarget.RightBottom, false);
                 menu.Items.Add(rightBottomImpassable);
 
                 menu.Items.Add(new ToolStripSeparator());
 
                 // 整格（四個邊全部）
-                var allPassable = new ToolStripMenuItem($"整格 可通行 ({cellCount} 格)");
+                var allPassable = new ToolStripMenuItem(LocalizationManager.L("Pass_MenuPassable", LocalizationManager.L("Pass_All"), cellCount));
                 allPassable.Click += (s, ev) => SetSelectedCellsPassability(PassabilityTarget.All, true);
                 menu.Items.Add(allPassable);
 
-                var allImpassable = new ToolStripMenuItem($"整格 不可通行 ({cellCount} 格)");
+                var allImpassable = new ToolStripMenuItem(LocalizationManager.L("Pass_MenuImpassable", LocalizationManager.L("Pass_All"), cellCount));
                 allImpassable.Click += (s, ev) => SetSelectedCellsPassability(PassabilityTarget.All, false);
                 menu.Items.Add(allImpassable);
             }
@@ -12253,15 +12247,15 @@ namespace L1FlyMapViewer
                 int cellCount = _editState.SelectedCells.Count;
                 menu.Items.Add(new ToolStripSeparator());
 
-                var regionNormalItem = new ToolStripMenuItem($"設為一般區域 ({cellCount} 格)");
+                var regionNormalItem = new ToolStripMenuItem(LocalizationManager.L("Menu_SetNormalRegion", cellCount));
                 regionNormalItem.Click += (s, ev) => SetSelectedCellsRegionType(RegionType.Normal);
                 menu.Items.Add(regionNormalItem);
 
-                var regionSafeItem = new ToolStripMenuItem($"設為安全區域 ({cellCount} 格)");
+                var regionSafeItem = new ToolStripMenuItem(LocalizationManager.L("Menu_SetSafeRegion", cellCount));
                 regionSafeItem.Click += (s, ev) => SetSelectedCellsRegionType(RegionType.Safe);
                 menu.Items.Add(regionSafeItem);
 
-                var regionCombatItem = new ToolStripMenuItem($"設為戰鬥區域 ({cellCount} 格)");
+                var regionCombatItem = new ToolStripMenuItem(LocalizationManager.L("Menu_SetCombatRegion", cellCount));
                 regionCombatItem.Click += (s, ev) => SetSelectedCellsRegionType(RegionType.Combat);
                 menu.Items.Add(regionCombatItem);
             }
@@ -14590,20 +14584,20 @@ namespace L1FlyMapViewer
                 bool pass1 = !Layer3AttributeDecoder.IsBlocked(attr1);
                 string region1 = Layer3AttributeDecoder.GetZoneName(attr1);
 
-                attrText += $"\n【Attr1 左上】\n";
+                attrText += $"\n{LocalizationManager.L("Attr_Info_Left")}\n";
                 attrText += $"  值: 0x{attr1:X4}\n";
                 attrText += $"  區域: {region1}\n";
-                attrText += $"  通行: {(pass1 ? "可" : "不可")}\n";
+                attrText += $"  通行: {(pass1 ? LocalizationManager.L("Pass_Yes") : LocalizationManager.L("Pass_No"))}\n";
 
                 // Attribute2 (右上)
                 short attr2 = attr.Attribute2;
                 bool pass2 = !Layer3AttributeDecoder.IsBlocked(attr2);
                 string region2 = Layer3AttributeDecoder.GetZoneName(attr2);
 
-                attrText += $"\n【Attr2 右上】\n";
+                attrText += $"\n{LocalizationManager.L("Attr_Info_Right")}\n";
                 attrText += $"  值: 0x{attr2:X4}\n";
                 attrText += $"  區域: {region2}\n";
-                attrText += $"  通行: {(pass2 ? "可" : "不可")}";
+                attrText += $"  通行: {(pass2 ? LocalizationManager.L("Pass_Yes") : LocalizationManager.L("Pass_No"))}";
 
                 info.Text = attrText;
                 info.SetLocation(new Point(5, 5));
@@ -22837,7 +22831,7 @@ namespace L1FlyMapViewer
             clearForm.GetControls().Add(chkL1);
 
             CheckBox chkL3 = new CheckBox();
-            chkL3.Text = "第3層 (屬性) - 設為可通行";
+            chkL3.Text = LocalizationManager.L("Clear_Layer3Desc");
             chkL3.SetLocation(new Point(30, 75));
             chkL3.Size = new Size(200, 20);
             chkL3.Checked = true;
@@ -23070,7 +23064,7 @@ namespace L1FlyMapViewer
             clearForm.GetControls().Add(chkL1);
 
             CheckBox chkL3 = new CheckBox();
-            chkL3.Text = "第3層 (屬性) - 設為可通行";
+            chkL3.Text = LocalizationManager.L("Clear_Layer3Desc");
             chkL3.SetLocation(new Point(30, 140));
             chkL3.Size = new Size(200, 20);
             chkL3.Checked = true;
@@ -25458,8 +25452,8 @@ namespace L1FlyMapViewer
                         int globalX = baseGameX + x;
                         int globalY = baseGameY + y;
                         allItems.Add((filePath, fileName, x, y, globalX, globalY, attr.Attribute1, attr.Attribute2,
-                            region1, pass1 ? "可通行" : "不可通行",
-                            region2, pass2 ? "可通行" : "不可通行"));
+                            region1, pass1 ? LocalizationManager.L("Pass_Passable") : LocalizationManager.L("Pass_Impassable"),
+                            region2, pass2 ? LocalizationManager.L("Pass_Passable") : LocalizationManager.L("Pass_Impassable")));
                     }
                 }
 
@@ -25488,7 +25482,7 @@ namespace L1FlyMapViewer
             tabControl.SetDock(DockStyle.Fill);
 
             // Tab 1: 資料列表
-            TabPage tabList = new TabPage("資料列表");
+            TabPage tabList = new TabPage(LocalizationManager.L("Analyze_DataList"));
             ListView lvItems = new ListView();
             lvItems.SetDock(DockStyle.Fill);
             lvItems.View = View.Details;
@@ -25497,16 +25491,16 @@ namespace L1FlyMapViewer
             lvItems.Font = new Font("Consolas", 9);
 
             lvItems.Columns.Add("S32", 100);
-            lvItems.Columns.Add("本地X", 55);
-            lvItems.Columns.Add("本地Y", 55);
-            lvItems.Columns.Add("遊戲X", 60);
-            lvItems.Columns.Add("遊戲Y", 60);
-            lvItems.Columns.Add("Attr1(左上)", 90);
-            lvItems.Columns.Add("區域1", 60);
-            lvItems.Columns.Add("通行1", 70);
-            lvItems.Columns.Add("Attr2(右上)", 95);
-            lvItems.Columns.Add("區域2", 60);
-            lvItems.Columns.Add("通行2", 70);
+            lvItems.Columns.Add(LocalizationManager.L("Analyze_LocalX"), 55);
+            lvItems.Columns.Add(LocalizationManager.L("Analyze_LocalY"), 55);
+            lvItems.Columns.Add(LocalizationManager.L("Analyze_GameX"), 60);
+            lvItems.Columns.Add(LocalizationManager.L("Analyze_GameY"), 60);
+            lvItems.Columns.Add(LocalizationManager.L("Analyze_Attr1Left"), 90);
+            lvItems.Columns.Add(LocalizationManager.L("Analyze_Region1"), 60);
+            lvItems.Columns.Add(LocalizationManager.L("Analyze_Pass1"), 70);
+            lvItems.Columns.Add(LocalizationManager.L("Analyze_Attr2Right"), 95);
+            lvItems.Columns.Add(LocalizationManager.L("Analyze_Region2"), 60);
+            lvItems.Columns.Add(LocalizationManager.L("Analyze_Pass2"), 70);
 
             // 使用 VirtualMode 處理大量資料
             lvItems.VirtualMode = true;
@@ -25588,11 +25582,11 @@ namespace L1FlyMapViewer
             lvStats.FullRowSelect = true;
             lvStats.GridLines = true;
 
-            lvStats.Columns.Add("S32 檔案", 200);
-            lvStats.Columns.Add("安全區", 80);
-            lvStats.Columns.Add("戰鬥區", 80);
-            lvStats.Columns.Add("不可通行", 80);
-            lvStats.Columns.Add("總計", 80);
+            lvStats.Columns.Add(LocalizationManager.L("Analyze_S32File"), 200);
+            lvStats.Columns.Add(LocalizationManager.L("Attr_SafeZone"), 80);
+            lvStats.Columns.Add(LocalizationManager.L("Attr_CombatZone"), 80);
+            lvStats.Columns.Add(LocalizationManager.L("Attr_Impassable"), 80);
+            lvStats.Columns.Add(LocalizationManager.L("Analyze_Total"), 80);
 
             lvStats.BeginUpdate();
             foreach (var stat in s32Stats)
@@ -25612,7 +25606,7 @@ namespace L1FlyMapViewer
             int totalImpassable = s32Stats.Sum(x => x.impassableCount);
 
             Label lblSummary = new Label();
-            lblSummary.Text = $"安全區: {totalSafe} | 戰鬥區: {totalCombat} | 不可通行: {totalImpassable}";
+            lblSummary.Text = LocalizationManager.L("Analyze_Summary", totalSafe, totalCombat, totalImpassable);
             lblSummary.SetDock(DockStyle.Bottom);
             lblSummary.Height = 25;
 

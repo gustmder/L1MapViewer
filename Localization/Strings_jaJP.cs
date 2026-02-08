@@ -170,6 +170,8 @@ namespace L1MapViewer.Localization
             { "Label_Layer1Coord", "Layer1座標" },
             { "Label_Zoom", "ズーム" },
             { "Label_S32Files", "S32ファイル" },
+            { "Label_S32FileList", "S32ファイルリスト" },
+            { "Label_S32FileListCount", "S32ファイルリスト ({0})" },
 
             // === Layer Names ===
             { "Layer_1", "レイヤー1 (床)" },
@@ -694,6 +696,68 @@ namespace L1MapViewer.Localization
             { "Layer2_Name", "装飾" },
             { "Layer4_Name", "オブジェクト" },
             { "Layer8_Name", "SPR" },
+
+            // === Passability Edit ===
+            { "Pass_LeftTop", "左上" },
+            { "Pass_RightTop", "右上" },
+            { "Pass_LeftBottom", "左下" },
+            { "Pass_RightBottom", "右下" },
+            { "Pass_All", "全体" },
+            { "Pass_Passable", "通行可" },
+            { "Pass_Impassable", "通行不可" },
+            { "Pass_Yes", "可" },
+            { "Pass_No", "不可" },
+            { "Pass_MenuPassable", "{0} 通行可 ({1} セル)" },
+            { "Pass_MenuImpassable", "{0} 通行不可 ({1} セル)" },
+            { "Status_PassEditCancelled", "通行編集モードをキャンセルしました" },
+            { "Status_PassEditMode", "通行編集モード：左クリックで選択、右クリックで通行性設定" },
+            { "Status_SetPassable", "({0},{1}) を通行可に設定しました" },
+            { "Status_SetImpassable", "({0},{1}) を通行不可に設定しました" },
+            { "Status_BatchSetPassability", "{0} セルを{1}に一括設定しました ({2} S32ファイルに影響)" },
+            { "Status_SetBoundaryPassability", "{0} 境界を{1}に設定しました ({2} S32ファイルに影響)" },
+            { "Status_SetCellsPassability", "{0} セルの {1} を{2}に設定しました (Ctrl+Z で戻す)" },
+            { "Undo_SetPassability", "{0} セル {1} {2} を設定" },
+            { "Help_PassEditMode", "【通行編集モード】\n• 左クリックドラッグで選択\n• 右クリック：通行性を設定\n  - 上/下/左/右 ブロック\n  - 全体 通行可/不可\n• もう一度ボタン：モード解除" },
+
+            // === Passability Export ===
+            { "Filter_TextFiles", "テキストファイル (*.txt)|*.txt" },
+            { "Export_PassTitle", "マップ通行データをエクスポート ({0} 形式)" },
+            { "Export_NoMapsFound", "マップが見つかりません！" },
+            { "Export_BatchPassConfirm", "{0} マップの通行データをエクスポートします\n形式: {1}\n出力先: {2}\n\n続行しますか？" },
+            { "Export_ConfirmExport", "エクスポート確認" },
+
+            // === Attribute Decoder ===
+            { "Attr_Impassable", "通行不可" },
+            { "Attr_SafeZone", "安全区域" },
+            { "Attr_CombatZone", "戦闘区域" },
+            { "Attr_NormalZone", "一般区域" },
+            { "Attr_NoFlags", "フラグなし(通行可)" },
+            { "Attr_Info_Left", "【Attr1 左上】" },
+            { "Attr_Info_Right", "【Attr2 右上】" },
+
+            // === Analyze Dialog ===
+            { "Analyze_DataList", "データリスト" },
+            { "Analyze_LocalX", "ローカルX" },
+            { "Analyze_LocalY", "ローカルY" },
+            { "Analyze_GameX", "ゲームX" },
+            { "Analyze_GameY", "ゲームY" },
+            { "Analyze_Attr1Left", "Attr1(左上)" },
+            { "Analyze_Region1", "区域1" },
+            { "Analyze_Pass1", "通行1" },
+            { "Analyze_Attr2Right", "Attr2(右上)" },
+            { "Analyze_Region2", "区域2" },
+            { "Analyze_Pass2", "通行2" },
+            { "Analyze_S32File", "S32ファイル" },
+            { "Analyze_Total", "合計" },
+            { "Analyze_Summary", "安全: {0} | 戦闘: {1} | 通行不可: {2}" },
+
+            // === Region Edit Context Menu ===
+            { "Menu_SetNormalRegion", "一般区域に設定 ({0} セル)" },
+            { "Menu_SetSafeRegion", "安全区域に設定 ({0} セル)" },
+            { "Menu_SetCombatRegion", "戦闘区域に設定 ({0} セル)" },
+
+            // === Clear Dialog ===
+            { "Clear_Layer3Desc", "レイヤー3 (属性) - 通行可に設定" },
 
             // === Tile Cleanup Dialog ===
             { "Menu_Tools_CleanupTiles", "未使用タイルをクリーンアップ..." },

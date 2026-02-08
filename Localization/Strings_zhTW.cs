@@ -697,6 +697,68 @@ namespace L1MapViewer.Localization
             { "Layer4_Name", "物件" },
             { "Layer8_Name", "SPR" },
 
+            // === Passability Edit ===
+            { "Pass_LeftTop", "左上" },
+            { "Pass_RightTop", "右上" },
+            { "Pass_LeftBottom", "左下" },
+            { "Pass_RightBottom", "右下" },
+            { "Pass_All", "整格" },
+            { "Pass_Passable", "可通行" },
+            { "Pass_Impassable", "不可通行" },
+            { "Pass_Yes", "可" },
+            { "Pass_No", "不可" },
+            { "Pass_MenuPassable", "{0} 可通行 ({1} 格)" },
+            { "Pass_MenuImpassable", "{0} 不可通行 ({1} 格)" },
+            { "Status_PassEditCancelled", "已取消通行編輯模式" },
+            { "Status_PassEditMode", "通行編輯模式：左鍵選取區域，右鍵設定通行性" },
+            { "Status_SetPassable", "已設定 ({0},{1}) 為可通行" },
+            { "Status_SetImpassable", "已設定 ({0},{1}) 為不可通行" },
+            { "Status_BatchSetPassability", "已批次設定 {0} 個格子為{1} (影響 {2} 個 S32 檔案)" },
+            { "Status_SetBoundaryPassability", "已設定 {0} 個邊界為{1} (影響 {2} 個 S32 檔案)" },
+            { "Status_SetCellsPassability", "已設定 {0} 格的 {1} 為{2} (Ctrl+Z 可還原)" },
+            { "Undo_SetPassability", "設定 {0} 格 {1} {2}" },
+            { "Help_PassEditMode", "【通行編輯模式】\n• 左鍵拖曳選取區域\n• 右鍵：設定通行性\n  - 上/下/左/右 阻擋\n  - 整格 可/不可通行\n• 再按按鈕：取消模式" },
+
+            // === Passability Export ===
+            { "Filter_TextFiles", "文字檔 (*.txt)|*.txt" },
+            { "Export_PassTitle", "匯出地圖通行資料 ({0} 格式)" },
+            { "Export_NoMapsFound", "沒有找到任何地圖！" },
+            { "Export_BatchPassConfirm", "將匯出 {0} 張地圖的通行資料\n格式: {1}\n輸出至: {2}\n\n是否繼續？" },
+            { "Export_ConfirmExport", "確認匯出" },
+
+            // === Attribute Decoder ===
+            { "Attr_Impassable", "不可通行" },
+            { "Attr_SafeZone", "安全區" },
+            { "Attr_CombatZone", "戰鬥區" },
+            { "Attr_NormalZone", "一般區" },
+            { "Attr_NoFlags", "無標記(可通行)" },
+            { "Attr_Info_Left", "【Attr1 左上】" },
+            { "Attr_Info_Right", "【Attr2 右上】" },
+
+            // === Analyze Dialog ===
+            { "Analyze_DataList", "資料列表" },
+            { "Analyze_LocalX", "本地X" },
+            { "Analyze_LocalY", "本地Y" },
+            { "Analyze_GameX", "遊戲X" },
+            { "Analyze_GameY", "遊戲Y" },
+            { "Analyze_Attr1Left", "Attr1(左上)" },
+            { "Analyze_Region1", "區域1" },
+            { "Analyze_Pass1", "通行1" },
+            { "Analyze_Attr2Right", "Attr2(右上)" },
+            { "Analyze_Region2", "區域2" },
+            { "Analyze_Pass2", "通行2" },
+            { "Analyze_S32File", "S32 檔案" },
+            { "Analyze_Total", "總計" },
+            { "Analyze_Summary", "安全區: {0} | 戰鬥區: {1} | 不可通行: {2}" },
+
+            // === Region Edit Context Menu ===
+            { "Menu_SetNormalRegion", "設為一般區域 ({0} 格)" },
+            { "Menu_SetSafeRegion", "設為安全區域 ({0} 格)" },
+            { "Menu_SetCombatRegion", "設為戰鬥區域 ({0} 格)" },
+
+            // === Clear Dialog ===
+            { "Clear_Layer3Desc", "第3層 (屬性) - 設為可通行" },
+
             // === Tile Cleanup Dialog ===
             { "Menu_Tools_CleanupTiles", "清理未使用的 Tiles..." },
             { "Dialog_TileCleanup_Title", "清理未使用的 Tiles" },

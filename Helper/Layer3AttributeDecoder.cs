@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using L1MapViewer.Localization;
 
 namespace L1MapViewer.Helper
 {
@@ -30,13 +31,13 @@ namespace L1MapViewer.Helper
         {
             List<string> flags = new List<string>();
 
-            if ((value & 0x0001) != 0) flags.Add("不可通行");
+            if ((value & 0x0001) != 0) flags.Add(LocalizationManager.L("Attr_Impassable"));
 
             // 例外值替換後判斷區域類型
             int replaced = ReplaceException(value);
             int lowNibble = replaced & 0x0F;
-            if ((lowNibble & 0x04) != 0) flags.Add("安全區");
-            else if ((lowNibble & 0x0C) == 0x08) flags.Add("戰鬥區");
+            if ((lowNibble & 0x04) != 0) flags.Add(LocalizationManager.L("Attr_SafeZone"));
+            else if ((lowNibble & 0x0C) == 0x08) flags.Add(LocalizationManager.L("Attr_CombatZone"));
 
             if ((value & 0x0002) != 0) flags.Add("bit1");
             if ((value & 0x0010) != 0) flags.Add("bit4");
@@ -52,7 +53,7 @@ namespace L1MapViewer.Helper
             if ((value & 0x4000) != 0) flags.Add("bit14");
             if ((value & 0x8000) != 0) flags.Add("bit15");
 
-            if (flags.Count == 0) flags.Add("無標記(可通行)");
+            if (flags.Count == 0) flags.Add(LocalizationManager.L("Attr_NoFlags"));
 
             return string.Join(", ", flags);
         }
@@ -90,9 +91,9 @@ namespace L1MapViewer.Helper
         /// </summary>
         public static string GetZoneName(short value)
         {
-            if (IsSafeZone(value)) return "安全區";
-            if (IsCombatZone(value)) return "戰鬥區";
-            return "一般區";
+            if (IsSafeZone(value)) return LocalizationManager.L("Attr_SafeZone");
+            if (IsCombatZone(value)) return LocalizationManager.L("Attr_CombatZone");
+            return LocalizationManager.L("Attr_NormalZone");
         }
 
         /// <summary>
