@@ -41,6 +41,9 @@ namespace L1FlyMapViewer
         // 更新所有 UI 文字
         private void UpdateLocalization()
         {
+            // 視窗標題
+            this.Text = LocalizationManager.L("Form_MapEditor_Title") + " - L1MapEditor";
+
             // 頂級選單
             menuFile.Text = LocalizationManager.L("Menu_File");
             menuEdit.Text = LocalizationManager.L("Menu_Edit");
@@ -142,9 +145,15 @@ namespace L1FlyMapViewer
             btnS32SelectAll.Text = LocalizationManager.L("Button_SelectAll");
             btnS32SelectNone.Text = LocalizationManager.L("Button_SelectNone");
 
+            // S32 檔案清單標籤
+            lblS32Files.Text = LocalizationManager.L("Label_S32FileList");
+
             // 工具列項目
-            toolStripJumpLabel.Text = LocalizationManager.L("Label_GameCoord") + ":";
+            toolStripJumpLabel.Text = LocalizationManager.L("Label_JumpCoord");
             toolStripJumpButton.Text = LocalizationManager.L("Button_JumpToCoord");
+            toolStripCopyMoveCmd.Text = LocalizationManager.L("Button_CopyMoveCmd");
+            toolStripCopyMoveCmd.ToolTipText = LocalizationManager.L("Tooltip_CopyMoveCmd");
+            toolStripJumpTextBox.ToolTip = LocalizationManager.L("Tooltip_JumpInput");
 
             // 右側工具按鈕 - 上方工具
             btnToolCopy.Text = LocalizationManager.L("Button_Copy");

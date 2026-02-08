@@ -826,13 +826,7 @@ namespace L1FlyMapViewer
             // 根據當前編輯模式決定顯示內容
             if (_editState.IsLayer5EditMode)
             {
-                helpText = "【透明編輯模式】\n" +
-                           "• 左鍵：選取地圖格子\n" +
-                           "• 查看右側【附近群組】\n" +
-                           "• 右鍵：設定半透明/消失\n" +
-                           "  紫色 = 半透明區塊\n" +
-                           "  紅色 = 消失區塊\n" +
-                           "• 再按按鈕：取消模式";
+                helpText = LocalizationManager.L("Help_Layer5EditMode");
                 bgColor = new SKColor(30, 30, 50, 220);
                 textColor = new SKColor(100, 180, 255);
             }
@@ -844,13 +838,7 @@ namespace L1FlyMapViewer
             }
             else if (currentRegionEditMode != RegionEditMode.None)
             {
-                helpText = "【區域設置模式】\n" +
-                           "• 左鍵拖曳選取區域\n" +
-                           "• 右鍵：選擇區域類型\n" +
-                           "  - 一般區域（灰色）\n" +
-                           "  - 安全區域（藍色）\n" +
-                           "  - 戰鬥區域（紅色）\n" +
-                           "• 再按按鈕：取消模式";
+                helpText = LocalizationManager.L("Help_RegionEditMode");
                 bgColor = new SKColor(40, 80, 40, 200);
                 textColor = new SKColor(144, 238, 144); // LightGreen
             }
@@ -1177,7 +1165,7 @@ namespace L1FlyMapViewer
             // 顯示選取數量（在選取區域模式下）
             if (isSelectingRegion && _editState.SelectedCells.Count > 0)
             {
-                string info = $"選取 {_editState.SelectedCells.Count} 格";
+                string info = string.Format(LocalizationManager.L("Overlay_SelectionCount"), _editState.SelectedCells.Count);
                 using var textPaint = new SKPaint
                 {
                     IsAntialias = true,

@@ -775,6 +775,36 @@ namespace L1MapViewer.Localization
             { "Dialog_TileCleanup_Success", "정리 완료! {0}개의 타일을 제거했습니다.\n\n백업 파일: {1}" },
             { "Dialog_TileCleanup_Failed", "정리 실패: {0}" },
             { "Dialog_TileCleanup_NoClient", "먼저 리니지 클라이언트를 열어주세요" },
+
+            // 오버레이 편집 모드 도움말
+            { "Help_Layer5EditMode", "【투명 편집 모드】\n• 좌클릭: 맵 셀 선택\n• 우측의 【인근 그룹】 확인\n• 우클릭: 반투명/소멸 설정\n  보라색 = 반투명 블록\n  빨간색 = 소멸 블록\n• 버튼을 다시 누르면: 모드 해제" },
+            { "Help_RegionEditMode", "【지역 설정 모드】\n• 좌클릭 드래그로 영역 선택\n• 우클릭: 지역 유형 선택\n  - 일반 지역 (회색)\n  - 안전 지역 (파란색)\n  - 전투 지역 (빨간색)\n• 버튼을 다시 누르면: 모드 해제" },
+
+            // 도구 모음 / 상태 표시줄
+            { "Label_JumpCoord", "좌표 이동:" },
+            { "Button_CopyMoveCmd", "이동 명령 복사" },
+            { "Tooltip_CopyMoveCmd", "이동 x y 맵id 명령을 클립보드에 복사" },
+            { "Tooltip_JumpInput", "좌표 (X,Y)를 입력한 후 Enter 또는 이동 클릭" },
+
+            // Tile 컨텍스트 메뉴
+            { "TileContext_RenumberTileId", "TileId 재번호 부여 ({0}개)" },
+            { "TileContext_DeleteAllL4", "모든 Layer4 오브젝트 삭제 ({0}개)" },
+            { "TileContext_DeleteAllRefs", "모든 참조 삭제 ({0})" },
+            { "TileContext_ExportAllTiles", "모든 Tile 내보내기 ({0}개)" },
+
+            // 맵 검증
+            { "Validate_Complete", "검사 완료" },
+            { "Validate_NoIssues", "검사 완료, 이상이 발견되지 않았습니다." },
+            { "Validate_L6Complete", "모든 S32의 Layer6가 완전합니다. 수정이 필요 없습니다." },
+
+            // 투명/지역 편집 상태 메시지
+            { "Status_Layer5EditEnabled", "투명 편집 모드: 좌클릭 추가/우클릭 삭제" },
+            { "Status_Layer5EditDisabled", "투명 편집 모드를 해제했습니다" },
+            { "Status_RegionEditEnabled", "지역 설정 모드: 좌클릭으로 영역 선택, 우클릭으로 유형 선택" },
+            { "Status_RegionEditDisabled", "지역 설정 모드를 해제했습니다" },
+
+            // 선택 오버레이
+            { "Overlay_SelectionCount", "{0}칸 선택" },
         };
     }
 }

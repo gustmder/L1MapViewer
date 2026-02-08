@@ -775,6 +775,36 @@ namespace L1MapViewer.Localization
             { "Dialog_TileCleanup_Success", "清理完成！已移除 {0} 個 Tile。\n\n備份檔案: {1}" },
             { "Dialog_TileCleanup_Failed", "清理失敗: {0}" },
             { "Dialog_TileCleanup_NoClient", "請先開啟天堂客戶端" },
+
+            // Overlay 編輯模式說明文字
+            { "Help_Layer5EditMode", "【透明編輯模式】\n• 左鍵：選取地圖格子\n• 查看右側【附近群組】\n• 右鍵：設定半透明/消失\n  紫色 = 半透明區塊\n  紅色 = 消失區塊\n• 再按按鈕：取消模式" },
+            { "Help_RegionEditMode", "【區域設置模式】\n• 左鍵拖曳選取區域\n• 右鍵：選擇區域類型\n  - 一般區域（灰色）\n  - 安全區域（藍色）\n  - 戰鬥區域（紅色）\n• 再按按鈕：取消模式" },
+
+            // 工具列 / 狀態列
+            { "Label_JumpCoord", "跳轉座標:" },
+            { "Button_CopyMoveCmd", "複製移動指令" },
+            { "Tooltip_CopyMoveCmd", "複製 移動 x y 地圖id 指令到剪貼簿" },
+            { "Tooltip_JumpInput", "輸入座標 (X,Y) 然後按 Enter 或點擊跳轉" },
+
+            // Tile 右鍵選單
+            { "TileContext_RenumberTileId", "重新編號 TileId ({0} 個)" },
+            { "TileContext_DeleteAllL4", "刪除所有 Layer4 物件 ({0} 個)" },
+            { "TileContext_DeleteAllRefs", "刪除所有引用 ({0})" },
+            { "TileContext_ExportAllTiles", "匯出全部 Tile ({0} 個)" },
+
+            // 地圖驗證
+            { "Validate_Complete", "檢查完成" },
+            { "Validate_NoIssues", "檢查完成，沒有發現任何異常。" },
+            { "Validate_L6Complete", "所有 S32 的 Layer6 都已完整，無需修復。" },
+
+            // 透明/區域編輯狀態訊息
+            { "Status_Layer5EditEnabled", "透明編輯模式：左鍵添加/右鍵刪除透明設定" },
+            { "Status_Layer5EditDisabled", "已取消透明編輯模式" },
+            { "Status_RegionEditEnabled", "區域設置模式：左鍵選取區域，右鍵選擇區域類型" },
+            { "Status_RegionEditDisabled", "已取消區域設置模式" },
+
+            // 選取 overlay
+            { "Overlay_SelectionCount", "選取 {0} 格" },
         };
     }
 }

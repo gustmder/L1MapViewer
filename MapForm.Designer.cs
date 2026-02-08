@@ -2070,7 +2070,7 @@ namespace L1FlyMapViewer
             // Note: menuStrip1 is set via MainMenuStrip property, not added to Controls
             this.MainMenuStrip = this.menuStrip1;
             this.SetName("MapForm");
-            this.Text = "地圖編輯器";
+            this.Text = LocalizationManager.L("Form_MapEditor_Title") + " - L1MapEditor";
             this.Load += new System.EventHandler(this.MapForm_Load);
             this.menuStrip1.ResumeLayout(false);
             this.menuStrip1.PerformLayout();

@@ -775,6 +775,36 @@ namespace L1MapViewer.Localization
             { "Dialog_TileCleanup_Success", "クリーンアップ完了！{0} 個のタイルを削除しました。\n\nバックアップファイル: {1}" },
             { "Dialog_TileCleanup_Failed", "クリーンアップ失敗: {0}" },
             { "Dialog_TileCleanup_NoClient", "先にリネージュクライアントを開いてください" },
+
+            // オーバーレイ編集モードヘルプ
+            { "Help_Layer5EditMode", "【透明編集モード】\n• 左クリック：マップセルを選択\n• 右側の【近くのグループ】を確認\n• 右クリック：半透明/消去を設定\n  紫色 = 半透明ブロック\n  赤色 = 消去ブロック\n• ボタンを再度押す：モード解除" },
+            { "Help_RegionEditMode", "【エリア設定モード】\n• 左ドラッグでエリアを選択\n• 右クリック：エリアタイプを選択\n  - 通常エリア（灰色）\n  - 安全エリア（青色）\n  - 戦闘エリア（赤色）\n• ボタンを再度押す：モード解除" },
+
+            // ツールバー / ステータスバー
+            { "Label_JumpCoord", "座標移動:" },
+            { "Button_CopyMoveCmd", "移動コマンドをコピー" },
+            { "Tooltip_CopyMoveCmd", "移動 x y マップid コマンドをクリップボードにコピー" },
+            { "Tooltip_JumpInput", "座標 (X,Y) を入力して Enter または移動をクリック" },
+
+            // Tile コンテキストメニュー
+            { "TileContext_RenumberTileId", "TileId を再番号付け ({0} 個)" },
+            { "TileContext_DeleteAllL4", "すべての Layer4 オブジェクトを削除 ({0} 個)" },
+            { "TileContext_DeleteAllRefs", "すべての参照を削除 ({0})" },
+            { "TileContext_ExportAllTiles", "すべての Tile をエクスポート ({0} 個)" },
+
+            // マップ検証
+            { "Validate_Complete", "検査完了" },
+            { "Validate_NoIssues", "検査完了、異常は見つかりませんでした。" },
+            { "Validate_L6Complete", "すべての S32 の Layer6 は完全です。修復は不要です。" },
+
+            // 透明/エリア編集ステータス
+            { "Status_Layer5EditEnabled", "透明編集モード：左クリックで追加/右クリックで削除" },
+            { "Status_Layer5EditDisabled", "透明編集モードを解除しました" },
+            { "Status_RegionEditEnabled", "エリア設定モード：左クリックでエリア選択、右クリックでタイプ選択" },
+            { "Status_RegionEditDisabled", "エリア設定モードを解除しました" },
+
+            // 選択オーバーレイ
+            { "Overlay_SelectionCount", "{0} セル選択中" },
         };
     }
 }

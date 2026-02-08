@@ -775,6 +775,36 @@ namespace L1MapViewer.Localization
             { "Dialog_TileCleanup_Success", "Cleanup complete! Removed {0} tiles.\n\nBackup file: {1}" },
             { "Dialog_TileCleanup_Failed", "Cleanup failed: {0}" },
             { "Dialog_TileCleanup_NoClient", "Please open a Lineage client first" },
+
+            // Overlay edit mode help text
+            { "Help_Layer5EditMode", "[Transparency Edit Mode]\n• Left click: Select map cell\n• Check [Nearby Groups] on the right\n• Right click: Set transparent/hidden\n  Purple = Semi-transparent block\n  Red = Hidden block\n• Press button again: Exit mode" },
+            { "Help_RegionEditMode", "[Region Edit Mode]\n• Left drag to select area\n• Right click: Choose region type\n  - Normal area (gray)\n  - Safe zone (blue)\n  - Combat zone (red)\n• Press button again: Exit mode" },
+
+            // Toolbar / Status bar
+            { "Label_JumpCoord", "Jump to:" },
+            { "Button_CopyMoveCmd", "Copy move command" },
+            { "Tooltip_CopyMoveCmd", "Copy move x y mapid command to clipboard" },
+            { "Tooltip_JumpInput", "Enter coordinates (X,Y) then press Enter or click Jump" },
+
+            // Tile context menu
+            { "TileContext_RenumberTileId", "Renumber TileId ({0})" },
+            { "TileContext_DeleteAllL4", "Delete all Layer4 objects ({0})" },
+            { "TileContext_DeleteAllRefs", "Delete all references ({0})" },
+            { "TileContext_ExportAllTiles", "Export all Tiles ({0})" },
+
+            // Map validation
+            { "Validate_Complete", "Validation Complete" },
+            { "Validate_NoIssues", "Validation complete, no issues found." },
+            { "Validate_L6Complete", "All S32 Layer6 data is complete. No repair needed." },
+
+            // Transparency/Region edit status messages
+            { "Status_Layer5EditEnabled", "Transparency edit mode: Left click to add / Right click to remove" },
+            { "Status_Layer5EditDisabled", "Transparency edit mode cancelled" },
+            { "Status_RegionEditEnabled", "Region edit mode: Left click to select area, right click to choose type" },
+            { "Status_RegionEditDisabled", "Region edit mode cancelled" },
+
+            // Selection overlay
+            { "Overlay_SelectionCount", "{0} cells selected" },
         };
     }
 }

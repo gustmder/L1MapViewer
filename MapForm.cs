@@ -999,7 +999,7 @@ namespace L1FlyMapViewer
             };
             statusRight.Items.Add(btnCopyMoveCmd);
             statusRight.Items.Add(new Eto.Forms.Label { Text = "|", TextColor = Eto.Drawing.Colors.Gray });
-            statusRight.Items.Add(new Eto.Forms.Label { Text = "跳轉座標:" });
+            statusRight.Items.Add(new Eto.Forms.Label { Text = LocalizationManager.L("Label_JumpCoord") });
             statusRight.Items.Add(txtJump);
             statusRight.Items.Add(btnJump);
 
@@ -4388,7 +4388,7 @@ namespace L1FlyMapViewer
             _document.S32Files.Clear();
             _layer4SpatialIndex.Clear();  // 清空 Layer4 空間索引
             _document.MapId = mapId;
-            lblS32Files.Text = "S32 檔案清單";  // 重置標籤
+            lblS32Files.Text = LocalizationManager.L("Label_S32FileList");  // 重置標籤
 
             // 清除所有快取
             ClearS32BlockCache();
@@ -4476,7 +4476,7 @@ namespace L1FlyMapViewer
             }
 
             // 更新 S32 檔案清單標籤顯示數量
-            lblS32Files.Text = $"S32 檔案清單 ({s32FileItems.Count})";
+            lblS32Files.Text = string.Format(LocalizationManager.L("Label_S32FileListCount"), s32FileItems.Count);
 
             this.toolStripStatusLabel1.Text = $"找到 {s32FileItems.Count} 個 S32 檔案，正在載入...";
 
@@ -6905,7 +6905,7 @@ namespace L1FlyMapViewer
                 // 取消區域編輯模式
                 currentRegionEditMode = RegionEditMode.None;
                 btnRegionEdit.BackgroundColor = SystemColors.Control;
-                this.toolStripStatusLabel1.Text = "已取消區域設置模式";
+                this.toolStripStatusLabel1.Text = LocalizationManager.L("Status_RegionEditDisabled");
                 UpdateRegionHelpLabel();
             }
             else
@@ -6922,7 +6922,7 @@ namespace L1FlyMapViewer
                 UpdateLayer5HelpLabel();
                 // 自動顯示區域覆蓋層
                 EnsureRegionsLayerVisible();
-                this.toolStripStatusLabel1.Text = "區域設置模式：左鍵選取區域，右鍵選擇區域類型";
+                this.toolStripStatusLabel1.Text = LocalizationManager.L("Status_RegionEditEnabled");
                 UpdateRegionHelpLabel();
             }
         }
@@ -7297,7 +7297,7 @@ namespace L1FlyMapViewer
                 // 取消模式
                 _editState.IsLayer5EditMode = false;
                 btnEditLayer5.BackgroundColor = SystemColors.Control;
-                this.toolStripStatusLabel1.Text = "已取消透明編輯模式";
+                this.toolStripStatusLabel1.Text = LocalizationManager.L("Status_Layer5EditDisabled");
                 UpdateLayer5HelpLabel();
                 _logger.Debug("[Layer5Edit] Disabled, calling RenderS32Map");
                 RenderS32Map();  // 重新渲染以移除群組覆蓋層
@@ -7314,7 +7314,7 @@ namespace L1FlyMapViewer
                 // 自動顯示 Layer5 覆蓋層
                 _logger.Debug("[Layer5Edit] Enabled, calling EnsureLayer5Visible");
                 EnsureLayer5Visible();
-                this.toolStripStatusLabel1.Text = "透明編輯模式：左鍵添加/右鍵刪除透明設定";
+                this.toolStripStatusLabel1.Text = LocalizationManager.L("Status_Layer5EditEnabled");
                 UpdateLayer5HelpLabel();
                 _logger.Debug("[Layer5Edit] Calling RenderS32Map");
                 RenderS32Map();  // 重新渲染以顯示群組覆蓋層
@@ -15946,7 +15946,7 @@ namespace L1FlyMapViewer
             ContextMenuStrip menu = new ContextMenuStrip();
 
             // 刪除所有使用此 TileId 的 Layer4 物件
-            ToolStripMenuItem deleteLayer4Item = new ToolStripMenuItem($"刪除所有 Layer4 物件 ({layer4Count} 個)");
+            ToolStripMenuItem deleteLayer4Item = new ToolStripMenuItem(string.Format(LocalizationManager.L("TileContext_DeleteAllL4"), layer4Count));
             deleteLayer4Item.Enabled = layer4Count > 0;
             deleteLayer4Item.Click += (s, ev) =>
             {
@@ -15954,7 +15954,7 @@ namespace L1FlyMapViewer
             };
 
             // 刪除所有使用此 TileId 的引用（Layer1 + Layer2 + Layer4）
-            ToolStripMenuItem deleteAllItem = new ToolStripMenuItem($"刪除所有引用 (L1:{layer1Count} L2:{layer2Count} L4:{layer4Count})");
+            ToolStripMenuItem deleteAllItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("TileContext_DeleteAllRefs"), $"L1:{layer1Count} L2:{layer2Count} L4:{layer4Count}"));
             deleteAllItem.Enabled = totalCount > 0;
             deleteAllItem.Click += (s, ev) =>
             {
@@ -15983,7 +15983,7 @@ namespace L1FlyMapViewer
             };
 
             // 匯出全部 Tile
-            ToolStripMenuItem exportAllItem = new ToolStripMenuItem($"匯出全部 Tile ({lvTiles.Items.Count} 個)");
+            ToolStripMenuItem exportAllItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("TileContext_ExportAllTiles"), lvTiles.Items.Count));
             exportAllItem.Click += (s, ev) =>
             {
                 var allTiles = new List<TileInfo>();
@@ -15998,7 +15998,7 @@ namespace L1FlyMapViewer
 
             // 重新編號 TileId（支援多選）
             int selectedCount = lvTiles.SelectedItems.Count;
-            ToolStripMenuItem renumberItem = new ToolStripMenuItem($"重新編號 TileId ({selectedCount} 個)");
+            ToolStripMenuItem renumberItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("TileContext_RenumberTileId"), selectedCount));
             renumberItem.Enabled = selectedCount > 0;
             renumberItem.Click += (s, ev) =>
             {
@@ -23359,7 +23359,7 @@ namespace L1FlyMapViewer
                 }
                 else
                 {
-                    WinFormsMessageBox.Show("所有 S32 的 Layer6 都已完整，無需修復。", "檢查完成",
+                    WinFormsMessageBox.Show(LocalizationManager.L("Validate_L6Complete"), LocalizationManager.L("Validate_Complete"),
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             };
@@ -27133,8 +27133,8 @@ namespace L1FlyMapViewer
 
             if (!validationResult.HasIssues)
             {
-                WinFormsMessageBox.Show("檢查完成，沒有發現任何異常。",
-                    "檢查完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                WinFormsMessageBox.Show(LocalizationManager.L("Validate_NoIssues"),
+                    LocalizationManager.L("Validate_Complete"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 btnMapValidate.Visible = false;
                 return;
             }
