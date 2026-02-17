@@ -23587,7 +23587,7 @@ namespace L1FlyMapViewer
                 lv.Font = new Font("Consolas", 9);
                 lv.View = View.Details;
                 lv.FullRowSelect = true;
-                lv.CheckBoxes = true;
+                lv.MultiSelect = true;
                 lv.SmallImageList = sprImageList;
                 lv.Columns.Add(LocalizationManager.L("L8_Column_File"), 100);
                 lv.Columns.Add(LocalizationManager.L("L8_Column_Extended"), 45);
@@ -24387,6 +24387,38 @@ namespace L1FlyMapViewer
             };
             resultForm.GetControls().Add(btnDeselectAll);
 
+            // 刪除後重新整理兩個 ListView 的輔助方法
+            void RefreshL8Lists()
+            {
+                s32WithL8All.Clear();
+                s32WithL8Selected.Clear();
+                foreach (var kvp in _document.S32Files)
+                {
+                    string fp = kvp.Key;
+                    S32Data sd = kvp.Value;
+                    if (sd.Layer8 != null && sd.Layer8.Count > 0)
+                    {
+                        var entry = (fp, Path.GetFileName(fp), sd.Layer8.Count, sd.Layer8.ToList());
+                        s32WithL8All.Add(entry);
+                        if (selectedS32Paths.Contains(fp))
+                            s32WithL8Selected.Add(entry);
+                    }
+                }
+                bool filter = chkFilterNoImage.Checked == true;
+                FillListView(lvAll, s32WithL8All, filter);
+                FillListView(lvSelected, s32WithL8Selected, filter);
+
+                int newTotalAll = s32WithL8All.Sum(x => x.count);
+                int newTotalSelected = s32WithL8Selected.Sum(x => x.count);
+                int newExtCount = _document.S32Files.Values.Count(x => x.Layer8HasExtendedData);
+                lblSummary.Text = string.Format(LocalizationManager.L("L8_Summary"), s32WithL8Selected.Count, newTotalSelected, s32WithL8All.Count, newTotalAll, newExtCount);
+                tabAll.Text = string.Format(LocalizationManager.L("L8_TabAll"), s32WithL8All.Count);
+                tabSelected.Text = string.Format(LocalizationManager.L("L8_TabSelected"), s32WithL8Selected.Count);
+
+                ClearS32BlockCache();
+                RenderS32Map();
+            }
+
             Button btnClearSelected = new Button();
             btnClearSelected.Text = LocalizationManager.L("L8_DeleteChecked");
             btnClearSelected.SetLocation(new Point(10, 630));
@@ -24396,15 +24428,15 @@ namespace L1FlyMapViewer
             btnClearSelected.Click += (s, args) =>
             {
                 ListView currentLv = tabControl.SelectedIndex == 0 ? lvAll : lvSelected;
-                int checkedCount = currentLv.CheckedItems.Count;
-                if (checkedCount == 0)
+                int selectedCount = currentLv.SelectedItems.Count;
+                if (selectedCount == 0)
                 {
                     WinFormsMessageBox.Show(LocalizationManager.L("L8_SelectToDelete"), LocalizationManager.L("Title_Info"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
 
                 var confirmResult = WinFormsMessageBox.Show(
-                    string.Format(LocalizationManager.L("L8_ConfirmDeleteChecked"), checkedCount),
+                    string.Format(LocalizationManager.L("L8_ConfirmDeleteChecked"), selectedCount),
                     LocalizationManager.L("L8_ConfirmDeleteTitle"),
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Warning);
@@ -24412,7 +24444,7 @@ namespace L1FlyMapViewer
                 if (confirmResult != DialogResult.Yes) return;
 
                 Dictionary<string, List<Layer8Item>> toRemove = new Dictionary<string, List<Layer8Item>>();
-                foreach (ListViewItem lvi in currentLv.CheckedItems)
+                foreach (ListViewItem lvi in currentLv.SelectedItems)
                 {
                     if (lvi.Tag == null) continue;
                     var (filePath, item) = ((string, Layer8Item))lvi.Tag;
@@ -24438,8 +24470,7 @@ namespace L1FlyMapViewer
                 WinFormsMessageBox.Show(string.Format(LocalizationManager.L("L8_DeleteComplete"), removedCount), LocalizationManager.L("Title_Done"),
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                resultForm.Close();
-                RenderS32Map();
+                RefreshL8Lists();
             };
             resultForm.GetControls().Add(btnClearSelected);
 
@@ -24473,8 +24504,7 @@ namespace L1FlyMapViewer
                 WinFormsMessageBox.Show(string.Format(LocalizationManager.L("L8_DeleteComplete"), removedCount), LocalizationManager.L("Title_Done"),
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                resultForm.Close();
-                RenderS32Map();
+                RefreshL8Lists();
             };
             resultForm.GetControls().Add(btnClearAll);
 
