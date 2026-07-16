@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using L1MapViewer.Converter;
 using L1MapViewer.Reader;
+using L1MapViewer.Sources;
 
 namespace L1MapViewer.Helper
 {
@@ -130,6 +131,10 @@ namespace L1MapViewer.Helper
         /// </summary>
         public bool IsRemaster(int tileId)
         {
+            // Lineage M MTil is converted to 24x24 L1-compatible blocks.
+            if (ClientDataSourceManager.IsLineageM)
+                return false;
+
             // Override 的情況，需要檢查 override 資料
             lock (_overrideLock)
             {
@@ -159,6 +164,9 @@ namespace L1MapViewer.Helper
         /// </summary>
         private List<byte[]> LoadTilFromPak(int tileId)
         {
+            if (ClientDataSourceManager.IsLineageM)
+                return ClientDataSourceManager.LoadTileBlocks(tileId);
+
             string key = $"{tileId}.til";
             byte[] data = L1PakReader.UnPack("Tile", key);
             if (data == null) return null;

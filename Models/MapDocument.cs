@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using L1MapViewer.Other;
+using L1MapViewer.Sources;
 using NLog;
 
 namespace L1MapViewer.Models
@@ -174,19 +175,20 @@ namespace L1MapViewer.Models
 
                 try
                 {
-                    if (!File.Exists(filePath))
+                    if (!ClientDataSourceManager.MapFileExists(filePath))
                         return;
 
+                    byte[] mapData = ClientDataSourceManager.ReadMapFile(filePath);
                     S32Data s32Data;
                     if (segInfo.isS32)
                     {
                         // 解析 .s32 檔案
-                        s32Data = CLI.S32Parser.ParseFile(filePath);
+                        s32Data = CLI.S32Parser.Parse(mapData);
                     }
                     else
                     {
                         // 解析 .seg 檔案
-                        s32Data = CLI.SegParser.ParseFile(filePath);
+                        s32Data = CLI.SegParser.Parse(mapData);
                     }
 
                     if (s32Data != null)
@@ -389,6 +391,9 @@ namespace L1MapViewer.Models
         /// </summary>
         public bool SaveS32File(S32Data s32Data)
         {
+            if (ClientDataSourceManager.IsReadOnly)
+                return false;
+
             if (s32Data == null || string.IsNullOrEmpty(s32Data.FilePath))
                 return false;
 

@@ -22,6 +22,7 @@ using Lin.Helper.Core.Sprite;
 using Lin.Helper.Core.Pak;
 using L1MapViewer.Compatibility;
 using L1MapViewer.Forms;
+using L1MapViewer.Sources;
 using flyworld.eto.component;
 using NLog;
 
@@ -3279,12 +3280,13 @@ namespace L1FlyMapViewer
                         foreach (var entry in mapData.FullFileNameList)
                         {
                             string filePath = entry.Key;
-                            if (!File.Exists(filePath)) continue;
+                            if (!ClientDataSourceManager.MapFileExists(filePath)) continue;
                             if (!entry.Value.isS32) continue;
 
                             try
                             {
-                                var s32Data = S32Parser.ParseFile(filePath);
+                                var s32Data = S32Parser.Parse(
+                                    ClientDataSourceManager.ReadMapFile(filePath));
                                 if (s32Data != null)
                                 {
                                     // 從 L1MapSeg 設定 SegInfo
@@ -3304,7 +3306,7 @@ namespace L1FlyMapViewer
                         foreach (var entry in mapData.FullFileNameList)
                         {
                             string filePath = entry.Key;
-                            if (!File.Exists(filePath)) continue;
+                            if (!ClientDataSourceManager.MapFileExists(filePath)) continue;
                             if (entry.Value.isS32) continue;  // 跳過 S32（已處理）
 
                             // 檢查是否已有同位置的 S32
@@ -3314,7 +3316,7 @@ namespace L1FlyMapViewer
                             try
                             {
                                 // SEG 檔案使用 SegParser（與單一匯出相同）
-                                byte[] segData = File.ReadAllBytes(filePath);
+                                byte[] segData = ClientDataSourceManager.ReadMapFile(filePath);
                                 var s32Data = SegParser.Parse(segData);
                                 if (s32Data != null)
                                 {
@@ -3499,14 +3501,17 @@ namespace L1FlyMapViewer
             LogPerf("[LOADMAP] Start");
 
             // 先在 UI 執行緒檢查路徑是否有效（避免 MessageBox 在背景執行緒彈出）
-            string szMapPath = Path.Combine(selectedPath, "map");
-            _logger.Debug($"[LOADMAP] Checking map path: {szMapPath}");
-            if (!Directory.Exists(szMapPath))
+            ClientDataSourceKind sourceKind = ClientDataSourceManager.Detect(selectedPath);
+            _logger.Debug($"[LOADMAP] Checking source path: {selectedPath}, kind={sourceKind}");
+            if (sourceKind == ClientDataSourceKind.Unknown)
             {
-                _logger.Warn($"[LOADMAP] Map path not found: {szMapPath}");
-                WinFormsMessageBox.Show($"錯誤的天堂路徑\n找不到 map 資料夾：{szMapPath}");
+                _logger.Warn($"[LOADMAP] Unsupported source path: {selectedPath}");
+                WinFormsMessageBox.Show(
+                    $"錯誤的天堂路徑\n找不到 map 資料夾，或 Map*.dat / Tile*.dat：{selectedPath}");
                 return;
             }
+
+            Share.LineagePath = selectedPath;
 
             // 切換資料夾時清除所有快取（不同資料夾的 tile/idx 內容不同）
             _renderCache.TilFileCache.Clear();
@@ -3515,6 +3520,8 @@ namespace L1FlyMapViewer
             cachedAggregatedTiles.Clear();
             Share.IdxDataList.Clear();  // 清除 idx 快取，強制重新讀取新資料夾的 idx
             Share.MapDataList.Clear();  // 清除地圖快取，強制重新讀取新資料夾的地圖
+            Share.Zone3descList.Clear();
+            Share.ZoneList.Clear();
             TileHashManager.ClearCache();  // 清除 Tile MD5 快取
             _listTilMaxId = null;       // 清除 list.til 快取
             TileProvider.Instance.ClearAllOverrides();  // 清除測 til override
@@ -3638,6 +3645,7 @@ namespace L1FlyMapViewer
                     }
 
                     this.toolStripStatusLabel2.Text = $"Maps={dictionary.Count}, Files={L1MapHelper.LastTotalFileCount}";
+                    btnSaveS32.Enabled = !ClientDataSourceManager.IsReadOnly;
                     this.toolStripStatusLabel1.Text = $"載入完成 - Zone3desc:{L1MapHelper.LastLoadZone3descMs}ms, ZoneXml:{L1MapHelper.LastLoadZoneXmlMs}ms, 掃描目錄:{L1MapHelper.LastScanDirectoriesMs}ms, UI:{uiMs}ms (總計:{readMs + uiMs}ms)";
                     Utils.ShowProgressBar(false, this);
                     LogPerf("[LOADMAP-UI] Done");
@@ -3902,18 +3910,19 @@ namespace L1FlyMapViewer
                         string filePath = kvp.Key;
                         var segInfo = kvp.Value;
 
-                        if (File.Exists(filePath))
+                        if (ClientDataSourceManager.MapFileExists(filePath))
                         {
                             S32Data s32Data = null;
+                            byte[] mapData = ClientDataSourceManager.ReadMapFile(filePath);
                             if (segInfo.isS32)
                             {
                                 // 解析 .s32 檔案
-                                s32Data = S32Parser.ParseFile(filePath);
+                                s32Data = S32Parser.Parse(mapData);
                             }
                             else
                             {
                                 // 解析 .seg 檔案
-                                s32Data = SegParser.ParseFile(filePath);
+                                s32Data = SegParser.Parse(mapData);
                             }
 
                             if (s32Data != null)
@@ -4581,7 +4590,7 @@ namespace L1FlyMapViewer
                 {
                     try
                     {
-                        byte[] data = File.ReadAllBytes(item.FilePath);
+                        byte[] data = ClientDataSourceManager.ReadMapFile(item.FilePath);
                         fileDataList.Add((item, data));
                     }
                     catch (Exception ex)
@@ -4644,6 +4653,9 @@ namespace L1FlyMapViewer
                 loadedCount = parsedResults.Count;
 
                 LogPerf($"[S32-LOAD] {loadedCount} files, read={totalFileReadMs}ms (seq), parse={totalParseMs}ms (parallel)");
+                DebugLog.Log(
+                    $"[LOAD-S32-BG] Complete: map={mapId}, files={loadedCount}, " +
+                    $"read={totalFileReadMs}ms, parse={totalParseMs}ms");
 
                 // 建立空間索引（用於快速查找 worldRect 內的 S32）
                 BuildS32SpatialIndex();
@@ -5061,6 +5073,9 @@ namespace L1FlyMapViewer
         // 刪除 S32 檔案（危險操作）
         private void DeleteS32File(S32FileItem item)
         {
+            if (!EnsureWritableClient("刪除 S32"))
+                return;
+
             if (item == null || !_document.S32Files.ContainsKey(item.FilePath))
             {
                 WinFormsMessageBox.Show("找不到指定的 S32 檔案", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -5131,6 +5146,9 @@ namespace L1FlyMapViewer
         // 刪除已勾選的所有 S32 檔案（危險操作）
         private void DeleteCheckedS32Files()
         {
+            if (!EnsureWritableClient("刪除 S32"))
+                return;
+
             // 收集已勾選的項目
             var checkedItems = new List<S32FileItem>();
             for (int i = 0; i < lstS32Files.Items.Count; i++)
@@ -5419,6 +5437,9 @@ namespace L1FlyMapViewer
         // 匯入 fs32 地圖包到當前地圖
         private void ImportFs32ToCurrentMap()
         {
+            if (!EnsureWritableClient("匯入 FS32"))
+                return;
+
             if (string.IsNullOrEmpty(_document.MapId))
             {
                 WinFormsMessageBox.Show("請先載入地圖", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -5703,6 +5724,9 @@ namespace L1FlyMapViewer
         // 在指定位置匯入 fs32
         private void ImportFs32AtPosition(Point worldPos, Struct.L1Map currentMap)
         {
+            if (!EnsureWritableClient("匯入 FS32"))
+                return;
+
             if (string.IsNullOrEmpty(_document.MapId))
             {
                 WinFormsMessageBox.Show("請先載入地圖", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -16205,7 +16229,9 @@ namespace L1FlyMapViewer
                                 {
                                     // 載入 til 檔案
                                     string key = $"{tileId}.til";
-                                    byte[] data = L1PakReader.UnPack("Tile", key);
+                                    byte[] data = ClientDataSourceManager.IsLineageM
+                                        ? ClientDataSourceManager.ReadTileFile(tileId)
+                                        : L1PakReader.UnPack("Tile", key);
                                     if (data == null)
                                     {
                                         errorCount++;
@@ -16304,6 +16330,9 @@ namespace L1FlyMapViewer
         // 重新編號 TileId
         private void RenumberTileIds(List<TileInfo> tiles)
         {
+            if (!EnsureWritableClient("重新編號 Tile"))
+                return;
+
             if (tiles.Count == 0) return;
 
             // 按原始 TileId 排序
@@ -17047,11 +17076,8 @@ namespace L1FlyMapViewer
         {
             try
             {
-                string key = $"{tileId}.til";
-                byte[] data = L1PakReader.UnPack("Tile", key);
-                if (data == null) return CreatePlaceholderThumbnail(tileId);
-
-                var tilArray = L1Til.Parse(data);
+                var tilArray = TileProvider.Instance.GetTilArray(tileId);
+                if (tilArray == null) return CreatePlaceholderThumbnail(tileId);
                 if (indexId >= tilArray.Count) return CreatePlaceholderThumbnail(tileId);
 
                 // 繪製實際的 tile 圖片（放大版本）
@@ -17427,9 +17453,25 @@ namespace L1FlyMapViewer
             return panel;
         }
 
+        private bool EnsureWritableClient(string operation)
+        {
+            if (!ClientDataSourceManager.IsReadOnly)
+                return true;
+
+            WinFormsMessageBox.Show(
+                $"Lineage M DAT 目前以唯讀模式開啟，無法執行「{operation}」。\n尚未支援寫回 DAT。",
+                "唯讀資料來源",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return false;
+        }
+
         // 保存 S32 按鈕點擊事件 - 保存所有被修改的 S32 檔案和 MarketRegion
         private void btnSaveS32_Click(object sender, EventArgs e)
         {
+            if (!EnsureWritableClient("儲存 S32"))
+                return;
+
             // 檢查是否按住 Shift 鍵（跳過 GroupId 重編）
             bool skipReindex = (ControlCompat.ModifierKeys & Keys.Shift) == Keys.Shift;
 
@@ -17600,6 +17642,9 @@ namespace L1FlyMapViewer
         // 保存 S32 檔案（安全模式：只更新修改過的部分）
         private void SaveS32File(string filePath, bool skipReindex = false)
         {
+            if (ClientDataSourceManager.IsReadOnly)
+                throw new InvalidOperationException("Lineage M DAT is read-only");
+
             // 從字典中取得對應的 S32Data
             if (!_document.S32Files.ContainsKey(filePath))
             {
@@ -18411,6 +18456,9 @@ namespace L1FlyMapViewer
         // 匯入地圖包到新地圖選單點擊事件
         private void importFs32ToNewMapToolStripMenuItem_Click(object sender, EventArgs e)
         {
+            if (!EnsureWritableClient("匯入新地圖"))
+                return;
+
             // 檢查是否已開啟天堂客戶端
             if (string.IsNullOrEmpty(Share.LineagePath) || !Directory.Exists(Share.LineagePath))
             {
@@ -18615,6 +18663,9 @@ namespace L1FlyMapViewer
         // 使用指定檔案匯入 fs32 到當前地圖
         private void ImportFs32ToCurrentMapWithFile(string fs32FilePath)
         {
+            if (!EnsureWritableClient("匯入 FS32"))
+                return;
+
             if (string.IsNullOrEmpty(_document.MapId))
             {
                 WinFormsMessageBox.Show("請先載入地圖", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -21606,7 +21657,9 @@ namespace L1FlyMapViewer
                     {
                         foreach (int tileId in usedTileIds)
                         {
-                            byte[] tilData = L1PakReader.UnPack("Tile", $"{tileId}.til");
+                            byte[] tilData = ClientDataSourceManager.IsLineageM
+                                ? ClientDataSourceManager.ReadTileFile(tileId)
+                                : L1PakReader.UnPack("Tile", $"{tileId}.til");
                             if (tilData != null)
                             {
                                 fs3p.Tiles[tileId] = new TilePackageData
@@ -26574,6 +26627,7 @@ namespace L1FlyMapViewer
         private void UpdateMapValidateButton()
         {
             // 先隱藏按鈕，背景檢查完成後再更新
+            _validateFlashTimer?.Stop();
             btnMapValidate.Visible = false;
 
             Task.Run(() =>
@@ -26597,6 +26651,7 @@ namespace L1FlyMapViewer
                     btnMapValidate.Visible = validationResult.HasIssues;
                     if (validationResult.HasIssues)
                     {
+                        bool isReadOnlyValidation = ClientDataSourceManager.IsReadOnly;
                         var tooltipParts = new List<string>();
                         if (validationResult.InvalidL5Items.Count > 0)
                             tooltipParts.Add($"Layer5異常: {validationResult.InvalidL5Items.Count}");
@@ -26612,10 +26667,14 @@ namespace L1FlyMapViewer
                             tooltipParts.Add($"損壞Tile: {validationResult.CorruptedTiles.Count}");
                         if (validationResult.DiscontinuousGroupIds.Count > 0)
                             tooltipParts.Add(string.Format(LocalizationManager.L("AbnormalCheck_GroupIdTooltip"), validationResult.DiscontinuousGroupIds.Count));
-                        toolTip1.SetToolTip(btnMapValidate, $"發現異常: {string.Join(", ", tooltipParts)}");
+                        string tooltipPrefix = isReadOnlyValidation
+                            ? "Lineage M 唯讀檢查（僅提醒）"
+                            : "發現異常";
+                        toolTip1.SetToolTip(btnMapValidate, $"{tooltipPrefix}: {string.Join(", ", tooltipParts)}");
 
                         // 閃爍提示
-                        StartValidateFlash();
+                        if (!isReadOnlyValidation)
+                            StartValidateFlash();
                     }
                 });
             });
@@ -26929,19 +26988,26 @@ namespace L1FlyMapViewer
 
             // 建立可用 TileId 的 HashSet
             var availableTileIds = new HashSet<int>();
-            L1PakReader.UnPack("Tile", "1.til");  // 觸發載入
-            if (Share.IdxDataList.TryGetValue("Tile", out var tileIdx))
+            if (!ClientDataSourceManager.IsLineageM)
             {
-                foreach (var key in tileIdx.Keys)
+                L1PakReader.UnPack("Tile", "1.til");  // 觸發載入
+                if (Share.IdxDataList.TryGetValue("Tile", out var tileIdx))
                 {
-                    string name = Path.GetFileNameWithoutExtension(key);
-                    if (int.TryParse(name, out int tileId))
-                        availableTileIds.Add(tileId);
+                    foreach (var key in tileIdx.Keys)
+                    {
+                        string name = Path.GetFileNameWithoutExtension(key);
+                        if (int.TryParse(name, out int tileId))
+                            availableTileIds.Add(tileId);
+                    }
                 }
             }
 
-            if (availableTileIds.Count == 0)
+            if (!ClientDataSourceManager.IsLineageM && availableTileIds.Count == 0)
                 return invalidTiles;
+
+            bool TileExists(int tileId) => ClientDataSourceManager.IsLineageM
+                ? ClientDataSourceManager.TileExists(tileId)
+                : availableTileIds.Contains(tileId);
 
             foreach (var kvp in s32Files)
             {
@@ -26953,7 +27019,7 @@ namespace L1FlyMapViewer
                     for (int x = 0; x < 128; x++)
                     {
                         var cell = s32Data.Layer1[y, x];
-                        if (cell != null && cell.TileId > 0 && !availableTileIds.Contains(cell.TileId))
+                        if (cell != null && cell.TileId > 0 && !TileExists(cell.TileId))
                             invalidTiles.Add((kvp.Key, "Layer1", cell.TileId));
                     }
                 }
@@ -26961,14 +27027,14 @@ namespace L1FlyMapViewer
                 // Layer2
                 foreach (var item in s32Data.Layer2)
                 {
-                    if (item.TileId > 0 && !availableTileIds.Contains(item.TileId))
+                    if (item.TileId > 0 && !TileExists(item.TileId))
                         invalidTiles.Add((kvp.Key, "Layer2", item.TileId));
                 }
 
                 // Layer4
                 foreach (var obj in s32Data.Layer4)
                 {
-                    if (obj.TileId > 0 && !availableTileIds.Contains(obj.TileId))
+                    if (obj.TileId > 0 && !TileExists(obj.TileId))
                         invalidTiles.Add((kvp.Key, "Layer4", obj.TileId));
                 }
             }
@@ -27054,20 +27120,23 @@ namespace L1FlyMapViewer
             // Fast mode: 從 Tile 索引建立可用 TileId 的 HashSet
             var availableTileIds = new HashSet<int>();
 
-            // 觸發載入 Tile 索引（如果尚未載入）
-            L1PakReader.UnPack("Tile", "1.til");
-
-            if (Share.IdxDataList.TryGetValue("Tile", out var tileIdx))
+            if (!ClientDataSourceManager.IsLineageM)
             {
-                foreach (var key in tileIdx.Keys)
+                // 觸發載入 Tile 索引（如果尚未載入）
+                L1PakReader.UnPack("Tile", "1.til");
+
+                if (Share.IdxDataList.TryGetValue("Tile", out var tileIdx))
                 {
-                    // key 格式是 "123.til"
-                    if (key.EndsWith(".til"))
+                    foreach (var key in tileIdx.Keys)
                     {
-                        string numStr = key.Substring(0, key.Length - 4);
-                        if (int.TryParse(numStr, out int tileId))
+                        // key 格式是 "123.til"
+                        if (key.EndsWith(".til"))
                         {
-                            availableTileIds.Add(tileId);
+                            string numStr = key.Substring(0, key.Length - 4);
+                            if (int.TryParse(numStr, out int tileId))
+                            {
+                                availableTileIds.Add(tileId);
+                            }
                         }
                     }
                 }
@@ -27079,7 +27148,10 @@ namespace L1FlyMapViewer
                 reason = string.Empty;
                 if (tileId <= 0) return true;  // TileId = 0 表示空格子，不算無效
 
-                if (!availableTileIds.Contains(tileId))
+                bool exists = ClientDataSourceManager.IsLineageM
+                    ? ClientDataSourceManager.TileExists(tileId)
+                    : availableTileIds.Contains(tileId);
+                if (!exists)
                 {
                     reason = "Til檔案不存在";
                     return false;
@@ -27257,6 +27329,17 @@ namespace L1FlyMapViewer
         // 檢查 Layer5 異常和無效 TileId
         private void btnMapValidate_Click(object sender, EventArgs e)
         {
+            bool isReadOnlyValidation = ClientDataSourceManager.IsReadOnly;
+
+            void ConfigureValidationMutationButton(Button button)
+            {
+                if (!isReadOnlyValidation)
+                    return;
+
+                button.Enabled = false;
+                toolTip1.SetToolTip(button, "Lineage M 為唯讀資料來源；此檢查僅供提醒，不會修正或寫回 DAT。");
+            }
+
             // 使用共用的驗證方法
             var validationResult = RunAllValidationChecks();
 
@@ -27273,7 +27356,11 @@ namespace L1FlyMapViewer
 
             if (!validationResult.HasIssues)
             {
-                WinFormsMessageBox.Show(LocalizationManager.L("Validate_NoIssues"),
+                string noIssuesMessage = LocalizationManager.L("Validate_NoIssues");
+                if (isReadOnlyValidation)
+                    noIssuesMessage += "\n\nLineage M 目前為唯讀檢查；結果僅供提醒，不會寫回 DAT。";
+
+                WinFormsMessageBox.Show(noIssuesMessage,
                     LocalizationManager.L("Validate_Complete"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 btnMapValidate.Visible = false;
                 return;
@@ -27337,7 +27424,10 @@ namespace L1FlyMapViewer
             }
 
             // 顯示確認對話框
-            string message = $"{LocalizationManager.L("AbnormalCheck_FoundIssues")}\n\n{string.Join("\n", msgParts)}\n\n{LocalizationManager.L("AbnormalCheck_ViewDetails")}";
+            string readOnlyNotice = isReadOnlyValidation
+                ? "【Lineage M 唯讀檢查】以下結果僅供提醒，不會修正或寫回 DAT。\n\n"
+                : string.Empty;
+            string message = $"{readOnlyNotice}{LocalizationManager.L("AbnormalCheck_FoundIssues")}\n\n{string.Join("\n", msgParts)}\n\n{LocalizationManager.L("AbnormalCheck_ViewDetails")}";
             var confirmResult = WinFormsMessageBox.Show(message, LocalizationManager.L("AbnormalCheck_Title"),
                 MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
 
@@ -27346,22 +27436,40 @@ namespace L1FlyMapViewer
 
             // 顯示清單讓使用者選擇要清除的項目
             Form resultForm = new Form();
-            resultForm.Text = LocalizationManager.L("AbnormalCheck_Title");
+            resultForm.Text = isReadOnlyValidation
+                ? $"{LocalizationManager.L("AbnormalCheck_Title")} - Lineage M 唯讀檢查"
+                : LocalizationManager.L("AbnormalCheck_Title");
             resultForm.Size = new Size(850, 600);
             resultForm.SetFormBorderStyle(FormBorderStyle.Sizable);
             resultForm.SetStartPosition(FormStartPosition.CenterParent);
 
             // 使用 TabControl 分頁顯示
             TabControl tabControl = new TabControl();
-            tabControl.SetLocation(new Point(10, 10));
+            int tabTop = isReadOnlyValidation ? 50 : 10;
+            int tabHeight = isReadOnlyValidation ? 490 : 530;
+            if (isReadOnlyValidation)
+            {
+                Label lblReadOnlyNotice = new Label
+                {
+                    Text = "Lineage M 唯讀檢查：結果僅供提醒；修復功能已停用，不會寫回 DAT。",
+                    BackgroundColor = Colors.LightYellow,
+                    TextColor = Colors.DarkOrange
+                };
+                lblReadOnlyNotice.SetLocation(new Point(10, 10));
+                lblReadOnlyNotice.Size = new Size(820, 30);
+                lblReadOnlyNotice.SetAnchor(AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right);
+                resultForm.GetControls().Add(lblReadOnlyNotice);
+            }
+
+            tabControl.SetLocation(new Point(10, tabTop));
             // 使用固定初始大小，Anchor 會在 Form 顯示後自動調整
-            tabControl.Size = new Size(820, 530);
+            tabControl.Size = new Size(820, tabHeight);
             tabControl.SetAnchor(AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right);
             resultForm.GetControls().Add(tabControl);
 
             // TabPage 內容的參考大小（使用 TabControl 大小減去邊框）
             const int tabContentWidth = 800;
-            const int tabContentHeight = 480;
+            int tabContentHeight = isReadOnlyValidation ? 440 : 480;
 
             // ===== Tab 1: Layer5 異常 =====
             if (invalidL5Items.Count > 0)
@@ -27406,6 +27514,7 @@ namespace L1FlyMapViewer
                 pnlL5Buttons.GetControls().Add(btnL5DeselectAll);
 
                 Button btnL5ClearSelected = new Button { Text = LocalizationManager.L("AbnormalCheck_ClearSelected"), Location = new Point(0, 35), Size = new Size(100, 30), BackColor = WinFormsColors.LightCoral };
+                ConfigureValidationMutationButton(btnL5ClearSelected);
                 btnL5ClearSelected.Click += (s, args) =>
                 {
                     if (clbL5Items.CheckedIndices.Count == 0) { WinFormsMessageBox.Show(LocalizationManager.L("AbnormalCheck_PleaseSelectItems"), LocalizationManager.L("AbnormalCheck_Notice")); return; }
@@ -27433,6 +27542,7 @@ namespace L1FlyMapViewer
                 pnlL5Buttons.GetControls().Add(btnL5ClearSelected);
 
                 Button btnL5ClearAll = new Button { Text = LocalizationManager.L("AbnormalCheck_ClearAll"), Location = new Point(110, 35), Size = new Size(100, 30), BackColor = WinFormsColors.Salmon };
+                ConfigureValidationMutationButton(btnL5ClearAll);
                 btnL5ClearAll.Click += (s, args) =>
                 {
                     if (WinFormsMessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ConfirmClearAll"), invalidL5Items.Count), LocalizationManager.L("AbnormalCheck_ConfirmDeleteAll"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
@@ -27518,6 +27628,7 @@ namespace L1FlyMapViewer
                 pnlTileButtons.GetControls().Add(btnFilterL4);
 
                 Button btnTileClearSelected = new Button { Text = LocalizationManager.L("AbnormalCheck_ClearSelected"), Location = new Point(0, 35), Size = new Size(100, 30), BackColor = WinFormsColors.LightCoral };
+                ConfigureValidationMutationButton(btnTileClearSelected);
                 btnTileClearSelected.Click += (s, args) =>
                 {
                     if (clbTileItems.CheckedIndices.Count == 0) { WinFormsMessageBox.Show(LocalizationManager.L("AbnormalCheck_PleaseSelectItems"), LocalizationManager.L("AbnormalCheck_Notice")); return; }
@@ -27555,6 +27666,7 @@ namespace L1FlyMapViewer
                 pnlTileButtons.GetControls().Add(btnTileClearSelected);
 
                 Button btnTileClearAll = new Button { Text = LocalizationManager.L("AbnormalCheck_ClearAll"), Location = new Point(110, 35), Size = new Size(100, 30), BackColor = WinFormsColors.Salmon };
+                ConfigureValidationMutationButton(btnTileClearAll);
                 btnTileClearAll.Click += (s, args) =>
                 {
                     if (WinFormsMessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ConfirmClearAllTiles"), invalidTileItems.Count),
@@ -27633,6 +27745,7 @@ namespace L1FlyMapViewer
                 pnlL8Buttons.GetControls().Add(btnL8DeselectAll);
 
                 Button btnL8ResetSelected = new Button { Text = LocalizationManager.L("AbnormalCheck_ResetSelectedFormat"), Location = new Point(0, 35), Size = new Size(150, 30), BackColor = WinFormsColors.LightCoral };
+                ConfigureValidationMutationButton(btnL8ResetSelected);
                 btnL8ResetSelected.Click += (s, args) =>
                 {
                     if (clbL8Items.CheckedIndices.Count == 0) { WinFormsMessageBox.Show(LocalizationManager.L("AbnormalCheck_PleaseSelectReset"), LocalizationManager.L("AbnormalCheck_Notice")); return; }
@@ -27663,6 +27776,7 @@ namespace L1FlyMapViewer
                 pnlL8Buttons.GetControls().Add(btnL8ResetSelected);
 
                 Button btnL8ResetAll = new Button { Text = LocalizationManager.L("AbnormalCheck_ResetAllFormat"), Location = new Point(160, 35), Size = new Size(150, 30), BackColor = WinFormsColors.Salmon };
+                ConfigureValidationMutationButton(btnL8ResetAll);
                 btnL8ResetAll.Click += (s, args) =>
                 {
                     if (WinFormsMessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ConfirmResetAll"), layer8ExtendedS32.Count),
@@ -27733,6 +27847,7 @@ namespace L1FlyMapViewer
                 pnlOverLimitButtons.GetControls().Add(lblSuggestion);
 
                 Button btnExpandLimit = new Button { Text = $"擴充上限至 {suggestedLimit}", Location = new Point(0, 30), Size = new Size(180, 30), BackColor = Colors.LightGreen };
+                ConfigureValidationMutationButton(btnExpandLimit);
                 btnExpandLimit.Click += (s, args) =>
                 {
                     if (WinFormsMessageBox.Show($"確定要將 list.til 上限從 {tileLimit} 擴充至 {suggestedLimit} 嗎？",
@@ -27753,6 +27868,7 @@ namespace L1FlyMapViewer
                 pnlOverLimitButtons.GetControls().Add(btnExpandLimit);
 
                 Button btnExpandCustom = new Button { Text = "自訂上限...", Location = new Point(190, 30), Size = new Size(100, 30) };
+                ConfigureValidationMutationButton(btnExpandCustom);
                 btnExpandCustom.Click += (s, args) =>
                 {
                     string input = Microsoft.VisualBasic.Interaction.InputBox(
@@ -27835,6 +27951,7 @@ namespace L1FlyMapViewer
                 pnlL5TypeButtons.GetControls().Add(btnL5TypeDeselectAll);
 
                 Button btnL5TypeClearSelected = new Button { Text = "清除勾選項目", Location = new Point(0, 35), Size = new Size(100, 30), BackColor = WinFormsColors.LightCoral };
+                ConfigureValidationMutationButton(btnL5TypeClearSelected);
                 btnL5TypeClearSelected.Click += (s, args) =>
                 {
                     if (clbL5TypeItems.CheckedIndices.Count == 0) { WinFormsMessageBox.Show("請先勾選要清除的項目", "提示"); return; }
@@ -27863,6 +27980,7 @@ namespace L1FlyMapViewer
                 pnlL5TypeButtons.GetControls().Add(btnL5TypeClearSelected);
 
                 Button btnL5TypeClearAll = new Button { Text = "清除全部", Location = new Point(110, 35), Size = new Size(100, 30), BackColor = WinFormsColors.Salmon };
+                ConfigureValidationMutationButton(btnL5TypeClearAll);
                 btnL5TypeClearAll.Click += (s, args) =>
                 {
                     if (WinFormsMessageBox.Show($"確定要清除全部 {invalidL5TypeItems.Count} 個無效 Type 的 L5 項目？", "確認全部刪除", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
@@ -27989,6 +28107,7 @@ namespace L1FlyMapViewer
                 pnlGroupIdButtons.GetControls().Add(btnGroupIdDeselectAll);
 
                 Button btnFixSelected = new Button { Text = LocalizationManager.L("AbnormalCheck_FixSelected"), Location = new Point(0, 35), Size = new Size(100, 30), BackColor = WinFormsColors.LightGreen };
+                ConfigureValidationMutationButton(btnFixSelected);
                 btnFixSelected.Click += (s, args) =>
                 {
                     if (clbGroupIdItems.CheckedIndices.Count == 0)
@@ -28022,6 +28141,7 @@ namespace L1FlyMapViewer
                 pnlGroupIdButtons.GetControls().Add(btnFixSelected);
 
                 Button btnFixAll = new Button { Text = LocalizationManager.L("AbnormalCheck_FixAll"), Location = new Point(110, 35), Size = new Size(100, 30), BackColor = WinFormsColors.PaleGreen };
+                ConfigureValidationMutationButton(btnFixAll);
                 btnFixAll.Click += (s, args) =>
                 {
                     if (WinFormsMessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ConfirmFixAll"), discontinuousGroupIds.Count), LocalizationManager.L("AbnormalCheck_ConfirmFixAll_Title"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
@@ -28061,6 +28181,12 @@ namespace L1FlyMapViewer
 
             resultForm.ShowDialog(this);
 
+            if (isReadOnlyValidation)
+            {
+                UpdateMapValidateButton();
+                return;
+            }
+
             // 修復後立即重新檢查，如果還有問題就警告使用者
             var recheckResult = RunAllValidationChecks();
             if (recheckResult.HasIssues)
@@ -28090,6 +28216,9 @@ namespace L1FlyMapViewer
         // 清理未使用的 Tiles（危險操作）
         private void menuCleanupTiles_Click(object sender, EventArgs e)
         {
+            if (!EnsureWritableClient("清理 Tile"))
+                return;
+
             // 檢查是否已開啟客戶端
             if (string.IsNullOrEmpty(Share.LineagePath))
             {
@@ -28559,6 +28688,9 @@ namespace L1FlyMapViewer
 
         private void btnToolAddS32_Click(object sender, EventArgs e)
         {
+            if (!EnsureWritableClient("新增 S32"))
+                return;
+
             // 檢查是否已載入地圖
             if (string.IsNullOrEmpty(_document.MapId) || !Share.MapDataList.ContainsKey(_document.MapId))
             {
@@ -28936,6 +29068,9 @@ namespace L1FlyMapViewer
 
         private void batchDeleteTileToolStripMenuItem_Click(object sender, EventArgs e)
         {
+            if (!EnsureWritableClient("批次刪除 Tile"))
+                return;
+
             // 檢查是否已載入客戶端
             if (Share.MapDataList == null || Share.MapDataList.Count == 0)
             {

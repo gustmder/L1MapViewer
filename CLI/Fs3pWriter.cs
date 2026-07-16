@@ -10,6 +10,7 @@ using System.Text.Json;
 using L1MapViewer.Helper;
 using L1MapViewer.Models;
 using L1MapViewer.Reader;
+using L1MapViewer.Sources;
 
 namespace L1MapViewer.CLI
 {
@@ -417,7 +418,9 @@ namespace L1MapViewer.CLI
             {
                 foreach (int tileId in usedTileIds)
                 {
-                    byte[] tilData = L1PakReader.UnPack("Tile", $"{tileId}.til");
+                    byte[] tilData = ClientDataSourceManager.IsLineageM
+                        ? ClientDataSourceManager.ReadTileFile(tileId)
+                        : L1PakReader.UnPack("Tile", $"{tileId}.til");
                     if (tilData != null)
                     {
                         fs3p.Tiles[tileId] = new TilePackageData

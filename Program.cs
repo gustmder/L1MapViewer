@@ -5,6 +5,7 @@ using L1MapViewer;
 using L1MapViewer.CLI;
 using L1MapViewer.Helper;
 using L1MapViewer.Localization;
+using L1MapViewer.Sources;
 using System.Diagnostics;
 using Eto;
 using Eto.Forms;
@@ -58,16 +59,15 @@ static class Program
         if (args.Length > 0 && Directory.Exists(args[0]))
         {
             string folderPath = args[0];
-            // 檢查是否為有效的天堂資料夾（包含 map 子資料夾）
-            string mapFolder = Path.Combine(folderPath, "map");
-            if (Directory.Exists(mapFolder))
+            // 支援傳統 map/ + IDX/PAK 客戶端與 Lineage M DAT 資料夾
+            if (ClientDataSourceManager.IsSupportedFolder(folderPath))
             {
                 L1MapViewer.Share.LineagePath = folderPath;
                 DebugLog.Log($"[PROGRAM] Set LineagePath from args: {folderPath}");
             }
             else
             {
-                DebugLog.Log($"[PROGRAM] Folder doesn't contain 'map' subfolder: {folderPath}");
+                DebugLog.Log($"[PROGRAM] Unsupported Lineage data folder: {folderPath}");
             }
         }
 
@@ -203,6 +203,10 @@ static class Program
             CrashReporter.ReportException(ex, "Application.Run");
             DebugLog.Log($"[PROGRAM] Fatal exception in Application.Run: {ex}");
             throw;
+        }
+        finally
+        {
+            ClientDataSourceManager.DisposeCurrent();
         }
     }
 

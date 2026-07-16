@@ -18,6 +18,7 @@ using Eto.Forms;
 using Eto.Drawing;
 using System.Xml;
 using L1FlyMapViewer;
+using L1MapViewer.Sources;
 using static L1MapViewer.Other.Struct;
 
 namespace L1MapViewer.Helper {
@@ -56,6 +57,17 @@ namespace L1MapViewer.Helper {
             if (string.IsNullOrEmpty(szSelectedPath)) {
                 DebugLog.Log("[L1MapHelper.Read] Empty path, returning cached list");
                 return Share.MapDataList;
+            }
+
+            ClientDataSourceManager.EnsureOpen(szSelectedPath);
+            if (ClientDataSourceManager.IsLineageM) {
+                _isReading = true;
+                try {
+                    return ReadLineageM(ClientDataSourceManager.LineageMSource);
+                }
+                finally {
+                    _isReading = false;
+                }
             }
 
             //確認路徑 (使用 Path.Combine 支援跨平台)
@@ -240,6 +252,86 @@ namespace L1MapViewer.Helper {
             finally {
                 _isReading = false;
             }
+        }
+
+        /// <summary>
+        /// Read map metadata from the virtual Map/*.s32 entries in Lineage M DAT shards.
+        /// The actual S32 bytes remain lazy and are read when a map is selected.
+        /// </summary>
+        private static Dictionary<string, L1Map> ReadLineageM(LineageMDataSource source) {
+            if (source == null)
+                throw new InvalidOperationException("Lineage M data source is not open");
+
+            DebugLog.Log($"[L1MapHelper.ReadLineageM] Start: {source.RootPath}");
+            var stopwatch = Stopwatch.StartNew();
+
+            isRemastered = false;
+            LastLoadZone3descMs = 0;
+            LastLoadZoneXmlMs = 0;
+
+            // Classic zone metadata must not leak into an M client opened afterwards.
+            Share.Zone3descList.Clear();
+            Share.ZoneList.Clear();
+
+            int totalFileCount = 0;
+            if (Share.MapDataList.Count == 0) {
+                foreach (var mapGroup in source.MapFiles.GroupBy(
+                    file => file.MapId,
+                    StringComparer.OrdinalIgnoreCase)) {
+                    string mapId = mapGroup.Key;
+                    var map = new L1Map(mapId, $"Map/{mapId}") {
+                        szName = getDescribe(mapId)
+                    };
+
+                    foreach (var resource in mapGroup) {
+                        string blockName = Path.GetFileNameWithoutExtension(resource.FileName);
+                        if (blockName.Length != 8 || !Regex.IsMatch(blockName, "^[a-fA-F0-9]{8}$"))
+                            continue;
+
+                        int blockX = Convert.ToInt32(blockName.Substring(0, 4), 16);
+                        int blockY = Convert.ToInt32(blockName.Substring(4, 4), 16);
+
+                        map.nMinBlockX = Math.Min(map.nMinBlockX, blockX);
+                        map.nMinBlockY = Math.Min(map.nMinBlockY, blockY);
+                        map.nMaxBlockX = Math.Max(map.nMaxBlockX, blockX);
+                        map.nMaxBlockY = Math.Max(map.nMaxBlockY, blockY);
+
+                        map.FullFileNameList[resource.LogicalPath] =
+                            new L1MapSeg(blockX, blockY, resource.IsS32);
+                        totalFileCount++;
+                    }
+
+                    if (map.FullFileNameList.Count == 0)
+                        continue;
+
+                    map.nBlockCountX = map.nMaxBlockX - map.nMinBlockX + 1;
+                    map.nBlockCountY = map.nMaxBlockY - map.nMinBlockY + 1;
+                    map.nLinLengthX = map.nBlockCountX * 64;
+                    map.nLinLengthY = map.nBlockCountY * 64;
+                    map.nLinEndX = (map.nMaxBlockX - 0x7FFF) * 64 + 0x7FFF;
+                    map.nLinEndY = (map.nMaxBlockY - 0x7FFF) * 64 + 0x7FFF;
+                    map.nLinBeginX = map.nLinEndX - map.nLinLengthX + 1;
+                    map.nLinBeginY = map.nLinEndY - map.nLinLengthY + 1;
+
+                    foreach (L1MapSeg segment in map.FullFileNameList.Values) {
+                        segment.isRemastered = false;
+                        segment.nMapMinBlockX = map.nMinBlockX;
+                        segment.nMapMinBlockY = map.nMinBlockY;
+                        segment.nMapBlockCountX = map.nBlockCountX;
+                    }
+
+                    Share.MapDataList[mapId] = map;
+                }
+            }
+
+            stopwatch.Stop();
+            LastScanDirectoriesMs = stopwatch.ElapsedMilliseconds;
+            LastMapCount = Share.MapDataList.Count;
+            LastTotalFileCount = totalFileCount;
+            DebugLog.Log(
+                $"[L1MapHelper.ReadLineageM] Complete: maps={LastMapCount}, " +
+                $"files={LastTotalFileCount}, scan={LastScanDirectoriesMs}ms");
+            return Share.MapDataList;
         }
 
         /// <summary>
@@ -813,7 +905,7 @@ namespace L1MapViewer.Helper {
                     SHA1 sha1 = new SHA1CryptoServiceProvider();
                     //取得資料
                     foreach (string fileFullName in Utils.SortDesc(pMap.FullFileNameList.Keys)) {
-                        byte[] data = File.ReadAllBytes(fileFullName);
+                        byte[] data = ClientDataSourceManager.ReadMapFile(fileFullName);
                         byte[] bytes = sha1.ComputeHash(data);
                         for (int i = 0; i < bytes.Length; i++) {
                             shaList.Add(bytes[i]);
@@ -878,7 +970,7 @@ namespace L1MapViewer.Helper {
                 viewer.hScrollBar1_Scroll(null, null);
                 //取得資料
                 foreach (string fileFullName in Utils.SortDesc(pMap.FullFileNameList.Keys)) {
-                    byte[] data = File.ReadAllBytes(fileFullName);
+                    byte[] data = ClientDataSourceManager.ReadMapFile(fileFullName);
 
                     //取得bmp在bitmap的座標 (不是天堂座標)
                     L1MapSeg pMapSeg = pMap.FullFileNameList[fileFullName];
@@ -1213,40 +1305,15 @@ namespace L1MapViewer.Helper {
             return result;
         }
         //--------------------------------------------------------------------------------------------------------------------//
-        //暫存TIL
-        private static Dictionary<string, List<byte[]>> tilList = new Dictionary<string, List<byte[]>>();
-        private static List<string> OverList = new List<string>();
-
         //將til畫到地圖的bolck上
         private static unsafe void drawTilBlock(int x, int y, int til, int id, int rowpix, IntPtr Scan0, int maxWidth, int maxHeight) {
-
-            string key = string.Format("{0}.til", til);
-
-            List<byte[]> tilArray;
-
-            if (tilList.ContainsKey(key)) {
-                tilArray = tilList[key];
-            } else {
-                //讀取想要的檔案
-                byte[] data = L1PakReader.UnPack("Tile", key);
-                tilArray = L1Til.Parse(data);
-                tilList.Add(key, tilArray);
-
-            }
+            List<byte[]> tilArray = TileProvider.Instance.GetTilArray(til);
 
             // 備援機制：當 tilArray 為 null 或 id 越界時
             if (tilArray == null || id >= tilArray.Count) {
                 if (til != 0) {
                     // 載入 0.til 作為預設填補
-                    string fallbackKey = "0.til";
-                    if (tilList.ContainsKey(fallbackKey)) {
-                        tilArray = tilList[fallbackKey];
-                    } else {
-                        byte[] fallbackData = L1PakReader.UnPack("Tile", fallbackKey);
-                        tilArray = L1Til.Parse(fallbackData);
-                        if (tilArray != null)
-                            tilList[fallbackKey] = tilArray;
-                    }
+                    tilArray = TileProvider.Instance.GetTilArray(0);
                     if (tilArray == null || tilArray.Count == 0) return;
                     // 使用 187 或 188 作為預設 id (0x8CBB/0x8CBC 計算結果)
                     id = 187 + (x & 1);
@@ -1372,35 +1439,13 @@ namespace L1MapViewer.Helper {
             }
         }
         private static unsafe void drawTilBlockR(int x, int y, int til, int id, BitmapData bmpData, int maxWidth, int maxHeight) {
-
-
-            string key = string.Format("{0}.til", til);
-
-            List<byte[]> tilArray;
-
-            if (tilList.ContainsKey(key)) {
-                tilArray = tilList[key];
-            } else {
-                //讀取想要的檔案
-                byte[] data = L1PakReader.UnPack("Tile", key);
-                tilArray = L1Til.Parse(data);
-                tilList.Add(key, tilArray);
-
-            }
+            List<byte[]> tilArray = TileProvider.Instance.GetTilArray(til);
 
             // 備援機制：當 tilArray 為 null 或 id 越界時
             if (tilArray == null || id >= tilArray.Count) {
                 if (til != 0) {
                     // 載入 0.til 作為預設填補
-                    string fallbackKey = "0.til";
-                    if (tilList.ContainsKey(fallbackKey)) {
-                        tilArray = tilList[fallbackKey];
-                    } else {
-                        byte[] fallbackData = L1PakReader.UnPack("Tile", fallbackKey);
-                        tilArray = L1Til.Parse(fallbackData);
-                        if (tilArray != null)
-                            tilList[fallbackKey] = tilArray;
-                    }
+                    tilArray = TileProvider.Instance.GetTilArray(0);
                     if (tilArray == null || tilArray.Count == 0) return;
                     // 使用 187 或 188 作為預設 id (0x8CBB/0x8CBC 計算結果)
                     id = 187 + (x & 1);

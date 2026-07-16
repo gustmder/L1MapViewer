@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using L1MapViewer.Sources;
 using Lin.Helper.Core.Tile;
 using NLog;
 
@@ -165,6 +167,25 @@ namespace L1MapViewer.Helper
         {
             try
             {
+                if (ClientDataSourceManager.IsLineageM)
+                {
+                    List<byte[]> blocks = TileProvider.Instance.GetTilArray(tileId);
+                    int invalidBlocks = blocks?.Count(block => block == null || block.Length == 0) ?? 0;
+                    bool isValid = blocks != null && blocks.Count > 0 && invalidBlocks == 0;
+                    return new TileCheckResult
+                    {
+                        TileId = tileId,
+                        IsValid = isValid,
+                        FrameCount = blocks?.Count ?? 0,
+                        FileSize = blocks?.Where(block => block != null).Sum(block => block.Length) ?? 0,
+                        ErrorMessage = isValid
+                            ? string.Empty
+                            : blocks == null || blocks.Count == 0
+                                ? "無法讀取 Lineage M Tile 資料"
+                                : $"轉換後有 {invalidBlocks} 個空白 block"
+                    };
+                }
+
                 byte[] data = Reader.L1PakReader.UnPack("Tile", $"{tileId}.til");
                 if (data == null || data.Length == 0)
                 {
